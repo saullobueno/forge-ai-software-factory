@@ -37,7 +37,7 @@ function isEscapingRoot(relativeFromRoot: string): boolean {
  * portfólio: um provider real (S3, GCS...) ficaria atrás desta mesma
  * interface em uma fase futura, sem tocar quem chama. Mesma disciplina de
  * segurança contra path traversal de `RepositoryFsService`
- * (`apps/api/src/modules/code/repository-fs.service.ts`) — nunca deixa um
+ * (`apps/api/src/infrastructure/repository-fs/repository-fs.service.ts`) — nunca deixa um
  * `storageKey` escapar de `ARTIFACTS_ROOT`, sempre 404 genérico (nunca
  * vazando se o alvo fora do escopo existe de verdade).
  */

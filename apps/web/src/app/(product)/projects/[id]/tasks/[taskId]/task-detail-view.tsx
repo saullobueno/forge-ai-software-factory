@@ -133,8 +133,8 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
       <section className="rounded-lg border border-border p-4">
         <h2 className="text-sm font-medium">Execução de IA</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Dispara uma execução de IA com escopo definido pela tarefa (spec §7). Esta fase só cria o registro em
-          fila — nenhum agente processa a execução ainda.
+          Dispara uma execução de IA com escopo definido pela tarefa (spec §7). Um orquestrador processa a
+          execução automaticamente — acompanhe o progresso em tempo real na página de detalhes.
         </p>
 
         <button
@@ -164,7 +164,7 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
             </div>
             <p className="mt-2 text-sm text-muted-foreground">{triggerAgentRun.data.objective}</p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Na fila — ainda não há um orquestrador processando execuções nesta fase do projeto.
+              Na fila — um orquestrador vai processar esta execução automaticamente em instantes.
             </p>
             <Link
               href={`/projects/${projectId}/tasks/${taskId}/runs/${triggerAgentRun.data.id}`}

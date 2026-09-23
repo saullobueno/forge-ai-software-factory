@@ -31,8 +31,9 @@ export class TasksController {
   }
 
   /**
-   * Cria um `agentRun` em `queued` para a tarefa (spec §7/§9). Fase 4 só
-   * enfileira — nada processa o registro criado (orquestrador é Fase 7).
+   * Cria um `agentRun` em `queued` para a tarefa (spec §7/§9) e enfileira
+   * um job real que `AgentRunWorkerService` consome para processá-la de
+   * ponta a ponta (Fase 7 — `AgentRunOrchestrator` de `@forge/agents`).
    */
   @Post(':id/agent-runs')
   @RequirePermission('agent_run:trigger')
@@ -41,7 +42,7 @@ export class TasksController {
       throw new NotFoundException('Tarefa não encontrada.');
     }
 
-    const agentRun = await this.tasksService.triggerAgentRun(id, user.organizationId);
+    const agentRun = await this.tasksService.triggerAgentRun(id, user.organizationId, user.role);
     if (!agentRun) {
       throw new NotFoundException('Tarefa não encontrada.');
     }

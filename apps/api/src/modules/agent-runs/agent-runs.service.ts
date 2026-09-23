@@ -1,9 +1,11 @@
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import type { OrchestratorActor } from '@forge/agents';
 import { transitionAgentRunStatus } from '@forge/domain';
 import type { MessageEvent } from '@nestjs/common';
 import { concat, map, type Observable, of } from 'rxjs';
 import { AgentsRepository } from '../agents/agents.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
+import { AgentRunWorkerService } from './agent-run-worker.service.js';
 import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps } from './agent-runs.repository.js';
 import type { TaskRow } from '../tasks/tasks.repository.js';
 
@@ -13,18 +15,27 @@ export class AgentRunsService {
     private readonly agentRunsRepository: AgentRunsRepository,
     private readonly agentsRepository: AgentsRepository,
     private readonly agentRunEvents: AgentRunEventsService,
+    private readonly agentRunWorker: AgentRunWorkerService,
   ) {}
 
   /**
    * Dispara uma execução de IA para uma tarefa (spec §7: "Uma tarefa pode
-   * iniciar uma execução de IA com escopo e política explícitos"). Fase 4
-   * só cria o registro em `queued` — nenhum step é processado (isso é o
-   * orquestrador da Fase 7). Escolhe o agente `planner` da organização (ou
-   * o primeiro agente habilitado, se não houver planner configurado);
+   * iniciar uma execução de IA com escopo e política explícitos"). Cria o
+   * `agentRun` em `queued` e enfileira um job real via `QueueAdapter`
+   * (Fase 0) — `AgentRunWorkerService` (Fase 7) o consome e processa a
+   * execução de ponta a ponta através de `AgentRunOrchestrator`
+   * (`@forge/agents`). Escolhe o agente `planner` da organização (ou o
+   * primeiro agente habilitado, se não houver planner configurado);
    * organizações sem nenhum agente configurado não conseguem disparar
    * execuções — erro explícito em vez de inventar um agente.
+   *
+   * `actor` é sempre o usuário que efetivamente chamou `POST
+   * /tasks/:id/agent-runs` (já passou pelo guard `agent_run:trigger`) —
+   * propagado pela fila para que o orquestrador avalie cada tool call com
+   * o RBAC real desse usuário (spec §8/§20), não um papel de "sistema"
+   * fixo.
    */
-  async triggerForTask(task: TaskRow): Promise<AgentRunRow> {
+  async triggerForTask(task: TaskRow, actor: OrchestratorActor): Promise<AgentRunRow> {
     const agent = await this.agentsRepository.findPlannerOrFirstEnabled(task.organizationId);
     if (!agent) {
       throw new UnprocessableEntityException(
@@ -32,12 +43,15 @@ export class AgentRunsService {
       );
     }
 
-    return this.agentRunsRepository.create({
+    const created = await this.agentRunsRepository.create({
       organizationId: task.organizationId,
       taskId: task.id,
       agentId: agent.id,
       objective: `Implementar: ${task.title}`,
     });
+
+    await this.agentRunWorker.enqueue(created.id, actor);
+    return created;
   }
 
   async listForTask(taskId: string, organizationId: string): Promise<AgentRunRow[]> {

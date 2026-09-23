@@ -24,6 +24,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
   },
   "dependencies": {
+    "@forge/agents": "workspace:*",
+    "@forge/ai": "workspace:*",
     "@forge/database": "workspace:*",
     "@forge/domain": "workspace:*",
     "@forge/types": "workspace:*",

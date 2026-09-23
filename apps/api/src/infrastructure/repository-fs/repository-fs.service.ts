@@ -20,10 +20,11 @@ export interface RepositoryFile {
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 /**
- * `apps/api/src/modules/code` (ou `apps/api/dist/modules/code` depois de
- * compilado — `nest build` espelha `src` em `dist` com o mesmo `rootDir`,
- * mesma profundidade) até a raiz do monorepo: `apps` -> `api` ->
- * `src`|`dist` -> `modules` -> `code` = 5 segmentos, daí os 5 `..`. Mesmo
+ * `apps/api/src/infrastructure/repository-fs` (ou
+ * `apps/api/dist/infrastructure/repository-fs` depois de compilado —
+ * `nest build` espelha `src` em `dist` com o mesmo `rootDir`, mesma
+ * profundidade) até a raiz do monorepo: `apps` -> `api` -> `src`|`dist` ->
+ * `infrastructure` -> `repository-fs` = 5 segmentos, daí os 5 `..`. Mesmo
  * raciocínio de `packages/database/src/seed/fixtures.ts` para
  * `FIXTURE_ROOT`.
  */
@@ -51,6 +52,13 @@ function isEscapingRoot(relativeFromRoot: string): boolean {
  * providers Mock/GitHub reais) para resolver árvore/arquivo/busca por
  * provider; nenhum destes métodos deveria sobreviver àquela fase sem virar
  * uma chamada ao adaptador.
+ *
+ * Vive em `infrastructure/` (movido da Fase 5, que o tinha só dentro de
+ * `modules/code/`) porque a partir da Fase 7 também é consumido pelo
+ * orquestrador de agentes (`modules/agent-runs/agent-run-worker.service.ts`)
+ * para ler o repositório de verdade — reaproveitado ali por tipagem
+ * estrutural com o port `RepositoryReader` de `@forge/agents`, sem
+ * nenhum adaptador extra.
  */
 @Injectable()
 export class RepositoryFsService {

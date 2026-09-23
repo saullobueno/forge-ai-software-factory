@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { MemberRole } from '@forge/types';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { TasksRepository, type TaskWithDependencies } from './tasks.repository.js';
@@ -26,12 +27,19 @@ export class TasksService {
   /**
    * Retorna `undefined` quando a tarefa não existe no tenant do chamador —
    * o controller decide o 404, esta camada não lança exceções HTTP.
+   * `actorRole` é o papel de quem chamou `POST /tasks/:id/agent-runs` —
+   * propagado até o orquestrador (Fase 7) para autorização real de cada
+   * tool call (spec §8/§20), não um papel de "sistema" fixo.
    */
-  async triggerAgentRun(taskId: string, organizationId: string): Promise<AgentRunRow | undefined> {
+  async triggerAgentRun(
+    taskId: string,
+    organizationId: string,
+    actorRole: MemberRole,
+  ): Promise<AgentRunRow | undefined> {
     const task = await this.tasksRepository.findById(taskId, organizationId);
     if (!task) return undefined;
 
-    return this.agentRunsService.triggerForTask(task);
+    return this.agentRunsService.triggerForTask(task, { role: actorRole, organizationId });
   }
 
   /**

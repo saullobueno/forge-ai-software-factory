@@ -35,7 +35,7 @@ test.describe('login -> projeto -> tarefa -> execução de IA', () => {
 
     await expect(page.getByTestId('agent-run-status')).toHaveText('Na fila');
     await expect(page.getByTestId('agent-run-result')).toContainText(
-      'Na fila — ainda não há um orquestrador',
+      'Na fila — um orquestrador vai processar esta execução automaticamente',
     );
   });
 });

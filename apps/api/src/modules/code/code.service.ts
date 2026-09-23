@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { RepositoryFsService, type TreeNode } from '../../infrastructure/repository-fs/repository-fs.service.js';
 import { CodeRepository } from './code.repository.js';
-import { RepositoryFsService, type TreeNode } from './repository-fs.service.js';
 import { extractTopLevelSymbols, type CodeSymbol } from './symbol-extractor.js';
 
 export interface FileContentResult {
