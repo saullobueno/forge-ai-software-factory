@@ -1,17 +1,46 @@
+import { agentRunStatusSchema } from '@forge/types';
 import { expect, test } from '@playwright/test';
+import { isAgentRunCancelable } from '../src/lib/agent-run-cancelable';
+import { AGENT_RUN_STATUS_LABELS } from '../src/lib/labels';
 
 /**
  * E2E real de ponta a ponta (não mock/MSW) para o cancelamento e o canal
  * SSE da Fase 6 (spec §9 — "transmitir logs e status via WebSockets/SSE"):
- * login -> tarefa demo -> dispara uma execução de IA nova (`queued`) ->
- * abre a página da execução -> cancela -> confirma que o badge de status
- * muda para "Cancelada" SEM `page.reload()` — a mudança chega pelo canal
- * SSE real (`GET /agent-runs/:id/events`), não por um refetch manual.
+ * login -> tarefa demo -> dispara uma execução de IA nova -> abre a
+ * página da execução -> cancela -> confirma que o badge de status muda
+ * para "Cancelada" SEM `page.reload()` — a mudança chega pelo canal SSE
+ * real (`GET /agent-runs/:id/events`), não por um refetch manual.
  *
  * Roda contra a API NestJS real e um PGlite migrado/seedado
  * especificamente para este teste (mesma cadeia de `webServer` de
  * `login-to-agent-run.spec.ts`).
+ *
+ * Desde a Fase 7, `AgentRunWorkerService` consome o job da fila quase
+ * instantaneamente (`MockAiProvider` não tem latência de rede) — a
+ * execução pode já ter avançado de `queued` para `planning`/`executing`/
+ * `testing`/`review`/`approval_required` antes desta página sequer
+ * terminar de carregar. A tarefa demo usada aqui ("Estornos aparecem...")
+ * sempre faz o `implementer` encontrar `format-currency.ts`/`invoice.ts`
+ * de verdade e propor um `apply_patch` (ferramenta de escrita) — a
+ * política (`decideToolPolicy`) sempre marca isso como `require_approval`,
+ * então o orquestrador NUNCA avança sozinho além de `approval_required`
+ * para esta tarefa (ver `AgentRunOrchestrator.finishPipeline`,
+ * `@forge/agents`). Ou seja: não importa quão rápido o orquestrador
+ * processe, o pior caso possível aqui é a execução já estar em
+ * `approval_required` quando a página carrega — nunca `completed`,
+ * `failed` ou `cancelled` por conta própria. Por isso a asserção abaixo
+ * tolera QUALQUER status cancelável (reaproveitando `isAgentRunCancelable`
+ * do próprio frontend, não uma lista de strings inventada à parte) em vez
+ * de exigir especificamente `queued` — a intenção do teste é cancelamento
+ * + propagação via SSE, não o status inicial exato.
  */
+const CANCELABLE_STATUS_LABEL_PATTERN = new RegExp(
+  `^(${agentRunStatusSchema.options
+    .filter(isAgentRunCancelable)
+    .map((status) => AGENT_RUN_STATUS_LABELS[status].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')})$`,
+);
+
 async function loginAndOpenDemoTask(page: import('@playwright/test').Page) {
   await page.goto('/login');
   await page.getByLabel('Email').fill('dev@acme-platform.example');
@@ -33,7 +62,8 @@ test.describe('cancelamento de execução de IA via canal SSE (sem reload de pá
 
     await page.getByRole('link', { name: /Ver detalhes da execução/ }).click();
     await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
-    await expect(page.getByTestId('run-status')).toHaveText('Na fila');
+    // Não necessariamente "Na fila" — ver o comentário no topo do arquivo.
+    await expect(page.getByTestId('run-status')).toHaveText(CANCELABLE_STATUS_LABEL_PATTERN);
 
     const cancelButton = page.getByRole('button', { name: 'Cancelar execução' });
     await expect(cancelButton).toBeVisible();
@@ -58,7 +88,8 @@ test.describe('cancelamento de execução de IA via canal SSE (sem reload de pá
 
     await page.getByRole('link', { name: /Ver detalhes da execução/ }).click();
     await expect(page).toHaveURL(/\/runs\/([0-9a-f-]{36})$/);
-    await expect(page.getByTestId('run-status')).toHaveText('Na fila');
+    // Não necessariamente "Na fila" — ver o comentário no topo do arquivo.
+    await expect(page.getByTestId('run-status')).toHaveText(CANCELABLE_STATUS_LABEL_PATTERN);
 
     const match = page.url().match(/\/runs\/([0-9a-f-]{36})$/);
     const runId = match?.[1];
