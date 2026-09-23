@@ -1,0 +1,226 @@
+import { hashPassword } from '@forge/domain';
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { TestApp } from './support/bootstrap-app.js';
+
+/**
+ * e2e real contra banco real (PGlite + migrações aplicadas) para as rotas
+ * de tarefas e disparo de execução de IA da Fase 4: `GET /projects/:id/tasks`,
+ * `GET /tasks/:id` e `POST /tasks/:id/agent-runs`. Mesmo padrão de
+ * `projects.e2e-spec.ts` — isolamento de tenant (404 genérico cross-tenant)
+ * e RBAC (403 por permissão insuficiente).
+ */
+let testApp: TestApp;
+let projectAId: string;
+let taskA1Id: string;
+let taskA2Id: string;
+let taskBId: string;
+let developerAToken: string;
+let qaEngineerAToken: string;
+let productManagerAToken: string;
+let developerBToken: string;
+
+const password = 'demo1234';
+
+beforeAll(async () => {
+  const { bootstrapTestApp } = await import('./support/bootstrap-app.js');
+  testApp = await bootstrapTestApp();
+
+  const [organizationA] = await testApp.db
+    .insert(testApp.schema.organizations)
+    .values({ name: 'Org A Tasks E2E', slug: 'org-a-tasks-e2e-test' })
+    .returning();
+  const [organizationB] = await testApp.db
+    .insert(testApp.schema.organizations)
+    .values({ name: 'Org B Tasks E2E', slug: 'org-b-tasks-e2e-test' })
+    .returning();
+  if (!organizationA || !organizationB) throw new Error('organizations não inseridas');
+
+  const passwordHash = await hashPassword(password);
+
+  await testApp.db.insert(testApp.schema.users).values([
+    {
+      organizationId: organizationA.id,
+      email: 'dev@org-a-tasks-e2e-test.example',
+      name: 'Dev A',
+      role: 'developer',
+      passwordHash,
+    },
+    {
+      organizationId: organizationA.id,
+      email: 'qa@org-a-tasks-e2e-test.example',
+      name: 'QA A',
+      role: 'qa_engineer',
+      passwordHash,
+    },
+    {
+      organizationId: organizationA.id,
+      email: 'pm@org-a-tasks-e2e-test.example',
+      name: 'PM A',
+      role: 'product_manager',
+      passwordHash,
+    },
+    {
+      organizationId: organizationB.id,
+      email: 'dev@org-b-tasks-e2e-test.example',
+      name: 'Dev B',
+      role: 'developer',
+      passwordHash,
+    },
+  ]);
+
+  const [projectA] = await testApp.db
+    .insert(testApp.schema.projects)
+    .values({ organizationId: organizationA.id, name: 'Project A', slug: 'project-a-tasks-e2e-test' })
+    .returning();
+  const [projectB] = await testApp.db
+    .insert(testApp.schema.projects)
+    .values({ organizationId: organizationB.id, name: 'Project B', slug: 'project-b-tasks-e2e-test' })
+    .returning();
+  if (!projectA || !projectB) throw new Error('projects não inseridos');
+  projectAId = projectA.id;
+
+  const [taskA1] = await testApp.db
+    .insert(testApp.schema.tasks)
+    .values({
+      organizationId: organizationA.id,
+      projectId: projectA.id,
+      title: 'Configurar CI',
+      description: 'Adicionar pipeline de CI',
+      priority: 'high',
+      status: 'ready',
+    })
+    .returning();
+  const [taskA2] = await testApp.db
+    .insert(testApp.schema.tasks)
+    .values({
+      organizationId: organizationA.id,
+      projectId: projectA.id,
+      title: 'Publicar release',
+      description: 'Depende do CI estar configurado',
+      priority: 'medium',
+      status: 'backlog',
+    })
+    .returning();
+  const [taskB] = await testApp.db
+    .insert(testApp.schema.tasks)
+    .values({ organizationId: organizationB.id, projectId: projectB.id, title: 'Task de outra org' })
+    .returning();
+  if (!taskA1 || !taskA2 || !taskB) throw new Error('tasks não inseridas');
+  taskA1Id = taskA1.id;
+  taskA2Id = taskA2.id;
+  taskBId = taskB.id;
+
+  await testApp.db
+    .insert(testApp.schema.taskDependencies)
+    .values({ taskId: taskA2.id, dependsOnTaskId: taskA1.id });
+
+  await testApp.db.insert(testApp.schema.agents).values({
+    organizationId: organizationA.id,
+    role: 'planner',
+    name: 'Planner A',
+    description: 'Agente planner de teste',
+  });
+
+  const login = async (email: string): Promise<string> => {
+    const response = await request(testApp.app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password })
+      .expect(200);
+    return response.body.token as string;
+  };
+
+  developerAToken = await login('dev@org-a-tasks-e2e-test.example');
+  qaEngineerAToken = await login('qa@org-a-tasks-e2e-test.example');
+  productManagerAToken = await login('pm@org-a-tasks-e2e-test.example');
+  developerBToken = await login('dev@org-b-tasks-e2e-test.example');
+}, 60_000);
+
+afterAll(async () => {
+  await testApp.cleanup();
+});
+
+describe('GET /projects/:id/tasks', () => {
+  it('lista as tarefas do projeto (com dependências) para um usuário da própria organização', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .get(`/projects/${projectAId}/tasks`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+
+    expect(response.body).toHaveLength(2);
+    const task2 = response.body.find((task: { id: string }) => task.id === taskA2Id);
+    expect(task2.dependencies).toHaveLength(1);
+    expect(task2.dependencies[0].dependsOnTask.id).toBe(taskA1Id);
+    expect(task2.dependencies[0].dependsOnTask.title).toBe('Configurar CI');
+  });
+
+  it('retorna 404 (não 403) para um projeto de OUTRA organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .get(`/projects/${projectAId}/tasks`)
+      .set('Authorization', `Bearer ${developerBToken}`)
+      .expect(404);
+  });
+
+  it('retorna 403 para um usuário da organização certa sem project:read', async () => {
+    await request(testApp.app.getHttpServer())
+      .get(`/projects/${projectAId}/tasks`)
+      .set('Authorization', `Bearer ${qaEngineerAToken}`)
+      .expect(403);
+  });
+});
+
+describe('GET /tasks/:id', () => {
+  it('retorna a tarefa para um usuário da própria organização', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .get(`/tasks/${taskA1Id}`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+
+    expect(response.body.id).toBe(taskA1Id);
+    expect(response.body.title).toBe('Configurar CI');
+  });
+
+  it('retorna 404 para uma tarefa de OUTRA organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .get(`/tasks/${taskBId}`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(404);
+  });
+
+  it('retorna 404 para um id que não existe em nenhuma organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .get('/tasks/00000000-0000-0000-0000-000000000000')
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(404);
+  });
+});
+
+describe('POST /tasks/:id/agent-runs', () => {
+  it('cria um agentRun em status "queued" para um usuário com agent_run:trigger', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/tasks/${taskA1Id}/agent-runs`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(201);
+
+    expect(response.body.taskId).toBe(taskA1Id);
+    expect(response.body.status).toBe('queued');
+    expect(response.body.startedAt).toBeNull();
+    expect(response.body.completedAt).toBeNull();
+  });
+
+  it('retorna 404 para uma tarefa de OUTRA organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/tasks/${taskBId}/agent-runs`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(404);
+  });
+
+  it('retorna 403 para um usuário sem agent_run:trigger', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/tasks/${taskA1Id}/agent-runs`)
+      .set('Authorization', `Bearer ${productManagerAToken}`)
+      .expect(403);
+
+    expect(response.body.message).toMatch(/permissão/i);
+  });
+});

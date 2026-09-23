@@ -22,10 +22,12 @@ export class AuthController {
   ): Promise<LoginResponse> {
     const result = await this.authService.login(body);
 
-    // Cookie httpOnly same-origin, preparado para quando a Fase 4 construir
-    // a UI de login em apps/web. Ainda não existe proxy same-origin no
-    // Next.js (apps/web só tem a landing placeholder) — até lá, o corpo da
-    // resposta (`token`) é o caminho suportado para chamadas de API/testes.
+    // Cookie httpOnly same-origin. Fase 4 adicionou o proxy same-origin em
+    // apps/web (`next.config.ts` `rewrites()` de `/api/*` para esta API) —
+    // o browser chama `/api/auth/login` na mesma origem do Next.js e
+    // recebe/mantém este cookie automaticamente. O corpo da resposta
+    // (`token`) continua sendo o caminho usado por chamadas de API/testes
+    // diretas (ex.: supertest), sem passar pelo proxy.
     response.cookie(SESSION_COOKIE_NAME, result.token, {
       httpOnly: true,
       sameSite: 'lax',

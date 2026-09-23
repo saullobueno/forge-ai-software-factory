@@ -5,9 +5,10 @@ import { DatabaseModule } from './infrastructure/database/database.module.js';
 import { QueueModule } from './infrastructure/queue/queue.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
+import { TasksModule } from './modules/tasks/tasks.module.js';
 
 @Module({
-  imports: [DatabaseModule, QueueModule, AuthModule, ProjectsModule],
+  imports: [DatabaseModule, QueueModule, AuthModule, ProjectsModule, TasksModule],
   controllers: [AppController],
   providers: [AppService],
 })

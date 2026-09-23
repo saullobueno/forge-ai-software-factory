@@ -69,6 +69,21 @@ beforeAll(async () => {
   if (!projectA) throw new Error('project não inserido');
   projectAId = projectA.id;
 
+  // Dois projetos adicionais na organização A (inseridos em sequência, cada
+  // um com `createdAt` estritamente maior que o anterior) para exercitar a
+  // paginação keyset de `GET /projects` — sem isso só existiria 1 projeto,
+  // insuficiente para testar cursor/nextCursor.
+  await testApp.db
+    .insert(testApp.schema.projects)
+    .values({ organizationId: organizationA.id, name: 'Project A2', slug: 'project-a2-e2e-test' });
+  await testApp.db
+    .insert(testApp.schema.projects)
+    .values({ organizationId: organizationA.id, name: 'Project A3', slug: 'project-a3-e2e-test' });
+
+  await testApp.db
+    .insert(testApp.schema.projects)
+    .values({ organizationId: organizationB.id, name: 'Project B', slug: 'project-b-e2e-test' });
+
   const login = async (email: string): Promise<string> => {
     const response = await request(testApp.app.getHttpServer())
       .post('/auth/login')
@@ -131,5 +146,53 @@ describe('GET /projects/:id', () => {
       .expect(403);
 
     expect(response.body.message).toMatch(/permissão/i);
+  });
+});
+
+describe('GET /projects', () => {
+  it('lista só os projetos da própria organização, nunca de outra', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .get('/projects')
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+
+    expect(response.body.items).toHaveLength(3);
+    expect(response.body.nextCursor).toBeNull();
+    const names = response.body.items.map((project: { name: string }) => project.name).sort();
+    expect(names).toEqual(['Project A', 'Project A2', 'Project A3']);
+  });
+
+  it('pagina por cursor sem repetir nem pular itens', async () => {
+    const firstPage = await request(testApp.app.getHttpServer())
+      .get('/projects?limit=2')
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+
+    expect(firstPage.body.items).toHaveLength(2);
+    expect(firstPage.body.nextCursor).not.toBeNull();
+
+    const secondPage = await request(testApp.app.getHttpServer())
+      .get(`/projects?limit=2&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+
+    expect(secondPage.body.items).toHaveLength(1);
+    expect(secondPage.body.nextCursor).toBeNull();
+
+    const idsAcrossPages = [...firstPage.body.items, ...secondPage.body.items].map(
+      (project: { id: string }) => project.id,
+    );
+    expect(new Set(idsAcrossPages).size).toBe(3);
+  });
+
+  it('retorna 401 sem token', async () => {
+    await request(testApp.app.getHttpServer()).get('/projects').expect(401);
+  });
+
+  it('retorna 403 para um usuário sem project:read', async () => {
+    await request(testApp.app.getHttpServer())
+      .get('/projects')
+      .set('Authorization', `Bearer ${qaEngineerAToken}`)
+      .expect(403);
   });
 });

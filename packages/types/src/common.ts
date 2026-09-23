@@ -9,7 +9,10 @@ export const timestampsSchema = z.object({
 
 export const paginationRequestSchema = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().min(1).max(100).default(20),
+  // z.coerce: `limit` chega como string quando este schema valida query
+  // params de uma requisição HTTP (ex.: `GET /projects?limit=10`), não só
+  // corpos JSON já tipados — sem coerce, `"10"` falharia contra `z.number()`.
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type PaginationRequest = z.infer<typeof paginationRequestSchema>;
 

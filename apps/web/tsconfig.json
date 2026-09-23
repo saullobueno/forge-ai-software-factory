@@ -9,6 +9,15 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // `@forge/types` (Fase 4: primeira dependência de apps/web em um
+    // pacote workspace) é consumido como fonte `.ts` direta (sem build
+    // próprio) e importa seus próprios módulos internos com extensão
+    // `.ts` — mesma convenção usada em `@forge/domain`/`@forge/database`
+    // e em `apps/api` (ver o comentário equivalente em
+    // `apps/api/tsconfig.json`). Seguro com `noEmit: true` (abaixo): o
+    // Next.js nunca emite JS a partir deste `tsc`, quem builda de fato é
+    // o bundler (Turbopack/webpack), que já resolve `.ts` nativamente.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

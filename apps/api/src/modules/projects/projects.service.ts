@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { ProjectsRepository, type ProjectRow } from './projects.repository.js';
+import type { PaginationRequest } from '@forge/types';
+import { ProjectsRepository, type Page, type ProjectRow } from './projects.repository.js';
 
 @Injectable()
 export class ProjectsService {
@@ -13,5 +14,9 @@ export class ProjectsService {
    */
   async findById(projectId: string, organizationId: string): Promise<ProjectRow | undefined> {
     return this.projectsRepository.findById(projectId, organizationId);
+  }
+
+  async listByOrganization(organizationId: string, pagination: PaginationRequest): Promise<Page<ProjectRow>> {
+    return this.projectsRepository.listByOrganization(organizationId, pagination);
   }
 }

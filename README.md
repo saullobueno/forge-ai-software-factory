@@ -54,12 +54,21 @@ pnpm --filter @forge/database db:seed        # popula "Acme Platform" com 2 usu�
 
 ## Autenticação/RBAC (Fase 2)
 
-- `POST /auth/login` (`{ email, password }`) retorna um JWT no corpo (`token`) e também como cookie `httpOnly` (`forge_session`, `sameSite=lax`, `secure` apenas em produção). `GET /auth/me` é protegido e retorna o usuário autenticado (sem hash de senha). Ainda não há UI de login — `apps/web` só tem a landing placeholder; a página de login é Fase 4.
+- `POST /auth/login` (`{ email, password }`) retorna um JWT no corpo (`token`) e também como cookie `httpOnly` (`forge_session`, `sameSite=lax`, `secure` apenas em produção). `GET /auth/me` é protegido e retorna o usuário autenticado (sem hash de senha).
 - **Credenciais de demo** (após `pnpm --filter @forge/database db:seed`, organização "Acme Platform"):
   - `tech-lead@acme-platform.example` / `demo1234` (role `tech_lead`)
   - `dev@acme-platform.example` / `demo1234` (role `developer`)
 - `JWT_SECRET` (ver `.env.example`) tem um default óbvio e inseguro (`dev-insecure-secret-change-me`) só para não bloquear `pnpm dev` local — **defina um valor real antes de qualquer deploy**.
 - RBAC: `packages/domain` define uma matriz `MemberRole -> Permission[]` fechada (`hasPermission`) e `authorizeToolCall`, que compõe isolamento de tenant + RBAC + a política de ferramentas da Fase 1 (`decideToolPolicy`) numa única decisão. Em `apps/api`, `JwtAuthGuard` + `PermissionsGuard` (decorator `@RequirePermission(...)`) aplicam isso a nível de rota — ver `GET /projects/:id` como referência mínima de isolamento de tenant de ponta a ponta.
+
+## Projetos e Tarefas (Fase 4)
+
+- **Proxy same-origin**: `apps/web` e `apps/api` são origens diferentes (`:3000`/`:API_PORT`) — o cookie `httpOnly forge_session` não atravessa fetch cross-origin. `apps/web/next.config.ts` usa `rewrites()` para repassar `/api/*` (chamado pelo browser na mesma origem do Next.js) para a API real, via a env var `API_INTERNAL_URL` (default `http://127.0.0.1:3001`). Ver `.env.example`.
+- **UI**: `/login` (React Hook Form + Zod, reusa `loginRequestSchema` de `@forge/types`), layout autenticado com sidebar (`apps/web/src/app/(product)/layout.tsx` — só "Projetos" é navegável; o resto da Arquitetura de Informação da spec §3 aparece esmaecido), `/projects` (lista paginada), `/projects/[id]` (detalhe: perfil tecnológico, notas de arquitetura, regras de código, tarefas) e `/projects/[id]/tasks/[taskId]` (detalhe da tarefa, dependências e botão "Iniciar execução de IA").
+- **Proteção de rotas**: `apps/web/src/proxy.ts` (Next.js 16 renomeou `middleware.ts` para `proxy.ts` — mesma função) checa só a presença do cookie `forge_session` e redireciona para `/login`; é uma checagem otimista, a validação de verdade continua sendo feita pela API a cada chamada — `apps/web/src/lib/api-client.ts` redireciona para `/login` em qualquer 401.
+- **Estado de servidor**: TanStack Query (`@tanstack/react-query`) para todas as chamadas à API a partir de Client Components.
+- **Endpoints novos em `apps/api`** (mesmo padrão de tenant scoping + RBAC de `GET /projects/:id`): `GET /projects` (paginado, `project:read`), `GET /projects/:id/tasks` (com dependências, `project:read`), `GET /tasks/:id` (`task:read`), `POST /tasks/:id/agent-runs` (`agent_run:trigger`) — cria um `agentRun` em `status: "queued"` para um agente existente da organização (`planner`, com fallback para o primeiro agente habilitado). Nenhum step é processado — o orquestrador de verdade é a Fase 7; a execução fica parada em fila, exatamente como a spec §9 descreve o primeiro estado do ciclo.
+- **Pegadinha real de `next build`/`rewrites()`**: o Next.js resolve `rewrites()` e grava o destino resolvido em `.next/routes-manifest.json` **no momento do `next build`** — `next start` só reproduz esse manifest, nunca reavalia `next.config.ts`. Definir `API_INTERNAL_URL` apenas na hora de rodar `next start` (sem rebuildar antes com essa env var já presente) não tem efeito nenhum. `apps/web/playwright.config.ts` faz isso corretamente (rebuild encadeado antes do `next start` do e2e); qualquer outro ambiente (staging, deploy) que precise de uma API_INTERNAL_URL diferente do default precisa rodar `next build` com a env var já definida.
 
 ## Regras de engenharia
 

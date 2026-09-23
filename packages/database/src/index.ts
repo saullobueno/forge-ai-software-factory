@@ -8,7 +8,7 @@ export * from './env.ts';
  * para montar `where` — uma única versão do driver em todo o monorepo,
  * resolvida aqui junto do schema/client.
  */
-export { and, eq, or } from 'drizzle-orm';
+export { and, asc, desc, eq, gt, lt, or } from 'drizzle-orm';
 
 /**
  * Reexporta o migrator do PGlite (mesmo usado por `db:migrate` — ver
