@@ -1,7 +1,17 @@
 {
   "compilerOptions": {
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
+    // "bundler" (não "nodenext"): a API consome @forge/types, @forge/domain
+    // e @forge/database diretamente como fonte TS via workspace (sem passo
+    // de build próprio, mesmo padrão desses pacotes entre si — ver
+    // tsconfig.base.json). "nodenext" exigiria extensão .js explícita em
+    // TODO import relativo desses pacotes, o que por sua vez quebra o
+    // carregador de schema do drizzle-kit (não resolve .js -> .ts). Como
+    // o app roda em dev via `nest start` (ts-node-like) e os testes via
+    // Vitest — nenhum dos dois executa `dist/main.js` com o loader ESM
+    // nativo do Node — "bundler" é seguro aqui; `start:prod` real exigiria
+    // dar aos pacotes workspace um build próprio (fora do escopo da Fase 2).
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "resolvePackageJsonExports": true,
     "esModuleInterop": true,
     "isolatedModules": true,

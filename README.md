@@ -11,13 +11,14 @@ pnpm + Turborepo · Next.js/React/TypeScript/Tailwind · NestJS · Drizzle ORM (
 ```
 apps/
   web/        Next.js (App Router) — frontend
-  api/        NestJS — backend
+  api/        NestJS — backend (auth/RBAC, projects)
 packages/
-  types/      Schemas Zod e tipos compartilhados
+  types/      Schemas Zod e tipos compartilhados (inclui Permission, MemberRole)
+  domain/     Lógica de domínio pura (RBAC, política de ferramentas, hash de senha)
   database/   Schema Drizzle + client (Postgres real ou PGlite local)
 ```
 
-Novos pacotes (`domain`, `ai`, `agents`, `code-intelligence`, `sandbox`, `git`, `testing`, `policies`, `ui`) e apps (`runner`, `docs`) serão adicionados conforme as fases do roadmap avançam — ver `FORGE-CLAUDE-CODE-PROMPT.md`.
+Novos pacotes (`ai`, `agents`, `code-intelligence`, `sandbox`, `git`, `testing`, `policies`, `ui`) e apps (`runner`, `docs`) serão adicionados conforme as fases do roadmap avançam — ver `FORGE-CLAUDE-CODE-PROMPT.md`.
 
 ## Decisões de infraestrutura local (sem Docker)
 
@@ -48,7 +49,17 @@ pnpm test          # testes unitários/integração em todo o monorepo
 ```bash
 pnpm --filter @forge/database db:generate   # gera migrações a partir do schema
 pnpm db:migrate                              # aplica migrações (Postgres real ou PGlite local)
+pnpm --filter @forge/database db:seed        # popula "Acme Platform" com 2 usuários + credenciais de demo
 ```
+
+## Autenticação/RBAC (Fase 2)
+
+- `POST /auth/login` (`{ email, password }`) retorna um JWT no corpo (`token`) e também como cookie `httpOnly` (`forge_session`, `sameSite=lax`, `secure` apenas em produção). `GET /auth/me` é protegido e retorna o usuário autenticado (sem hash de senha). Ainda não há UI de login — `apps/web` só tem a landing placeholder; a página de login é Fase 4.
+- **Credenciais de demo** (após `pnpm --filter @forge/database db:seed`, organização "Acme Platform"):
+  - `tech-lead@acme-platform.example` / `demo1234` (role `tech_lead`)
+  - `dev@acme-platform.example` / `demo1234` (role `developer`)
+- `JWT_SECRET` (ver `.env.example`) tem um default óbvio e inseguro (`dev-insecure-secret-change-me`) só para não bloquear `pnpm dev` local — **defina um valor real antes de qualquer deploy**.
+- RBAC: `packages/domain` define uma matriz `MemberRole -> Permission[]` fechada (`hasPermission`) e `authorizeToolCall`, que compõe isolamento de tenant + RBAC + a política de ferramentas da Fase 1 (`decideToolPolicy`) numa única decisão. Em `apps/api`, `JwtAuthGuard` + `PermissionsGuard` (decorator `@RequirePermission(...)`) aplicam isso a nível de rota — ver `GET /projects/:id` como referência mínima de isolamento de tenant de ponta a ponta.
 
 ## Regras de engenharia
 

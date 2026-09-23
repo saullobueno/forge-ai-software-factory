@@ -193,3 +193,25 @@ export type NotificationKind = z.infer<typeof notificationKindSchema>;
 
 export const actorTypeSchema = z.enum(['user', 'agent', 'system']);
 export type ActorType = z.infer<typeof actorTypeSchema>;
+
+/**
+ * Conjunto fechado de permissões RBAC (spec §3, Fase 2). Cobre as áreas
+ * centrais de projeto, tarefas, execuções de IA, ambientes, políticas,
+ * membros e auditoria — fundação para autorização, não o modelo final
+ * (`roles.permissions` jsonb continua livre para granularidade futura por
+ * organização, spec §16/Fase 14). Union fechada por design: uma nova
+ * permissão exige decisão explícita, igual a `AgentToolName`.
+ */
+export const permissionSchema = z.enum([
+  'project:read',
+  'project:write',
+  'task:read',
+  'task:manage',
+  'agent_run:trigger',
+  'agent_run:approve',
+  'environment:deploy',
+  'policy:manage',
+  'member:manage',
+  'audit_log:read',
+]);
+export type Permission = z.infer<typeof permissionSchema>;

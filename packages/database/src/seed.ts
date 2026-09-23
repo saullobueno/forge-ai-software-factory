@@ -1,11 +1,19 @@
 import { eq } from 'drizzle-orm';
+import { hashPassword } from '@forge/domain';
 import { createDatabase } from './client';
 import { organizations, projects, tasks, users } from './schema/index';
 
 /**
- * Popula um cenário mínimo e coerente: 1 organization, 2 users, 1 project e
- * 2 tasks. Serve de base para a Fase 3 (repositório demo). Idempotente por
- * slug — rodar de novo contra o mesmo banco não duplica dados nem falha.
+ * Senha de demonstração para os dois usuários seedados — projeto de
+ * portfólio local, sem dados sensíveis reais. Documentada em `README.md`.
+ */
+const DEMO_PASSWORD = 'demo1234';
+
+/**
+ * Popula um cenário mínimo e coerente: 1 organization, 2 users (com senha
+ * de demo), 1 project e 2 tasks. Serve de base para a Fase 3 (repositório
+ * demo). Idempotente por slug — rodar de novo contra o mesmo banco não
+ * duplica dados nem falha.
  */
 async function main() {
   const { db, close } = createDatabase();
@@ -26,6 +34,8 @@ async function main() {
     .returning();
   if (!organization) throw new Error('Falha ao inserir a organization de seed');
 
+  const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
+
   const [techLead] = await db
     .insert(users)
     .values({
@@ -33,6 +43,7 @@ async function main() {
       email: 'tech-lead@acme-platform.example',
       name: 'Ana Tech Lead',
       role: 'tech_lead',
+      passwordHash: demoPasswordHash,
     })
     .returning();
   if (!techLead) throw new Error('Falha ao inserir o tech lead de seed');
@@ -44,6 +55,7 @@ async function main() {
       email: 'dev@acme-platform.example',
       name: 'Bruno Developer',
       role: 'developer',
+      passwordHash: demoPasswordHash,
     })
     .returning();
   if (!developer) throw new Error('Falha ao inserir o developer de seed');
@@ -91,7 +103,7 @@ async function main() {
 
   console.log('Seed aplicado com sucesso:');
   console.log(`  organization: ${organization.name} (${organization.id})`);
-  console.log(`  users: ${techLead.email}, ${developer.email}`);
+  console.log(`  users: ${techLead.email}, ${developer.email} (senha de demo: "${DEMO_PASSWORD}")`);
   console.log(`  project: ${project.name} (${project.id})`);
   console.log('  tasks: 2');
 

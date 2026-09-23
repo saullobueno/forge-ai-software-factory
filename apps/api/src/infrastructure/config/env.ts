@@ -6,6 +6,14 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
   REDIS_URL: z.string().url().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /**
+   * Segredo de assinatura dos JWTs de sessão (Fase 2 — Auth/RBAC). O
+   * default só existe para não bloquear `pnpm dev`/testes locais sem
+   * configuração extra — é claramente inseguro e NUNCA deve ser usado em
+   * produção. Mesma filosofia das Fases 0/1: nenhuma credencial externa é
+   * obrigatória para rodar o projeto localmente.
+   */
+  JWT_SECRET: z.string().min(1).default('dev-insecure-secret-change-me'),
 });
 
 export type Env = z.infer<typeof envSchema>;

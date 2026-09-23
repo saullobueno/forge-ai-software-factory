@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
+    "@forge/domain": "workspace:*",
     "@forge/types": "workspace:*",
     "drizzle-orm": "^0.38.3",
     "pg": "^8.13.1",

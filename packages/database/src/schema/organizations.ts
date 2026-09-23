@@ -23,6 +23,15 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   avatarUrl: text('avatar_url'),
   role: memberRoleEnum('role').notNull(),
+  /**
+   * Formato `"<salt-hex>:<hash-hex>"` (scrypt via `node:crypto`, ver
+   * `@forge/domain` `hashPassword`/`verifyPassword` — Fase 2). Nullable:
+   * uma conta sem senha configurada simplesmente nunca autentica por
+   * login local (não é um estado inválido, ex.: futura autenticação via
+   * SSO). Nunca é exposto fora da camada de persistência — `userSchema`
+   * em `@forge/types` não declara esse campo.
+   */
+  passwordHash: text('password_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
