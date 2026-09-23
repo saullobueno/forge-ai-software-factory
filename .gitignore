@@ -38,6 +38,6 @@ pnpm-debug.log*
 !.vscode/extensions.json
 .idea
 
-/test-results
-/playwright-report
-/playwright/.cache
+test-results/
+playwright-report/
+playwright/.cache
