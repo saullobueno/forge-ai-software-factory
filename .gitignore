@@ -24,6 +24,8 @@ coverage
 *.sqlite3
 *.db
 /packages/database/local.db*
+.data/
+**/.data/
 
 .DS_Store
 Thumbs.db
