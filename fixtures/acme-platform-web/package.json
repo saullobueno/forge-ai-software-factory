@@ -1,0 +1,16 @@
+{
+  "name": "acme-platform-web",
+  "version": "1.4.2",
+  "private": true,
+  "description": "Acme Platform — biblioteca de faturamento (formatação de moeda e resumo de faturas).",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.2"
+  }
+}
