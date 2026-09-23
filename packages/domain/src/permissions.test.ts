@@ -48,6 +48,17 @@ describe('hasPermission', () => {
     expect(hasPermission('product_manager', 'environment:deploy')).toBe(false);
   });
 
+  it('agent_run:cancel segue o mesmo conjunto de papéis de agent_run:trigger', () => {
+    for (const role of memberRoleSchema.options) {
+      expect(hasPermission(role, 'agent_run:cancel')).toBe(hasPermission(role, 'agent_run:trigger'));
+    }
+  });
+
+  it('product_manager não dispara nem cancela execuções de IA', () => {
+    expect(hasPermission('product_manager', 'agent_run:trigger')).toBe(false);
+    expect(hasPermission('product_manager', 'agent_run:cancel')).toBe(false);
+  });
+
   it('member:manage é exclusivo de admin', () => {
     for (const role of memberRoleSchema.options) {
       expect(hasPermission(role, 'member:manage')).toBe(role === 'admin');

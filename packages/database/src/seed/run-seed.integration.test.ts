@@ -1,8 +1,9 @@
 import { authorizeToolCall } from '@forge/domain';
 import { and, eq } from 'drizzle-orm';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Database } from '../client.ts';
 import {
@@ -20,6 +21,7 @@ import {
   pullRequests,
   repositories,
   tasks,
+  testArtifacts,
   testRuns,
   workspaces,
 } from '../schema/index.ts';
@@ -167,6 +169,18 @@ describe('runSeed (PGlite + migrações reais)', () => {
     expect(testRun.suites).toHaveLength(2);
     expect(testRun.suites.every((suite) => suite.failedCount === 0)).toBe(true);
     expect(testRun.suites.some((suite) => suite.passedCount > 0)).toBe(true);
+
+    // testArtifact -> arquivo real em disco (não só o registro no banco —
+    // `ArtifactStorageService`/`GET /artifacts/:id/content` na Fase 6 lê o
+    // storageKey diretamente de `.data/artifacts/` na raiz do monorepo).
+    const testArtifact = await db.query.testArtifacts.findFirst({ where: eq(testArtifacts.testRunId, testRun.id) });
+    if (!testArtifact) throw new Error('testArtifact não encontrado');
+    expect(testArtifact.kind).toBe('log');
+    const currentDir = dirname(fileURLToPath(import.meta.url));
+    const artifactAbsolutePath = join(currentDir, '..', '..', '..', '..', '.data', 'artifacts', testArtifact.storageKey);
+    const artifactContent = readFileSync(artifactAbsolutePath, 'utf8');
+    expect(artifactContent).toContain('Tests  6 passed (6)');
+    expect(Buffer.byteLength(artifactContent, 'utf8')).toBe(testArtifact.sizeBytes);
 
     // pullRequest ligada a repository/workspace/task
     const pullRequest = await db.query.pullRequests.findFirst({

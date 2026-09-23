@@ -9,6 +9,10 @@ import { AGENT_RUN_STATUS_LABELS, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } fro
 import { agentRunStatusTone, taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
 import type { ApiAgentRun, ApiProject, ApiTask } from '@/lib/types';
 
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR');
+}
+
 export function TaskDetailView({ projectId, taskId }: { projectId: string; taskId: string }) {
   const queryClient = useQueryClient();
 
@@ -22,10 +26,16 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
     queryFn: () => apiFetch<ApiTask>(`/tasks/${taskId}`),
   });
 
+  const agentRunsQuery = useQuery({
+    queryKey: ['tasks', taskId, 'agent-runs'],
+    queryFn: () => apiFetch<ApiAgentRun[]>(`/tasks/${taskId}/agent-runs`),
+  });
+
   const triggerAgentRun = useMutation({
     mutationFn: () => apiFetch<ApiAgentRun>(`/tasks/${taskId}/agent-runs`, { method: 'POST' }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tasks', taskId] });
+      void queryClient.invalidateQueries({ queryKey: ['tasks', taskId, 'agent-runs'] });
     },
   });
 
@@ -98,6 +108,28 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
         )}
       </section>
 
+      {agentRunsQuery.data && agentRunsQuery.data.length > 0 && (
+        <section className="rounded-lg border border-border p-4">
+          <h2 className="text-sm font-medium">Execuções de IA anteriores</h2>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {agentRunsQuery.data.map((run) => (
+              <li key={run.id}>
+                <Link
+                  href={`/projects/${projectId}/tasks/${taskId}/runs/${run.id}`}
+                  className="flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-muted"
+                >
+                  <Badge tone={agentRunStatusTone(run.status)}>{AGENT_RUN_STATUS_LABELS[run.status]}</Badge>
+                  <span className="truncate text-muted-foreground">{run.objective}</span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                    {formatDateTime(run.createdAt)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="rounded-lg border border-border p-4">
         <h2 className="text-sm font-medium">Execução de IA</h2>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -134,6 +166,12 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
             <p className="mt-2 text-xs text-muted-foreground">
               Na fila — ainda não há um orquestrador processando execuções nesta fase do projeto.
             </p>
+            <Link
+              href={`/projects/${projectId}/tasks/${taskId}/runs/${triggerAgentRun.data.id}`}
+              className="mt-3 inline-block text-sm font-medium text-foreground hover:underline"
+            >
+              Ver detalhes da execução →
+            </Link>
           </div>
         )}
       </section>

@@ -1,4 +1,4 @@
-import type { AgentRunStatus, TaskPriority, TaskStatus } from '@forge/types';
+import type { AgentRunStatus, AgentStepStatus, FindingSeverity, TaskPriority, TaskStatus, ToolCallStatus } from '@forge/types';
 
 type Tone = 'neutral' | 'positive' | 'attention' | 'critical';
 
@@ -36,6 +36,43 @@ export function agentRunStatusTone(status: AgentRunStatus): Tone {
       return 'critical';
     case 'approval_required':
     case 'review':
+      return 'attention';
+    default:
+      return 'neutral';
+  }
+}
+
+export function agentStepStatusTone(status: AgentStepStatus): Tone {
+  switch (status) {
+    case 'succeeded':
+      return 'positive';
+    case 'failed':
+      return 'critical';
+    case 'running':
+      return 'attention';
+    default:
+      return 'neutral';
+  }
+}
+
+export function toolCallStatusTone(status: ToolCallStatus): Tone {
+  switch (status) {
+    case 'succeeded':
+      return 'positive';
+    case 'failed':
+    case 'rejected':
+      return 'critical';
+    default:
+      return 'neutral';
+  }
+}
+
+export function findingSeverityTone(severity: FindingSeverity): Tone {
+  switch (severity) {
+    case 'critical':
+    case 'high':
+      return 'critical';
+    case 'medium':
       return 'attention';
     default:
       return 'neutral';

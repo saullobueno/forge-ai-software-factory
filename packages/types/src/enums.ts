@@ -209,6 +209,7 @@ export const permissionSchema = z.enum([
   'task:manage',
   'agent_run:trigger',
   'agent_run:approve',
+  'agent_run:cancel',
   'environment:deploy',
   'policy:manage',
   'member:manage',

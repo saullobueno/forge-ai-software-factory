@@ -20,6 +20,13 @@ import { permissionSchema } from '@forge/types';
  * - `product_manager`: "transforma requisitos em especificações
  *   executáveis" — gerencia tarefas, sem acesso a execução/aprovação de IA.
  *
+ * `agent_run:cancel` (Fase 6) segue sempre o mesmo conjunto de papéis de
+ * `agent_run:trigger`: quem pode iniciar uma execução de IA para uma tarefa
+ * também pode interrompê-la — é a mesma superfície de controle sobre o
+ * próprio disparo, não uma decisão de aprovação (`agent_run:approve`, que
+ * continua restrita a `tech_lead`/`platform_engineer`). `product_manager`
+ * não dispara execuções, então também não cancela.
+ *
  * Fundação intencionalmente simples: o motor de políticas configurável por
  * organização (`roles.permissions` jsonb) é elaboração de fase futura
  * (Fase 14) — aqui o enum de sistema (`MemberRole`) basta.
@@ -31,6 +38,7 @@ const ROLE_PERMISSIONS: Readonly<Record<MemberRole, readonly Permission[]>> = {
     'task:read',
     'agent_run:trigger',
     'agent_run:approve',
+    'agent_run:cancel',
     'environment:deploy',
     'policy:manage',
     'audit_log:read',
@@ -42,10 +50,11 @@ const ROLE_PERMISSIONS: Readonly<Record<MemberRole, readonly Permission[]>> = {
     'task:manage',
     'agent_run:trigger',
     'agent_run:approve',
+    'agent_run:cancel',
     'audit_log:read',
   ],
-  developer: ['project:read', 'task:read', 'task:manage', 'agent_run:trigger'],
-  qa_engineer: ['task:read', 'agent_run:trigger'],
+  developer: ['project:read', 'task:read', 'task:manage', 'agent_run:trigger', 'agent_run:cancel'],
+  qa_engineer: ['task:read', 'agent_run:trigger', 'agent_run:cancel'],
   product_manager: ['project:read', 'task:read', 'task:manage'],
 };
 

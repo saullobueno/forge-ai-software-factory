@@ -1,4 +1,12 @@
-import type { AgentRunStatus, TaskPriority, TaskStatus } from '@forge/types';
+import type {
+  AgentRole,
+  AgentRunStatus,
+  AgentStepStatus,
+  TaskPriority,
+  TaskStatus,
+  TestArtifactKind,
+  ToolCallStatus,
+} from '@forge/types';
 
 /**
  * Modelos de view local para as respostas JSON da API (Fase 4).
@@ -128,4 +136,66 @@ export interface ApiDiffEntry {
   beforeSizeBytes: number | null;
   afterSizeBytes: number | null;
   createdAt: string;
+}
+
+/**
+ * Modelos de view da Fase 6 (`AgentRunsModule`/`ArtifactsModule` — spec §9
+ * "Modelo de execução"). Mesma regra das interfaces acima: espelham a
+ * resposta JSON tal como o backend já valida/tenant-scopa, sem reparse
+ * client-side. `input`/`output`/`arguments`/`result` continuam
+ * `Record<string, unknown>` (jsonb livre no schema — spec §16); a leitura
+ * estruturada de campos específicos (ex.: os `findings` do `reviewer`) é
+ * feita sob demanda com um parser defensivo, nunca com um cast direto (ver
+ * `reviewer-findings.ts`).
+ */
+export interface ApiToolCall {
+  id: string;
+  agentStepId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  status: ToolCallStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface ApiAgentStep {
+  id: string;
+  agentRunId: string;
+  name: string;
+  role: AgentRole;
+  status: AgentStepStatus;
+  input: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  tokens: number;
+  costUsd: string;
+  createdAt: string;
+  toolCalls: ApiToolCall[];
+}
+
+export interface ApiAgentRunDetail extends ApiAgentRun {
+  steps: ApiAgentStep[];
+}
+
+export interface ApiTestArtifact {
+  id: string;
+  testRunId: string;
+  testSuiteId: string | null;
+  kind: TestArtifactKind;
+  name: string;
+  storageKey: string;
+  sizeBytes: number | null;
+  createdAt: string;
+}
+
+export interface ApiArtifactContent {
+  id: string;
+  name: string;
+  kind: TestArtifactKind;
+  content: string;
+  sizeBytes: number;
 }

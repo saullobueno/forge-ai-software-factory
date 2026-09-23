@@ -30,6 +30,19 @@ export function canTransitionAgentRunStatus(from: AgentRunStatus, to: AgentRunSt
   return AGENT_RUN_STATUS_TRANSITIONS[from].includes(to);
 }
 
+/**
+ * Um status de execução é "cancelável" quando existe uma transição válida
+ * dele para `cancelled` (Fase 6 — `POST /agent-runs/:id/cancel`). Deriva
+ * direto do grafo acima em vez de listar os status manualmente, para nunca
+ * divergir de `AGENT_RUN_STATUS_TRANSITIONS` se o grafo mudar: hoje é
+ * verdade para todo status não-terminal (`queued`, `planning`, `executing`,
+ * `testing`, `review`, `approval_required`) e falso para os 3 terminais
+ * (`completed`, `failed`, `cancelled`).
+ */
+export function isAgentRunStatusCancellable(status: AgentRunStatus): boolean {
+  return canTransitionAgentRunStatus(status, 'cancelled');
+}
+
 export type AgentRunStatusTransitionResult =
   | { success: true; status: AgentRunStatus }
   | { success: false; error: string };

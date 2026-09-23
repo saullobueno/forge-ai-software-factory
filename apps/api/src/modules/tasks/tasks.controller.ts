@@ -48,4 +48,25 @@ export class TasksController {
 
     return agentRun;
   }
+
+  /**
+   * Lista as execuções de IA já disparadas para uma tarefa (Fase 6, mais
+   * recentes primeiro — ver `AgentRunsRepository.listByTask`). Detalhe
+   * completo de uma execução (steps + tool calls) é
+   * `GET /agent-runs/:id`, não este endpoint.
+   */
+  @Get(':id/agent-runs')
+  @RequirePermission('task:read')
+  async listAgentRuns(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    const agentRuns = await this.tasksService.listAgentRuns(id, user.organizationId);
+    if (!agentRuns) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    return agentRuns;
+  }
 }

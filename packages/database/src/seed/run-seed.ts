@@ -1,6 +1,9 @@
 import { authorizeToolCall, hashPassword } from '@forge/domain';
 import type { AgentRole } from '@forge/types';
 import { and, eq } from 'drizzle-orm';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Database } from '../client.ts';
 import {
   agentRuns,
@@ -34,6 +37,34 @@ import { toolCallStatusForPolicyDecision } from './tool-call-policy.ts';
  * local, sem dados sensíveis reais. Documentada em `README.md`.
  */
 export const DEMO_PASSWORD = 'demo1234';
+
+/**
+ * `.data/artifacts` na raiz do monorepo — a mesma raiz de armazenamento
+ * lida por `ArtifactStorageService` em `apps/api` (Fase 6). Cada pacote
+ * calcula `REPO_ROOT` de forma independente a partir da própria
+ * profundidade em disco (mesmo padrão de `FIXTURE_ROOT` em `fixtures.ts` e
+ * de `REPO_ROOT` em `repository-fs.service.ts`) — não há um pacote
+ * compartilhado só para essa constante. `packages/database/src/seed/` está
+ * 4 níveis abaixo da raiz (`seed` -> `src` -> `database` -> `packages`),
+ * daí o `../../../../`. `.data/` já está no `.gitignore` da raiz.
+ */
+const currentSeedDir = dirname(fileURLToPath(import.meta.url));
+const SEED_REPO_ROOT = join(currentSeedDir, '..', '..', '..', '..');
+const ARTIFACTS_ROOT = join(SEED_REPO_ROOT, '.data', 'artifacts');
+
+/**
+ * Grava em disco o conteúdo real por trás de um `testArtifact.storageKey`
+ * (Fase 6 — sem isso, `GET /artifacts/:id/content` responderia 404 para um
+ * artefato que existe no banco mas nunca teve bytes reais em lugar
+ * nenhum). `storageKey` já é o caminho relativo a `ARTIFACTS_ROOT` — mesmo
+ * valor que `ArtifactStorageService.resolveWithinRoot` resolve do lado da
+ * API.
+ */
+async function writeDemoArtifactFile(storageKey: string, content: string): Promise<void> {
+  const absolutePath = join(ARTIFACTS_ROOT, storageKey);
+  await mkdir(dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, content, 'utf8');
+}
 
 export type SeedSummary =
   | { alreadySeeded: true; organizationId: string }
@@ -666,13 +697,38 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     },
   ]);
 
-  await db.insert(testArtifacts).values({
-    testRunId: testRun.id,
-    kind: 'log',
-    name: 'vitest-run.log',
-    storageKey: `demo/acme-platform-web/test-runs/${testRun.id}/vitest-run.log`,
-    sizeBytes: 2_048,
-  });
+  const artifactStorageKey = `demo/acme-platform-web/test-runs/${testRun.id}/vitest-run.log`;
+  const artifactLogContent =
+    '$ vitest run src/lib/format-currency.test.ts src/lib/invoice.test.ts\n\n' +
+    ' RUN  v2.1.9 acme-platform-web\n\n' +
+    ' ✓ src/lib/format-currency.test.ts (4 tests) 22ms\n' +
+    '   ✓ formatCurrency > formata valores positivos em BRL\n' +
+    '   ✓ formatCurrency > formata valores positivos em USD\n' +
+    '   ✓ formatCurrency > preserva o sinal negativo em estornos/créditos\n' +
+    '   ✓ formatCurrency > lança para moeda não suportada\n' +
+    ' ✓ src/lib/invoice.test.ts (2 tests) 13ms\n' +
+    '   ✓ formatInvoiceSummary > resume itens e total\n' +
+    '   ✓ formatInvoiceSummary > mostra estorno com sinal negativo\n\n' +
+    ' Test Files  2 passed (2)\n' +
+    '      Tests  6 passed (6)\n' +
+    '   Start at  ' +
+    timestampAt(baseMs, stepOffsetMs - 40_000).toISOString() +
+    '\n' +
+    '   Duration  35ms\n';
+
+  const [testArtifact] = await db
+    .insert(testArtifacts)
+    .values({
+      testRunId: testRun.id,
+      kind: 'log',
+      name: 'vitest-run.log',
+      storageKey: artifactStorageKey,
+      sizeBytes: Buffer.byteLength(artifactLogContent, 'utf8'),
+    })
+    .returning();
+  if (!testArtifact) throw new Error('Falha ao inserir o testArtifact de seed');
+
+  await writeDemoArtifactFile(artifactStorageKey, artifactLogContent);
 
   const [pullRequest] = await db
     .insert(pullRequests)

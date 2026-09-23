@@ -1,4 +1,13 @@
-import type { AgentRunStatus, TaskPriority, TaskStatus } from '@forge/types';
+import type {
+  AgentRole,
+  AgentRunStatus,
+  AgentStepStatus,
+  FindingSeverity,
+  TaskPriority,
+  TaskStatus,
+  TestArtifactKind,
+  ToolCallStatus,
+} from '@forge/types';
 
 /** Rótulos em pt-BR (spec §7) — status de tarefa. */
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
@@ -30,4 +39,53 @@ export const AGENT_RUN_STATUS_LABELS: Record<AgentRunStatus, string> = {
   completed: 'Concluída',
   failed: 'Falhou',
   cancelled: 'Cancelada',
+};
+
+/** Rótulos em pt-BR (spec §8) — papel de agente. */
+export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
+  planner: 'Planejar',
+  code_explorer: 'Inspecionar código',
+  implementer: 'Implementar',
+  test_engineer: 'Testar',
+  reviewer: 'Revisar',
+  documentation_agent: 'Documentar',
+};
+
+/** Rótulos em pt-BR — status de um agentStep dentro da timeline de uma execução. */
+export const AGENT_STEP_STATUS_LABELS: Record<AgentStepStatus, string> = {
+  pending: 'Pendente',
+  running: 'Em execução',
+  succeeded: 'Concluído',
+  failed: 'Falhou',
+  skipped: 'Ignorado',
+};
+
+/** Rótulos em pt-BR — status de uma tool call dentro de um step. */
+export const TOOL_CALL_STATUS_LABELS: Record<ToolCallStatus, string> = {
+  pending: 'Pendente',
+  succeeded: 'Concluída',
+  failed: 'Falhou',
+  rejected: 'Rejeitada',
+};
+
+/** Rótulos em pt-BR (spec §11) — severidade de um finding do reviewer. */
+export const FINDING_SEVERITY_LABELS: Record<FindingSeverity, string> = {
+  critical: 'Crítica',
+  high: 'Alta',
+  medium: 'Média',
+  low: 'Baixa',
+  info: 'Informativa',
+};
+
+export const FINDING_STATUS_LABELS: Record<'confirmed' | 'hypothesis', string> = {
+  confirmed: 'Confirmado',
+  hypothesis: 'Hipótese',
+};
+
+/** Rótulos em pt-BR (spec §12) — tipo de artefato de teste. */
+export const TEST_ARTIFACT_KIND_LABELS: Record<TestArtifactKind, string> = {
+  log: 'Log',
+  coverage: 'Cobertura',
+  screenshot: 'Captura de tela',
+  report: 'Relatório',
 };

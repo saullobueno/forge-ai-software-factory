@@ -1,6 +1,10 @@
 import { agentRunStatusSchema } from '@forge/types';
 import { describe, expect, it } from 'vitest';
-import { canTransitionAgentRunStatus, transitionAgentRunStatus } from './agent-run-status.ts';
+import {
+  canTransitionAgentRunStatus,
+  isAgentRunStatusCancellable,
+  transitionAgentRunStatus,
+} from './agent-run-status.ts';
 
 const ALL_STATUSES = agentRunStatusSchema.options;
 const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled'] as const;
@@ -48,6 +52,21 @@ describe('canTransitionAgentRunStatus', () => {
   it('rejeita transições para o mesmo status', () => {
     for (const status of ALL_STATUSES) {
       expect(canTransitionAgentRunStatus(status, status)).toBe(false);
+    }
+  });
+});
+
+describe('isAgentRunStatusCancellable', () => {
+  it('é verdadeiro para todo status não-terminal', () => {
+    for (const status of ALL_STATUSES) {
+      if ((TERMINAL_STATUSES as readonly string[]).includes(status)) continue;
+      expect(isAgentRunStatusCancellable(status)).toBe(true);
+    }
+  });
+
+  it('é falso para os 3 status terminais', () => {
+    for (const terminal of TERMINAL_STATUSES) {
+      expect(isAgentRunStatusCancellable(terminal)).toBe(false);
     }
   });
 });

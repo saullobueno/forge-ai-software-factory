@@ -33,4 +33,19 @@ export class TasksService {
 
     return this.agentRunsService.triggerForTask(task);
   }
+
+  /**
+   * `undefined` quando a tarefa não existe no tenant do chamador — mesmo
+   * contrato de `findById`/`triggerAgentRun` acima, o controller decide o
+   * 404. Confirma a existência da tarefa ANTES de listar (em vez de listar
+   * direto por `taskId`) para nunca vazar "esta tarefa tem N execuções" de
+   * uma tarefa de outra organização via uma lista vazia vs. 404
+   * inconsistentes.
+   */
+  async listAgentRuns(taskId: string, organizationId: string): Promise<AgentRunRow[] | undefined> {
+    const task = await this.tasksRepository.findById(taskId, organizationId);
+    if (!task) return undefined;
+
+    return this.agentRunsService.listForTask(taskId, organizationId);
+  }
 }
