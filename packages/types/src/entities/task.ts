@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { taskPrioritySchema, taskStatusSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { taskPrioritySchema, taskStatusSchema } from '../enums.ts';
 
 export const taskSchema = z.object({
   id: idSchema,

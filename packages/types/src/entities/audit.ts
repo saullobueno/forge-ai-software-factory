@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema } from '../common';
-import { actorTypeSchema } from '../enums';
+import { idSchema } from '../common.ts';
+import { actorTypeSchema } from '../enums.ts';
 
 /**
  * Registro de auditoria imutável (spec §20) — só `createdAt`, sem

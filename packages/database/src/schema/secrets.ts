@@ -1,8 +1,8 @@
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { secretProviderEnum } from './enums';
-import { organizations } from './organizations';
-import { projects } from './projects';
-import { environments } from './environments';
+import { secretProviderEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
+import { projects } from './projects.ts';
+import { environments } from './environments.ts';
 
 /**
  * Aponta apenas para a localização de um secret em um provedor externo —

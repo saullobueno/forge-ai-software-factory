@@ -1,19 +1,19 @@
 import { relations } from 'drizzle-orm';
-import { organizations, users, teams, teamMembers, roles } from './organizations';
-import { projects, repositories } from './projects';
-import { tasks, taskDependencies } from './tasks';
-import { workspaces } from './workspaces';
-import { agents, agentRuns, agentSteps, toolCalls } from './agents';
-import { policies, policyDecisions } from './policies';
-import { aiMessages, aiUsages } from './ai';
-import { fileSnapshots, codeChanges, diffs, pullRequests } from './git';
-import { testRuns, testSuites, testArtifacts } from './testing';
-import { environments, deployments } from './environments';
-import { knowledgeSources, knowledgeChunks } from './knowledge';
-import { approvals } from './approvals';
-import { secretReferences } from './secrets';
-import { notifications } from './notifications';
-import { auditLogs } from './audit';
+import { organizations, users, teams, teamMembers, roles } from './organizations.ts';
+import { projects, repositories } from './projects.ts';
+import { tasks, taskDependencies } from './tasks.ts';
+import { workspaces } from './workspaces.ts';
+import { agents, agentRuns, agentSteps, toolCalls } from './agents.ts';
+import { policies, policyDecisions } from './policies.ts';
+import { aiMessages, aiUsages } from './ai.ts';
+import { fileSnapshots, codeChanges, diffs, pullRequests } from './git.ts';
+import { testRuns, testSuites, testArtifacts } from './testing.ts';
+import { environments, deployments } from './environments.ts';
+import { knowledgeSources, knowledgeChunks } from './knowledge.ts';
+import { approvals } from './approvals.ts';
+import { secretReferences } from './secrets.ts';
+import { notifications } from './notifications.ts';
+import { auditLogs } from './audit.ts';
 
 /**
  * Todas as relations() do schema ficam centralizadas neste arquivo para

@@ -1,7 +1,7 @@
 import { index, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { aiMessageRoleEnum } from './enums';
-import { organizations } from './organizations';
-import { agentRuns, agentSteps, toolCalls } from './agents';
+import { aiMessageRoleEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
+import { agentRuns, agentSteps, toolCalls } from './agents.ts';
 
 export const aiMessages = pgTable('ai_messages', {
   id: uuid('id').primaryKey().defaultRandom(),

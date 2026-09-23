@@ -1,8 +1,8 @@
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { knowledgeSourceKindEnum } from './enums';
-import { organizations } from './organizations';
-import { projects } from './projects';
-import { workspaces } from './workspaces';
+import { knowledgeSourceKindEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
+import { projects } from './projects.ts';
+import { workspaces } from './workspaces.ts';
 
 export const knowledgeSources = pgTable('knowledge_sources', {
   id: uuid('id').primaryKey().defaultRandom(),

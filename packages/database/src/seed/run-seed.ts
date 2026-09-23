@@ -1,7 +1,7 @@
 import { authorizeToolCall, hashPassword } from '@forge/domain';
 import type { AgentRole } from '@forge/types';
 import { and, eq } from 'drizzle-orm';
-import type { Database } from '../client';
+import type { Database } from '../client.ts';
 import {
   agentRuns,
   agents,
@@ -23,11 +23,11 @@ import {
   toolCalls,
   users,
   workspaces,
-} from '../schema/index';
-import { DEMO_AGENT_STEP_ORDER } from './agent-run-timeline';
-import { DEMO_BUGGY_FILE_PATH, loadDemoCurrencyBugDiff } from './fixtures';
-import { DEMO_TASK_STATUS_TIMELINE } from './task-status-timeline';
-import { toolCallStatusForPolicyDecision } from './tool-call-policy';
+} from '../schema/index.ts';
+import { DEMO_AGENT_STEP_ORDER } from './agent-run-timeline.ts';
+import { DEMO_BUGGY_FILE_PATH, loadDemoCurrencyBugDiff } from './fixtures.ts';
+import { DEMO_TASK_STATUS_TIMELINE } from './task-status-timeline.ts';
+import { toolCallStatusForPolicyDecision } from './tool-call-policy.ts';
 
 /**
  * Senha de demonstração para os usuários seedados — projeto de portfólio

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { authorizeToolCall } from './authorize-tool-call';
+import { authorizeToolCall } from './authorize-tool-call.ts';
 
 const orgA = '11111111-1111-1111-1111-111111111111';
 const orgB = '22222222-2222-2222-2222-222222222222';

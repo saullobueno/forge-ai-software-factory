@@ -1,6 +1,6 @@
 import { applyPatch } from 'diff';
 import { describe, expect, it } from 'vitest';
-import { DEMO_BUGGY_FILE_PATH, loadDemoCurrencyBugDiff } from './fixtures';
+import { DEMO_BUGGY_FILE_PATH, loadDemoCurrencyBugDiff } from './fixtures.ts';
 
 describe('loadDemoCurrencyBugDiff', () => {
   it('gera um patch que, aplicado ao conteúdo "antes", reproduz exatamente o conteúdo "depois"', () => {

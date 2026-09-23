@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { secretReferenceSchema } from './secret';
+import { secretReferenceSchema } from './secret.ts';
 
 const id = '11111111-1111-1111-1111-111111111111';
 const base = {

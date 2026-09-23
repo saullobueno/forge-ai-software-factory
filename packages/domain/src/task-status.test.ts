@@ -1,6 +1,6 @@
 import { taskStatusSchema } from '@forge/types';
 import { describe, expect, it } from 'vitest';
-import { canTransitionTaskStatus, transitionTaskStatus } from './task-status';
+import { canTransitionTaskStatus, transitionTaskStatus } from './task-status.ts';
 
 const ALL_STATUSES = taskStatusSchema.options;
 

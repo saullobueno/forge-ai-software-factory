@@ -1,9 +1,9 @@
 import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { testArtifactKindEnum, testRunStatusEnum } from './enums';
-import { organizations, users } from './organizations';
-import { projects } from './projects';
-import { workspaces } from './workspaces';
-import { agentRuns } from './agents';
+import { testArtifactKindEnum, testRunStatusEnum } from './enums.ts';
+import { organizations, users } from './organizations.ts';
+import { projects } from './projects.ts';
+import { workspaces } from './workspaces.ts';
+import { agentRuns } from './agents.ts';
 
 export const testRuns = pgTable('test_runs', {
   id: uuid('id').primaryKey().defaultRandom(),

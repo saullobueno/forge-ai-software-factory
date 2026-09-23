@@ -57,6 +57,36 @@ $ pnpm run test:e2e
 $ pnpm run test:cov
 ```
 
+## Verificação de runtime real (fora do Vitest)
+
+Toda a suíte acima (inclusive `test:e2e`) roda via Vitest, que resolve
+módulos com esbuild e tolera imports relativos sem extensão — o que já
+mascarou um bug real: `apps/api` compilava e passava em 100% dos testes,
+mas travava com `ERR_MODULE_NOT_FOUND` ao rodar como processo Node de
+verdade (`node dist/main.js` ou `nest start`), porque `@forge/types`,
+`@forge/domain` e `@forge/database` são consumidos direto como fonte
+`.ts` (sem build próprio) e o loader ESM nativo do Node exige que cada
+import relativo aponte para um arquivo que existe em disco de verdade.
+
+`test/runtime-smoke.e2e-spec.ts` cobre exatamente esse caso: builda a
+API, sobe `node dist/main.js` e depois `nest start` (sem `--watch`) como
+processos Node reais — não via Vitest/tsx — e faz uma requisição HTTP de
+verdade contra cada um. Já roda como parte de `pnpm run test:e2e`.
+
+Para verificar manualmente (use uma porta livre; `API_PORT`, não
+`PORT` — ver `src/infrastructure/config/env.ts`):
+
+```bash
+$ pnpm run build
+$ API_PORT=3091 node dist/main.js
+# em outro terminal:
+$ curl http://127.0.0.1:3091/
+# esperado: "Hello World!"
+
+# mesma verificação via `nest start` (sem --watch, senão fica em loop):
+$ API_PORT=3091 pnpm exec nest start
+```
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

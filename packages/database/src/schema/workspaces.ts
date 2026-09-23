@@ -1,8 +1,8 @@
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { workspaceStatusEnum } from './enums';
-import { organizations } from './organizations';
-import { projects, repositories } from './projects';
-import { tasks } from './tasks';
+import { workspaceStatusEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
+import { projects, repositories } from './projects.ts';
+import { tasks } from './tasks.ts';
 
 /**
  * Contexto de execução isolado (spec §6): branch/worktree, tarefa

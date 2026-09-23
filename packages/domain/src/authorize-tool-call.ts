@@ -1,6 +1,6 @@
 import type { AgentToolName, MemberRole, Permission, PolicyDecisionKind } from '@forge/types';
-import { hasPermission } from './permissions';
-import { decideToolPolicy } from './tool-policy';
+import { hasPermission } from './permissions.ts';
+import { decideToolPolicy } from './tool-policy.ts';
 
 /**
  * Permissão mínima exigida para invocar cada ferramenta tipada (spec §8).

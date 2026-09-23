@@ -5,6 +5,21 @@
     "lib": ["ES2022"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    // `packages/types`, `packages/domain` e `packages/database` não têm
+    // etapa de build própria — consumidores rodam sua fonte `.ts` direto
+    // (via workspace `main`/`exports`, ver package.json de cada um). Em
+    // `apps/web` (Next.js/Turbopack) e nos testes (Vitest) isso é
+    // transparente; mas `apps/api` roda como processo Node real
+    // (`node dist/main.js`, também via `nest start`), e o loader ESM
+    // nativo do Node (com suporte experimental a TypeScript) exige que
+    // cada import relativo aponte para um arquivo que realmente existe em
+    // disco — como não há `.js` compilado, o import precisa terminar em
+    // `.ts` (ex.: `./env.ts`), não `.js`. `rewriteRelativeImportExtensions`
+    // permite escrever `.ts` nesses imports (em vez do erro padrão do TS
+    // "An import path can only end with a '.ts' extension...") e, no caso
+    // raro de algum consumidor futuro vir a compilar estes pacotes de
+    // verdade, reescreve a extensão para `.js` no output emitido.
+    "rewriteRelativeImportExtensions": true,
     "moduleDetection": "force",
     "strict": true,
     "noUncheckedIndexedAccess": true,

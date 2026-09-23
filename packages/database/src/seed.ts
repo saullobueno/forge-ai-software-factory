@@ -1,5 +1,5 @@
-import { createDatabase } from './client';
-import { DEMO_PASSWORD, runSeed } from './seed/run-seed';
+import { createDatabase } from './client.ts';
+import { DEMO_PASSWORD, runSeed } from './seed/run-seed.ts';
 
 /**
  * Entrypoint CLI (`pnpm db:seed`). A lógica de seeding em si vive em

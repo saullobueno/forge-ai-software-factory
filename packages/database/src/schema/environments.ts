@@ -1,8 +1,8 @@
 import { boolean, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { deploymentStatusEnum, environmentKindEnum } from './enums';
-import { organizations, users } from './organizations';
-import { projects } from './projects';
-import { pullRequests } from './git';
+import { deploymentStatusEnum, environmentKindEnum } from './enums.ts';
+import { organizations, users } from './organizations.ts';
+import { projects } from './projects.ts';
+import { pullRequests } from './git.ts';
 
 export const environments = pgTable('environments', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -1,7 +1,7 @@
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { TechProfile } from '@forge/types';
-import { repositoryProviderEnum } from './enums';
-import { organizations } from './organizations';
+import { repositoryProviderEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
 
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -1,5 +1,5 @@
-export * from './client';
-export * from './env';
+export * from './client.ts';
+export * from './env.ts';
 
 /**
  * Reexporta os combinadores de query do Drizzle mais usados por

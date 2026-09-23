@@ -1,6 +1,6 @@
 import { canTransitionTaskStatus, transitionTaskStatus } from '@forge/domain';
 import { describe, expect, it } from 'vitest';
-import { DEMO_TASK_STATUS_TIMELINE } from './task-status-timeline';
+import { DEMO_TASK_STATUS_TIMELINE } from './task-status-timeline.ts';
 
 describe('DEMO_TASK_STATUS_TIMELINE', () => {
   it('é uma sequência de transições de TaskStatus real e válida do início ao fim', () => {

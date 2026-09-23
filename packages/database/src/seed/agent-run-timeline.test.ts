@@ -1,6 +1,6 @@
 import { canTransitionAgentRunStatus, transitionAgentRunStatus } from '@forge/domain';
 import { describe, expect, it } from 'vitest';
-import { DEMO_AGENT_RUN_STATUS_TIMELINE } from './agent-run-timeline';
+import { DEMO_AGENT_RUN_STATUS_TIMELINE } from './agent-run-timeline.ts';
 
 describe('DEMO_AGENT_RUN_STATUS_TIMELINE', () => {
   it('é uma sequência de transições de AgentRunStatus real e válida do início ao fim', () => {

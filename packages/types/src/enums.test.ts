@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentRunStatusSchema, taskStatusSchema } from './enums';
+import { agentRunStatusSchema, taskStatusSchema } from './enums.ts';
 
 describe('taskStatusSchema', () => {
   it('aceita os status definidos na spec', () => {

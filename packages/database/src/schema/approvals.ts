@@ -1,6 +1,6 @@
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { approvalStatusEnum, approvalSubjectTypeEnum } from './enums';
-import { organizations, users } from './organizations';
+import { approvalStatusEnum, approvalSubjectTypeEnum } from './enums.ts';
+import { organizations, users } from './organizations.ts';
 
 /**
  * Aprovação humana sobre uma entidade (referência polimórfica via

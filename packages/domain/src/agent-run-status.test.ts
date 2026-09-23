@@ -1,6 +1,6 @@
 import { agentRunStatusSchema } from '@forge/types';
 import { describe, expect, it } from 'vitest';
-import { canTransitionAgentRunStatus, transitionAgentRunStatus } from './agent-run-status';
+import { canTransitionAgentRunStatus, transitionAgentRunStatus } from './agent-run-status.ts';
 
 const ALL_STATUSES = agentRunStatusSchema.options;
 const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled'] as const;

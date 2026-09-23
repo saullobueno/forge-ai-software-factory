@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { approvalStatusSchema, approvalSubjectTypeSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { approvalStatusSchema, approvalSubjectTypeSchema } from '../enums.ts';
 
 /**
  * Aprovação humana sobre uma entidade (referência polimórfica via

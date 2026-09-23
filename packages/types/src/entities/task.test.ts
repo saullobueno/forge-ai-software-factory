@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { taskDependencySchema, taskSchema } from './task';
+import { taskDependencySchema, taskSchema } from './task.ts';
 
 const baseTimestamps = { createdAt: new Date(), updatedAt: new Date() };
 

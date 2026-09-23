@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { userSchema } from './organization';
+import { userSchema } from './organization.ts';
 
 /**
  * Corpo de `POST /auth/login` (Fase 2 — Auth/RBAC). A senha em texto claro

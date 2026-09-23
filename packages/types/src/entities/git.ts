@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
+import { idSchema, timestampsSchema } from '../common.ts';
 import {
   fileChangeTypeSchema,
   pullRequestStatusSchema,
   repositoryProviderSchema,
-} from '../enums';
+} from '../enums.ts';
 
 export const fileSnapshotSchema = z.object({
   id: idSchema,

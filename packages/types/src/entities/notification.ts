@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { notificationKindSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { notificationKindSchema } from '../enums.ts';
 
 export const notificationSchema = z.object({
   id: idSchema,

@@ -1,8 +1,8 @@
 import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { PolicyRule } from '@forge/types';
-import { agentToolNameEnum, policyDecisionKindEnum } from './enums';
-import { organizations } from './organizations';
-import { toolCalls } from './agents';
+import { agentToolNameEnum, policyDecisionKindEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
+import { toolCalls } from './agents.ts';
 
 export const policies = pgTable('policies', {
   id: uuid('id').primaryKey().defaultRandom(),

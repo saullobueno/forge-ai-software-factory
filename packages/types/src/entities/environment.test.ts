@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deploymentSchema } from './environment';
+import { deploymentSchema } from './environment.ts';
 
 const id = '11111111-1111-1111-1111-111111111111';
 const base = {

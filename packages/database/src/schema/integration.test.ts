@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Database } from '../client';
+import type { Database } from '../client.ts';
 import {
   agentRuns,
   agentSteps,
@@ -14,7 +14,7 @@ import {
   projects,
   tasks,
   users,
-} from './index';
+} from './index.ts';
 
 /**
  * Teste de integração real (spec §22): sobe um Postgres real embarcado

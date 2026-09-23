@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approvalSchema } from './approval';
+import { approvalSchema } from './approval.ts';
 
 const id = '11111111-1111-1111-1111-111111111111';
 const base = {

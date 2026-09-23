@@ -1,6 +1,6 @@
 import { memberRoleSchema, permissionSchema } from '@forge/types';
 import { describe, expect, it } from 'vitest';
-import { hasPermission } from './permissions';
+import { hasPermission } from './permissions.ts';
 
 describe('hasPermission', () => {
   it('admin tem todas as permissões do sistema', () => {

@@ -1,6 +1,6 @@
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { actorTypeEnum } from './enums';
-import { organizations, users } from './organizations';
+import { actorTypeEnum } from './enums.ts';
+import { organizations, users } from './organizations.ts';
 
 /**
  * Registro de auditoria imutável (spec §20) — só `createdAt`, sem

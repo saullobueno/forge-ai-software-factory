@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { memberRoleSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { memberRoleSchema } from '../enums.ts';
 
 export const organizationSchema = z.object({
   id: idSchema,

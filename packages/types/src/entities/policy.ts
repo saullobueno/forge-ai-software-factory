@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { agentToolNameSchema, policyDecisionKindSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { agentToolNameSchema, policyDecisionKindSchema } from '../enums.ts';
 
 export const policyRuleSchema = z.object({
   toolName: agentToolNameSchema,

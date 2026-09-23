@@ -1,10 +1,10 @@
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { fileChangeTypeEnum, pullRequestStatusEnum, repositoryProviderEnum } from './enums';
-import { organizations } from './organizations';
-import { projects, repositories } from './projects';
-import { tasks } from './tasks';
-import { workspaces } from './workspaces';
-import { agentRuns } from './agents';
+import { fileChangeTypeEnum, pullRequestStatusEnum, repositoryProviderEnum } from './enums.ts';
+import { organizations } from './organizations.ts';
+import { projects, repositories } from './projects.ts';
+import { tasks } from './tasks.ts';
+import { workspaces } from './workspaces.ts';
+import { agentRuns } from './agents.ts';
 
 export const fileSnapshots = pgTable('file_snapshots', {
   id: uuid('id').primaryKey().defaultRandom(),

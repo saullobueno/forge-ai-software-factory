@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { aiMessageRoleSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { aiMessageRoleSchema } from '../enums.ts';
 
 export const aiMessageSchema = z.object({
   id: idSchema,

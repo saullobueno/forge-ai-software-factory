@@ -1,7 +1,7 @@
 import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { taskPriorityEnum, taskStatusEnum } from './enums';
-import { organizations, users } from './organizations';
-import { projects } from './projects';
+import { taskPriorityEnum, taskStatusEnum } from './enums.ts';
+import { organizations, users } from './organizations.ts';
+import { projects } from './projects.ts';
 
 export const tasks = pgTable('tasks', {
   id: uuid('id').primaryKey().defaultRandom(),

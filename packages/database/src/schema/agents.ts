@@ -15,10 +15,10 @@ import {
   agentStepStatusEnum,
   agentToolNameEnum,
   toolCallStatusEnum,
-} from './enums';
-import { organizations } from './organizations';
-import { tasks } from './tasks';
-import { workspaces } from './workspaces';
+} from './enums.ts';
+import { organizations } from './organizations.ts';
+import { tasks } from './tasks.ts';
+import { workspaces } from './workspaces.ts';
 
 /**
  * Configuração de um agente para um papel (spec §8): ferramentas

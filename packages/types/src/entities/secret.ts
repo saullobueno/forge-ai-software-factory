@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { secretProviderSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { secretProviderSchema } from '../enums.ts';
 
 /**
  * Aponta apenas para a localização de um secret em um provedor externo.

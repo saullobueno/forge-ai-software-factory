@@ -1,6 +1,6 @@
 import { agentToolNameSchema } from '@forge/types';
 import { describe, expect, it } from 'vitest';
-import { decideToolPolicy } from './tool-policy';
+import { decideToolPolicy } from './tool-policy.ts';
 
 describe('decideToolPolicy', () => {
   it('permite ferramentas somente leitura/inspeção', () => {

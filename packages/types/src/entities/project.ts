@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
-import { repositoryProviderSchema, workspaceStatusSchema } from '../enums';
+import { idSchema, timestampsSchema } from '../common.ts';
+import { repositoryProviderSchema, workspaceStatusSchema } from '../enums.ts';
 
 export const techProfileSchema = z.object({
   languages: z.array(z.string()).default([]),

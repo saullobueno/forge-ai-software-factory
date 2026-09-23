@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { idSchema, timestampsSchema } from '../common';
+import { idSchema, timestampsSchema } from '../common.ts';
 import {
   agentRoleSchema,
   agentRunStatusSchema,
   agentStepStatusSchema,
   agentToolNameSchema,
   toolCallStatusSchema,
-} from '../enums';
+} from '../enums.ts';
 
 /**
  * Configuração de um agente para um papel (spec §8): ferramentas

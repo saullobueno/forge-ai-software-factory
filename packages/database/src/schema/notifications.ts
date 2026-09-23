@@ -1,6 +1,6 @@
 import { boolean, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { notificationKindEnum } from './enums';
-import { organizations, users } from './organizations';
+import { notificationKindEnum } from './enums.ts';
+import { organizations, users } from './organizations.ts';
 
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),

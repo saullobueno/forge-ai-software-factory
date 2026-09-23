@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loginRequestSchema, loginResponseSchema } from './auth';
+import { loginRequestSchema, loginResponseSchema } from './auth.ts';
 
 describe('loginRequestSchema', () => {
   it('aceita email e senha válidos', () => {

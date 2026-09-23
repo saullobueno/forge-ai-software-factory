@@ -1,17 +1,32 @@
 {
   "compilerOptions": {
-    // "bundler" (não "nodenext"): a API consome @forge/types, @forge/domain
-    // e @forge/database diretamente como fonte TS via workspace (sem passo
-    // de build próprio, mesmo padrão desses pacotes entre si — ver
-    // tsconfig.base.json). "nodenext" exigiria extensão .js explícita em
-    // TODO import relativo desses pacotes, o que por sua vez quebra o
-    // carregador de schema do drizzle-kit (não resolve .js -> .ts). Como
-    // o app roda em dev via `nest start` (ts-node-like) e os testes via
-    // Vitest — nenhum dos dois executa `dist/main.js` com o loader ESM
-    // nativo do Node — "bundler" é seguro aqui; `start:prod` real exigiria
-    // dar aos pacotes workspace um build próprio (fora do escopo da Fase 2).
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    // "nodenext": a API roda como servidor real via `node dist/main.js` (e
+    // via `nest start`, que usa o mesmo loader ESM nativo do Node por
+    // baixo — não é um bundler). O Node ESM puro exige que cada import
+    // relativo aponte para um arquivo que realmente existe em disco.
+    //
+    // `apps/api` tem build próprio (`nest build`/`tsc`): seu próprio
+    // código-fonte importa os irmãos com extensão `.js` (ex.:
+    // `./app.module.js`), como é convenção — depois de compilado,
+    // `dist/app.module.js` de fato existe.
+    //
+    // Já `@forge/types`, `@forge/domain` e `@forge/database` NÃO têm build
+    // próprio — são consumidos direto como fonte `.ts` via workspace (ver
+    // tsconfig.base.json), então o Node só encontra o arquivo se o import
+    // apontar pra extensão real `.ts` (ex.: `./env.ts`), e é assim que
+    // esses três pacotes importam entre si internamente.
+    // `rewriteRelativeImportExtensions` (herdado de tsconfig.base.json)
+    // permite ao `tsc` desta config aceitar essas extensões `.ts` sem
+    // erro ao seguir a cadeia de imports desses pacotes (mesmo eles não
+    // sendo emitidos por este build — estão fora de `rootDir`).
+    //
+    // O único ponto que não resolve `.ts`/`.js` automaticamente é o
+    // loader de config do drizzle-kit (`packages/database/drizzle.config.ts`),
+    // que por isso inlina sua própria validação de env em vez de importar
+    // `./src/env.ts` — não afeta esta config, que é só de `apps/api`.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "rewriteRelativeImportExtensions": true,
     "resolvePackageJsonExports": true,
     "esModuleInterop": true,
     "isolatedModules": true,
