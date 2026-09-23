@@ -36,10 +36,18 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-6">
       <Breadcrumb items={[{ label: 'Projetos', href: '/projects' }, { label: project.name }]} />
 
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-        <p className="mt-1 font-mono text-xs text-muted-foreground">{project.slug}</p>
-        {project.description && <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">{project.slug}</p>
+          {project.description && <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>}
+        </div>
+        <Link
+          href={`/projects/${projectId}/code`}
+          className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+        >
+          Ver código
+        </Link>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2">

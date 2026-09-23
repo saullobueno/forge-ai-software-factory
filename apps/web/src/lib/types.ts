@@ -82,3 +82,50 @@ export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;
 }
+
+/**
+ * Modelos de view da Fase 5 (`CodeModule` — spec §10 "Inteligência de
+ * código"). Mesma regra de `ApiProject`/`ApiTask` acima: espelham a
+ * resposta JSON tal como o backend já valida, sem reparse client-side.
+ */
+export interface ApiTreeNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: ApiTreeNode[];
+}
+
+export type ApiCodeSymbolKind = 'function' | 'class' | 'interface' | 'type' | 'enum' | 'variable' | 're-export';
+
+export interface ApiCodeSymbol {
+  name: string;
+  kind: ApiCodeSymbolKind;
+  line: number;
+}
+
+export interface ApiFileContent {
+  path: string;
+  content: string;
+  sizeBytes: number;
+  language: string;
+  symbols: ApiCodeSymbol[] | null;
+}
+
+export interface ApiSearchResult {
+  path: string;
+  matchedInName: boolean;
+  matchedInContent: boolean;
+  snippet: string | null;
+}
+
+export interface ApiDiffEntry {
+  id: string;
+  filePath: string;
+  changeType: string;
+  patch: string;
+  additions: number;
+  deletions: number;
+  beforeSizeBytes: number | null;
+  afterSizeBytes: number | null;
+  createdAt: string;
+}
