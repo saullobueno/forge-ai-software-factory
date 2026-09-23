@@ -4,8 +4,8 @@ import { drizzle as drizzlePglite, type PgliteDatabase } from 'drizzle-orm/pglit
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { Pool } from 'pg';
-import { databaseEnv } from './env.js';
-import * as schema from './schema/index.js';
+import { databaseEnv } from './env';
+import * as schema from './schema/index';
 
 export type Database = NodePgDatabase<typeof schema> | PgliteDatabase<typeof schema>;
 

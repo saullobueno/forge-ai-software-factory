@@ -14,10 +14,12 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
+    "@forge/types": "workspace:*",
     "drizzle-orm": "^0.38.3",
     "pg": "^8.13.1",
     "zod": "^3.24.1"

@@ -1,7 +1,7 @@
 import { migrate as migrateNodePostgres } from 'drizzle-orm/node-postgres/migrator';
 import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
-import { createDatabase } from './client.js';
-import { databaseEnv } from './env.js';
+import { createDatabase } from './client';
+import { databaseEnv } from './env';
 
 async function main() {
   const { db, close } = createDatabase();

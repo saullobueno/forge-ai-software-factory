@@ -258,6 +258,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.17
         version: 0.2.17
+      '@forge/types':
+        specifier: workspace:*
+        version: link:../types
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@electric-sql/pglite@0.2.17)(@types/pg@8.23.1)(@types/react@19.3.0)(pg@8.23.0)(react@19.2.8)
@@ -283,6 +286,19 @@ importers:
       vitest:
         specifier: ^4.1.2
         version: 4.1.11(@types/node@22.20.4)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@22.20.4)(esbuild@0.19.12)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/domain:
+    dependencies:
+      '@forge/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.11(@types/node@22.20.4)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@22.20.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   packages/types:
     dependencies:

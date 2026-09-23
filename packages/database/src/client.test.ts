@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDatabase, type Database } from './client.js';
+import { createDatabase, type Database } from './client';
 
 describe('createDatabase (PGlite)', () => {
   let close: (() => Promise<void>) | undefined;
