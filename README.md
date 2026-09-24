@@ -26,14 +26,14 @@ Novos pacotes (`code-intelligence`, `policies`, `ui`) e apps (`runner`, `docs`) 
 
 ## Decisões de infraestrutura local (sem Docker)
 
-Nesta máquina o Docker não está instalado. Para não bloquear o desenvolvimento, duas decisões foram tomadas:
+Nesta máquina o Docker não está instalado. Para não bloquear o desenvolvimento, quatro decisões foram tomadas:
 
-1. **Banco de dados**: sem `DATABASE_URL` definido, o `@forge/database` usa [PGlite](https://pglite.dev) — um Postgres real compilado para WASM, embarcado no processo, sem instalação nenhuma. O mesmo schema Drizzle roda sem alterações contra um Postgres real (`pg`) assim que `DATABASE_URL` for definido — por exemplo, subindo `docker compose up -d postgres` depois que o Docker estiver instalado.
+1. **Banco de dados**: sem `DATABASE_URL` definido, o `@forge/database` usa [PGlite](https://pglite.dev) — um Postgres real compilado para WASM, embarcado no processo, sem instalação nenhuma. O arquivo local default fica em `<repo>/.data/forge-dev.pglite`, independente do diretório de onde API, migrations ou seed rodam. O mesmo schema Drizzle roda sem alterações contra um Postgres real (`pg`) assim que `DATABASE_URL` for definido — por exemplo, Neon/Render Postgres em staging/produção.
 2. **Fila/Redis**: sem `REDIS_URL` definido, a API usa uma fila em memória (`InMemoryQueueAdapter`, mesma interface do BullMQ). Com `REDIS_URL` definido, passa a usar `BullMqQueueAdapter` (BullMQ + ioredis) automaticamente.
 3. **IA**: nenhuma chave de provedor foi configurada. Até que `ANTHROPIC_API_KEY` (ou similar) seja definida, os agentes de IA (Fase 7) usam um adaptador mock determinístico, alinhado ao modo demo descrito na spec (§21).
 4. **Runner/Sandbox**: `@forge/sandbox` fornece `DockerSandboxRunner` e `LocalProcessSandboxRunner`. O fallback local é útil para desenvolvimento sem Docker, mas não é isolamento de kernel; por isso segue desacoplado do orquestrador até existir fluxo de aprovação humana para ações reais.
 
-Nada disso exige mudança de código quando a infraestrutura real estiver disponível — apenas variáveis de ambiente. Ver `.env.example`.
+Banco e fila reais não exigem mudança de código quando a infraestrutura estiver disponível — apenas variáveis de ambiente. Provider de IA real e runner seguro para comandos/testes ainda são frentes próprias de implementação. Ver `.env.example`, `.env.production.example` e [docs/production-deployment.md](docs/production-deployment.md).
 
 ## Como rodar
 
@@ -54,14 +54,41 @@ pnpm test          # testes unitários/integração em todo o monorepo
 ```bash
 pnpm --filter @forge/database db:generate   # gera migrações a partir do schema
 pnpm db:migrate                              # aplica migrações (Postgres real ou PGlite local)
-pnpm --filter @forge/database db:seed        # popula "Acme Platform" com 2 usuários + credenciais de demo
+pnpm --filter @forge/database db:seed        # popula "Acme Platform" com usuários, demo, ambientes e conhecimento
 ```
+
+## Como abrir a UI demo
+
+Para ver a experiência completa sem Docker local, use o PGlite/fila em memória do modo dev:
+
+```bash
+pnpm db:migrate
+pnpm --filter @forge/database db:seed
+pnpm dev
+```
+
+Depois abra `http://localhost:3000`. A raiz redireciona para `/projects`; sem sessão, o proxy encaminha para `/login`.
+
+Credenciais de demo:
+
+- `tech-lead@acme-platform.example` / `demo1234` — vê Projetos, Playground IA, Auditoria e aprova execuções.
+- `platform@acme-platform.example` / `demo1234` — gerencia ambientes e solicita deployments.
+- `dev@acme-platform.example` / `demo1234` — perfil de desenvolvedor com permissões mais restritas.
+
+Rotas úteis para navegar após login:
+
+- `/projects`
+- `/projects/[id]`
+- `/projects/[id]/tasks/[taskId]`
+- `/ai-playground`
+- `/audit-logs`
 
 ## Autenticação/RBAC (Fase 2)
 
 - `POST /auth/login` (`{ email, password }`) retorna um JWT no corpo (`token`) e também como cookie `httpOnly` (`forge_session`, `sameSite=lax`, `secure` apenas em produção). `GET /auth/me` é protegido e retorna o usuário autenticado (sem hash de senha).
 - **Credenciais de demo** (após `pnpm --filter @forge/database db:seed`, organização "Acme Platform"):
   - `tech-lead@acme-platform.example` / `demo1234` (role `tech_lead`)
+  - `platform@acme-platform.example` / `demo1234` (role `platform_engineer`)
   - `dev@acme-platform.example` / `demo1234` (role `developer`)
 - `JWT_SECRET` (ver `.env.example`) tem um default óbvio e inseguro (`dev-insecure-secret-change-me`) só para não bloquear `pnpm dev` local — **defina um valor real antes de qualquer deploy**.
 - RBAC: `packages/domain` define uma matriz `MemberRole -> Permission[]` fechada (`hasPermission`) e `authorizeToolCall`, que compõe isolamento de tenant + RBAC + a política de ferramentas da Fase 1 (`decideToolPolicy`) numa única decisão. Em `apps/api`, `JwtAuthGuard` + `PermissionsGuard` (decorator `@RequirePermission(...)`) aplicam isso a nível de rota — ver `GET /projects/:id` como referência mínima de isolamento de tenant de ponta a ponta.
@@ -95,14 +122,20 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 
 - `GET /projects/:id/environments` lista ambientes e deployments recentes do projeto com o mesmo isolamento de tenant dos módulos anteriores.
 - A página de detalhe de projeto mostra Development/Preview/Staging/Production, URL, proteção e último deployment.
+- `POST /projects/:projectId/environments/:environmentId/deployments` solicita um deployment demo para papéis com `environment:deploy`.
+- Ambientes não protegidos criam um deployment `succeeded` imediatamente no modo demo; ambientes protegidos criam um deployment `queued` e uma linha `approvals.pending` (`subjectType: "deployment"`), além de audit logs `deployment.requested`/`deployment.approval_required`.
 - O seed demo é aditivo: se a organização "Acme Platform" já existir, `db:seed` garante os ambientes sem duplicar dados.
-- Ainda não há deploy real nem aprovação de deploy protegida conectada à UI; essa parte depende do fluxo de approvals/políticas.
+- A UI mostra o botão "Solicitar deploy" para `platform_engineer`/`admin` e exibe o gate "Aguardando aprovação" quando o último deployment protegido está pendente.
+- Ainda não há execução real em Render/Vercel nem decisão de approve/reject para deployments; a etapa atual cobre solicitação, gate e auditoria.
 
 ## Conhecimento (Fase 12)
 
 - `@forge/knowledge` implementa a base isolada para ingestão/recuperação de conhecimento: chunking determinístico com overlap, estimativa simples de tokens, detecção heurística de prompt injection e wrapper explícito de conteúdo não confiável.
 - `retrieveKnowledge()` faz recuperação lexical escopada por organização/projeto/workspace e nunca retorna conteúdo fora do escopo solicitado.
-- Ainda não há indexador de repositório/docs, persistência em `knowledge_sources`/`knowledge_chunks`, embeddings/vector store, endpoints, UI ou conexão com os agentes.
+- O seed demo persiste 4 fontes em `knowledge_sources`/`knowledge_chunks` para o projeto "Forge Web App": ADR de arquitetura, regras de código, README operacional e handoff de QA.
+- `GET /projects/:id/knowledge` lista fontes/chunks/tokens com isolamento de tenant e `GET /projects/:id/knowledge/search?q=...` retorna chunks recuperados com `wrappedContent` seguro para uso futuro por agentes.
+- A tela `/projects/[id]` mostra a seção "Conhecimento" com fontes indexadas e busca contextual.
+- Ainda não há indexador automático de repositório/docs, embeddings/vector store ou conexão direta da recuperação com o orquestrador de agentes.
 
 ## Playground de IA (Fase 13)
 
