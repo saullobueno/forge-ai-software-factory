@@ -13,9 +13,11 @@ git log --oneline                          # confira se há commits depois do ú
 git status --short                         # confira se não há trabalho não commitado de uma sessão anterior
 ```
 
-Último commit confirmado nesta pausa: **este commit** (Fase 17 — fluxo de aprovação humana; confira `git log --oneline -1` ao retomar). Todas as Fases 0-17 do roadmap estão commitadas e verificadas — ver tabela abaixo.
+Último commit confirmado: **`fd68696`** ("fix(sandbox): retry temp workspace cleanup to avoid Windows EPERM flake"). Todas as Fases 0-17 do roadmap estão commitadas e verificadas — ver tabela abaixo.
 
 Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **86/86**; suíte Playwright completa → **12/12**.
+
+Depois de commitar a Fase 17, a mesma verificação apontou mais um bug real (não relacionado à Fase 17): `packages/sandbox` tinha um teste com `afterEach` chamando `rmSync` imediatamente após matar um processo por timeout — no Windows, o handle do diretório não é liberado de forma síncrona com o kill, causando `EPERM` esporádico sob carga (reproduzido de forma consistente rodando a suíte inteira; sempre passava isolado). Corrigido trocando por `fs/promises.rm` com `maxRetries`/`retryDelay` (`fd68696`).
 
 ## Histórico da sessão (contexto importante, não repita o erro)
 
