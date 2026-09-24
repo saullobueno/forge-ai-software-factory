@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.describe('alternância de tema', () => {
   test('alterna entre claro e escuro e persiste após reload', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/');
+    await page.goto('/login');
 
     const html = page.locator('html');
     const toggle = page.getByTestId('theme-toggle');

@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 // Next.js 16 renomeou `middleware.ts` para `proxy.ts` (mesma funcionalidade,
 // ver node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md).
 const SESSION_COOKIE_NAME = 'forge_session';
-const PROTECTED_PREFIXES = ['/projects'];
+const PROTECTED_PREFIXES = ['/projects', '/ai-playground', '/audit-logs'];
 
 /**
  * Checagem otimista (spec Fase 4 — só presença do cookie, nunca valida a
@@ -35,5 +35,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/projects/:path*', '/login'],
+  matcher: ['/projects/:path*', '/ai-playground', '/audit-logs', '/login'],
 };
