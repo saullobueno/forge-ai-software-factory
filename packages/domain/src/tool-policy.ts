@@ -56,13 +56,28 @@ const DESTRUCTIVE_COMMAND_PATTERNS: readonly RegExp[] = [
   /\bdrop\s+(table|database)\b/i,
   /\bgit\s+push\b.*--force\b/i,
   /\bgit\s+reset\s+--hard\b/i,
+  /\brmdir\s+\/s\s+\/q\b/i,
+  /\bdel\s+\/[a-z]*s[a-z]*\s+\/[a-z]*q[a-z]*\b/i,
+  /\bremove-item\b.*(?:^|\s)-(recurse|r)\b.*(?:^|\s)-(force|f)\b/i,
+  /\bformat\s+[a-z]:/i,
   /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, // fork bomb
 ];
+
+/**
+ * Checa uma linha de comando bruta (não os args de uma tool call) contra a
+ * mesma heurística acima. Exportado para ser reaproveitado por
+ * `packages/sandbox` (Fase 8 — runner sandbox), que precisa da mesma
+ * política de comando bloqueado ao executar `run_command` de verdade dentro
+ * do runner isolado, sem duplicar a lista de padrões aqui.
+ */
+export function isDestructiveCommandLine(commandLine: string): boolean {
+  return DESTRUCTIVE_COMMAND_PATTERNS.some((pattern) => pattern.test(commandLine));
+}
 
 function isDestructiveCommand(args: Record<string, unknown> | undefined): boolean {
   const command = args?.['command'];
   if (typeof command !== 'string') return false;
-  return DESTRUCTIVE_COMMAND_PATTERNS.some((pattern) => pattern.test(command));
+  return isDestructiveCommandLine(command);
 }
 
 /**

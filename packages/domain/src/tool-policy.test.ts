@@ -1,6 +1,6 @@
 import { agentToolNameSchema } from '@forge/types';
 import { describe, expect, it } from 'vitest';
-import { decideToolPolicy } from './tool-policy.ts';
+import { decideToolPolicy, isDestructiveCommandLine } from './tool-policy.ts';
 
 describe('decideToolPolicy', () => {
   it('permite ferramentas somente leitura/inspeção', () => {
@@ -45,6 +45,10 @@ describe('decideToolPolicy', () => {
       'DROP TABLE users;',
       'git push origin main --force',
       'git reset --hard HEAD~10',
+      'rmdir /s /q C:\\workspace',
+      'del /s /q C:\\workspace\\*',
+      'powershell -NoProfile -Command Remove-Item -Recurse -Force C:\\workspace',
+      'format C:',
     ];
     for (const command of destructiveCommands) {
       const result = decideToolPolicy({ toolName: 'run_command', args: { command } });
@@ -66,5 +70,10 @@ describe('decideToolPolicy', () => {
       args: { command: 'rm -rf /' },
     });
     expect(destructive.decision).not.toBe('allow');
+  });
+
+  it('expõe a mesma heurística destrutiva para runners isolados', () => {
+    expect(isDestructiveCommandLine('git reset --hard HEAD~1')).toBe(true);
+    expect(isDestructiveCommandLine('pnpm test')).toBe(false);
   });
 });
