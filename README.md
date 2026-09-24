@@ -159,10 +159,12 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 ## Performance e Acessibilidade (Fase 15)
 
 - O layout autenticado tem skip link para o conteúdo principal, `main` identificável e foco visível consistente para links, botões e campos.
+- Em viewports estreitos, a navegação autenticada vira um drawer mobile com foco gerenciado e Escape para fechar; o conteúdo principal usa largura mínima segura para evitar overflow horizontal em telas reais de telefone/tablet.
 - Playwright cobre login -> layout autenticado -> navegação por teclado até o conteúdo.
-- `@axe-core/playwright` roda uma auditoria automatizada nas rotas autenticadas principais; a tela de auditoria também garante metadata scrollável focável por teclado.
+- `@axe-core/playwright` roda auditoria automatizada nas rotas autenticadas principais e em estados densos: scorecard do Playground IA e timeline de execução com steps/findings/tool calls expandidos.
+- `lighthouse-budgets.spec.ts` roda Lighthouse real em sessão autenticada contra `/projects`, `/projects/[id]/code` e timeline de execução, com budgets de performance/acessibilidade/best-practices. Os relatórios HTML locais ficam em `apps/web/lighthouse-reports/` e são ignorados pelo Git.
 - O lint do web ignora `test-results/**` e `playwright-report/**`, evitando corrida contra artefatos efêmeros do Playwright.
-- Ainda falta Lighthouse, budgets de bundle e refinamentos responsivos por viewport.
+- Ainda falta monitoramento contínuo em CI para budgets de bundle por chunk e refinamentos adicionais por viewport nas telas futuras.
 
 ## QA e Handoff (Fase 16)
 

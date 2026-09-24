@@ -16,6 +16,7 @@ Este documento é um resumo operacional para retomada. O mapa completo e mais de
 | Correção do login local | Implementada nesta sessão, ainda não commitada | Default do PGlite agora é `<repo>/.data/forge-dev.pglite`, evitando migrate/seed em arquivo diferente do usado pela API dev. |
 | Fase 11: deployments demo | Implementada nesta sessão, ainda não commitada | Platform/admin solicitam deployments; ambientes protegidos criam approval pendente e audit log. |
 | Fase 12: conhecimento integrado | Implementada nesta sessão, ainda não commitada | Seed persiste fontes/chunks; API lista/busca conhecimento; UI no detalhe do projeto. |
+| Fase 15: responsividade e Lighthouse | Implementada nesta sessão, ainda não commitada | Drawer mobile acessível, testes responsivos, axe ampliado e Lighthouse com budgets reais. |
 
 ## Como Ver A Demo Local
 
@@ -86,6 +87,10 @@ Resultados confirmados nesta sessão:
 | `pnpm --filter @forge/knowledge test` | 1 arquivo / 6 testes passaram |
 | `pnpm --filter @forge/api test:e2e -- knowledge.e2e-spec.ts` | 1 arquivo / 7 testes passaram |
 | `pnpm --filter @forge/web test:e2e -- project-knowledge.spec.ts` | 1 teste passou |
+| `pnpm --filter @forge/web test:e2e -- responsive.spec.ts` | 2 testes passaram |
+| `pnpm --filter @forge/web test:e2e -- axe-accessibility.spec.ts` | 3 testes passaram |
+| `pnpm --filter @forge/web test:e2e -- lighthouse-budgets.spec.ts` | 1 teste passou; scores: 99/100/100, 91/100/100, 100/100/100 |
+| `pnpm --filter @forge/web test:e2e` | 21/21 passaram; Lighthouse na suíte completa: 100/100/100, 96/100/100, 100/100/100 |
 | `pnpm turbo run build lint typecheck test` | 31/34 passaram; `@forge/database#test` estourou hook PGlite sob carga |
 | `pnpm --filter @forge/database test` | rerun isolado passou: 6 arquivos / 18 testes |
 
@@ -112,4 +117,4 @@ Observação desta sessão: `pnpm --filter @forge/api test:e2e` completo foi ten
 | Média | Fase 12 | Criar indexador automático de docs/repositório, adicionar embeddings/vector store e conectar recuperação aos agentes. |
 | Média | Fase 13 | Adicionar fronteira para provedores reais Gemini/Groq com feature flag e histórico persistido. |
 | Média | Fases 9/10/18 | Conectar testes/Git/comandos reais apenas quando houver runner isolado adequado. |
-| Baixa | Fase 15 | Lighthouse, budgets de bundle e testes responsivos. |
+| Baixa | Fase 15 | Levar budgets de bundle/chunk para CI e repetir refinamentos responsivos nas telas futuras. |
