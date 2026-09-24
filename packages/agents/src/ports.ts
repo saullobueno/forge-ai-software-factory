@@ -3,6 +3,7 @@ import type {
   AgentRunStatus,
   AgentStepStatus,
   AgentToolName,
+  KnowledgeSourceKind,
   MemberRole,
   ToolCallStatus,
 } from '@forge/types';
@@ -32,6 +33,18 @@ export interface RepositoryContext {
   name: string;
   owner: string;
   defaultBranch: string;
+}
+
+export interface AgentKnowledgeContext {
+  sourceId: string;
+  title: string;
+  uri: string;
+  kind: KnowledgeSourceKind;
+  content: string;
+  wrappedContent: string;
+  chunkIndex: number;
+  score: number;
+  hasPromptInjectionRisk: boolean;
 }
 
 export interface AgentConfig {
@@ -119,6 +132,7 @@ export interface AgentRunStore {
   getTask(taskId: string, organizationId: string): Promise<TaskContext | undefined>;
   getProjectRules(projectId: string, organizationId: string): Promise<ProjectRulesContext | undefined>;
   getRepositoryForProject(projectId: string, organizationId: string): Promise<RepositoryContext | undefined>;
+  getKnowledgeContext(projectId: string, organizationId: string, query: string, limit: number): Promise<AgentKnowledgeContext[]>;
   getAgentByRole(organizationId: string, role: AgentRole): Promise<AgentConfig | undefined>;
   /** Persiste a transição — quem chama (`AgentRunOrchestrator`) já validou via `@forge/domain` antes de chamar isto. */
   setStatus(agentRunId: string, status: AgentRunStatus): Promise<void>;

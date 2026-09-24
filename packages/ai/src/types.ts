@@ -1,4 +1,4 @@
-import type { AgentRole, AgentToolName } from '@forge/types';
+import type { AgentRole, AgentToolName, KnowledgeSourceKind } from '@forge/types';
 
 /**
  * Um arquivo do repositório demo já lido de verdade pelo orquestrador (Fase
@@ -25,6 +25,25 @@ export interface AiPriorStepContext {
 }
 
 /**
+ * Trecho de conhecimento recuperado para esta execução. O conteúdo vem de
+ * `knowledge_sources`/`knowledge_chunks` e deve ser tratado como dado não
+ * confiável: `wrappedContent` já chega cercado por instruções explícitas
+ * para impedir que a base de conhecimento altere políticas de sistema,
+ * segurança, ferramentas ou escopo de tenant.
+ */
+export interface AiKnowledgeContext {
+  sourceId: string;
+  title: string;
+  uri: string;
+  kind: KnowledgeSourceKind;
+  content: string;
+  wrappedContent: string;
+  chunkIndex: number;
+  score: number;
+  hasPromptInjectionRisk: boolean;
+}
+
+/**
  * Requisição de geração para um step de agente (spec §8/§9). O shape é
  * deliberadamente próximo do que uma chamada real ao Vercel AI SDK
  * (`generateText`) receberia — um "papel"/instrução, o contexto disponível
@@ -48,6 +67,8 @@ export interface AiGenerateRequest {
   availableTools: readonly AgentToolName[];
   /** Conteúdo real do repositório demo, lido pelo orquestrador antes de chamar `generate`. */
   repositoryFiles: readonly AiRepositoryFileContext[];
+  /** Conhecimento persistido recuperado para o projeto/tarefa desta execução. */
+  knowledgeContext: readonly AiKnowledgeContext[];
   /** Steps anteriores desta execução, na ordem em que rodaram. */
   priorSteps: readonly AiPriorStepContext[];
 }

@@ -88,9 +88,17 @@ export class AgentRunOrchestrator {
         return;
       }
 
-      const [projectRules, repository] = await Promise.all([
+      const knowledgeQuery = [
+        run.objective,
+        task.title,
+        task.description ?? '',
+        task.acceptanceCriteria ?? '',
+      ].join('\n');
+
+      const [projectRules, repository, knowledgeContext] = await Promise.all([
         store.getProjectRules(task.projectId, run.organizationId),
         store.getRepositoryForProject(task.projectId, run.organizationId),
+        store.getKnowledgeContext(task.projectId, run.organizationId, knowledgeQuery, 5),
       ]);
 
       const { root, repositoryFiles } = await this.loadRepository(repository, this.deps.repositoryReader);
@@ -122,6 +130,16 @@ export class AgentRunOrchestrator {
             objective: run.objective,
             acceptanceCriteria: task.acceptanceCriteria,
             allowedTools: agent?.allowedTools ?? [],
+            knowledgeContext: knowledgeContext.map((chunk) => ({
+              sourceId: chunk.sourceId,
+              title: chunk.title,
+              uri: chunk.uri,
+              kind: chunk.kind,
+              chunkIndex: chunk.chunkIndex,
+              score: chunk.score,
+              hasPromptInjectionRisk: chunk.hasPromptInjectionRisk,
+              wrappedContent: chunk.wrappedContent,
+            })),
           },
         });
 
@@ -172,6 +190,7 @@ export class AgentRunOrchestrator {
             acceptanceCriteria: task.acceptanceCriteria,
             availableTools: agent.allowedTools,
             repositoryFiles,
+            knowledgeContext,
             priorSteps,
           });
 

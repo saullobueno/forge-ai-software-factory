@@ -135,9 +135,10 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 - `@forge/knowledge` implementa a base isolada para ingestão/recuperação de conhecimento: chunking determinístico com overlap, estimativa simples de tokens, detecção heurística de prompt injection e wrapper explícito de conteúdo não confiável.
 - `retrieveKnowledge()` faz recuperação lexical escopada por organização/projeto/workspace e nunca retorna conteúdo fora do escopo solicitado.
 - O seed demo persiste 4 fontes em `knowledge_sources`/`knowledge_chunks` para o projeto "Forge Web App": ADR de arquitetura, regras de código, README operacional e handoff de QA.
-- `GET /projects/:id/knowledge` lista fontes/chunks/tokens com isolamento de tenant e `GET /projects/:id/knowledge/search?q=...` retorna chunks recuperados com `wrappedContent` seguro para uso futuro por agentes.
+- `GET /projects/:id/knowledge` lista fontes/chunks/tokens com isolamento de tenant e `GET /projects/:id/knowledge/search?q=...` retorna chunks recuperados com `wrappedContent` seguro para uso por agentes.
 - A tela `/projects/[id]` mostra a seção "Conhecimento" com fontes indexadas e busca contextual.
-- Ainda não há indexador automático de repositório/docs, embeddings/vector store ou conexão direta da recuperação com o orquestrador de agentes.
+- O orquestrador recupera até 5 chunks por execução, injeta o contexto nos steps e envia o mesmo material ao provider de IA com metadados de fonte para auditoria/UI.
+- Ainda não há indexador automático de repositório/docs, embeddings/vector store ou ranking semântico.
 
 ## Playground de IA (Fase 13)
 

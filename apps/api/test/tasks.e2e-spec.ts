@@ -126,6 +126,25 @@ beforeAll(async () => {
     description: 'Agente planner de teste',
   });
 
+  const [knowledgeSource] = await testApp.db
+    .insert(testApp.schema.knowledgeSources)
+    .values({
+      organizationId: organizationA.id,
+      projectId: projectA.id,
+      kind: 'adr',
+      title: 'ADR para configurar pipelines',
+      uri: 'demo://tasks-e2e/adr-ci',
+    })
+    .returning();
+  if (!knowledgeSource) throw new Error('knowledge source não inserida');
+
+  await testApp.db.insert(testApp.schema.knowledgeChunks).values({
+    knowledgeSourceId: knowledgeSource.id,
+    chunkIndex: 0,
+    content: 'Ao configurar pipelines, preservar isolamento por organizationId antes de executar automações.',
+    tokenCount: 13,
+  });
+
   const login = async (email: string): Promise<string> => {
     const response = await request(testApp.app.getHttpServer())
       .post('/auth/login')
@@ -248,4 +267,47 @@ describe('POST /tasks/:id/agent-runs', () => {
 
     expect(response.body.message).toMatch(/permissão/i);
   });
+
+  it('injeta conhecimento persistido do projeto no run processado pelo worker', async () => {
+    const createResponse = await request(testApp.app.getHttpServer())
+      .post(`/tasks/${taskA1Id}/agent-runs`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(201);
+
+    const detail = await waitForAgentRunProcessed(createResponse.body.id as string);
+    const plannerStep = detail.steps.find((step: { role: string }) => step.role === 'planner');
+
+    expect(plannerStep?.input.knowledgeContext).toEqual([
+      expect.objectContaining({
+        title: 'ADR para configurar pipelines',
+        wrappedContent: expect.stringContaining('<untrusted_knowledge>'),
+      }),
+    ]);
+    expect(plannerStep?.output.knowledgeSourcesUsed).toEqual([
+      expect.objectContaining({
+        title: 'ADR para configurar pipelines',
+        kind: 'adr',
+      }),
+    ]);
+  });
 });
+
+async function waitForAgentRunProcessed(agentRunId: string): Promise<{
+  status: string;
+  steps: Array<{ role: string; input: Record<string, unknown>; output: Record<string, unknown> }>;
+}> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await request(testApp.app.getHttpServer())
+      .get(`/agent-runs/${agentRunId}`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+
+    if (response.body.status !== 'queued' && response.body.steps.length > 0) {
+      return response.body;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(`agentRun ${agentRunId} não foi processado a tempo`);
+}

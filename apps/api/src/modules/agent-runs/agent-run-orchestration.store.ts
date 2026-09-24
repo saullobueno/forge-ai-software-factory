@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, schema } from '@forge/database';
+import { and, asc, eq, isNull, or, schema } from '@forge/database';
+import { retrieveKnowledge, wrapUntrustedKnowledge, type KnowledgeDocument } from '@forge/knowledge';
 import type {
   AgentConfig,
+  AgentKnowledgeContext,
   AgentRunContext,
   AgentRunStore,
   CompleteStepInput,
@@ -73,6 +75,53 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
     });
     if (!row) return undefined;
     return { name: row.name, owner: row.owner, defaultBranch: row.defaultBranch };
+  }
+
+  async getKnowledgeContext(
+    projectId: string,
+    organizationId: string,
+    query: string,
+    limit: number,
+  ): Promise<AgentKnowledgeContext[]> {
+    const sources = await this.database.db.query.knowledgeSources.findMany({
+      where: and(
+        eq(schema.knowledgeSources.organizationId, organizationId),
+        or(eq(schema.knowledgeSources.projectId, projectId), isNull(schema.knowledgeSources.projectId)),
+      ),
+      with: { chunks: { orderBy: [asc(schema.knowledgeChunks.chunkIndex)] } },
+    });
+
+    const documents: KnowledgeDocument[] = sources.flatMap((source) =>
+      source.chunks.map((chunk) => ({
+        sourceId: source.id,
+        organizationId: source.organizationId,
+        projectId: source.projectId,
+        workspaceId: source.workspaceId,
+        kind: source.kind,
+        title: source.title,
+        uri: source.uri,
+        version: source.version,
+        content: chunk.content,
+        chunkIndex: chunk.chunkIndex,
+      })),
+    );
+
+    return retrieveKnowledge({
+      documents,
+      query,
+      scope: { organizationId, projectId },
+      limit,
+    }).map((chunk) => ({
+      sourceId: chunk.sourceId,
+      title: chunk.title,
+      uri: chunk.uri,
+      kind: chunk.kind,
+      content: chunk.content,
+      wrappedContent: wrapUntrustedKnowledge(chunk.content),
+      chunkIndex: chunk.chunkIndex,
+      score: chunk.score,
+      hasPromptInjectionRisk: chunk.hasPromptInjectionRisk,
+    }));
   }
 
   async getAgentByRole(organizationId: string, role: AgentRole): Promise<AgentConfig | undefined> {

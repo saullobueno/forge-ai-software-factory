@@ -3,7 +3,14 @@ import type { AiGenerateRequest, AiGenerateResult, AiProvider } from '@forge/ai'
 import type { AgentRole, AgentRunStatus } from '@forge/types';
 import { describe, expect, it } from 'vitest';
 import { AgentRunOrchestrator } from './orchestrator.ts';
-import type { AgentConfig, AgentRunContext, OrchestratorActor, RepositoryContext, TaskContext } from './ports.ts';
+import type {
+  AgentConfig,
+  AgentKnowledgeContext,
+  AgentRunContext,
+  OrchestratorActor,
+  RepositoryContext,
+  TaskContext,
+} from './ports.ts';
 import {
   agentConfig,
   FakeAgentRunStore,
@@ -56,6 +63,7 @@ function buildStore(
     objective?: string;
     acceptanceCriteria?: string | null;
     agents?: Partial<Record<AgentRole, AgentConfig | undefined>>;
+    knowledgeContext?: AgentKnowledgeContext[];
   } = {},
 ) {
   const run: AgentRunContext = {
@@ -77,7 +85,14 @@ function buildStore(
   };
   const agents: Record<AgentRole, AgentConfig | undefined> = { ...DEFAULT_AGENTS, ...overrides.agents };
 
-  const store = new FakeAgentRunStore(run, task, agents, REPOSITORY);
+  const store = new FakeAgentRunStore(
+    run,
+    task,
+    agents,
+    REPOSITORY,
+    undefined,
+    overrides.knowledgeContext,
+  );
   const repositoryReader = new FakeRepositoryReader(new Map([[`/fake-root/${REPOSITORY.name}`, REPO_FILES]]));
   return { store, repositoryReader };
 }
@@ -244,6 +259,48 @@ describe('AgentRunOrchestrator', () => {
       ),
     ).toBe(true);
     expect(store.statusHistory.at(-1)).toBe('approval_required');
+  });
+
+  it('injeta conhecimento recuperado no input dos steps e na requisição enviada ao provedor de IA', async () => {
+    const { store, repositoryReader } = buildStore({
+      knowledgeContext: [
+        {
+          sourceId: 'knowledge-1',
+          title: 'ADR de arquitetura',
+          uri: 'demo://adr',
+          kind: 'adr',
+          content: 'Repositórios precisam filtrar por organizationId.',
+          wrappedContent:
+            '<untrusted_knowledge>\nRepositórios precisam filtrar por organizationId.\n</untrusted_knowledge>',
+          chunkIndex: 0,
+          score: 2,
+          hasPromptInjectionRisk: false,
+        },
+      ],
+    });
+    const events = new RecordingEventPublisher();
+    const seenKnowledgeCounts: number[] = [];
+    const ai: AiProvider = {
+      name: 'knowledge-recorder',
+      async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
+        seenKnowledgeCounts.push(request.knowledgeContext.length);
+        return new MockAiProvider().generate(request);
+      },
+    };
+    const orchestrator = new AgentRunOrchestrator({ store, ai, repositoryReader, events });
+
+    await orchestrator.run(RUN_ID, ACTOR);
+
+    expect(seenKnowledgeCounts).toContain(1);
+    expect(store.steps[0]?.input['knowledgeContext']).toEqual([
+      expect.objectContaining({
+        title: 'ADR de arquitetura',
+        wrappedContent: expect.stringContaining('<untrusted_knowledge>'),
+      }),
+    ]);
+    expect(store.steps[0]?.output?.['knowledgeSourcesUsed']).toEqual([
+      expect.objectContaining({ title: 'ADR de arquitetura', score: 2 }),
+    ]);
   });
 
   it('não avança quando a execução já não está mais em "queued" ao ser processada', async () => {

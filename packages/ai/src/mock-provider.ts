@@ -121,7 +121,7 @@ export class MockAiProvider implements AiProvider {
   }
 
   private generatePlanner(request: AiGenerateRequest): AiGenerateResult {
-    const { objective, acceptanceCriteria, availableTools } = request;
+    const { objective, acceptanceCriteria, availableTools, knowledgeContext } = request;
 
     const toolCalls: AiProposedToolCall[] = [];
     if (includesTool(availableTools, 'get_issue')) {
@@ -139,18 +139,36 @@ export class MockAiProvider implements AiProvider {
       acceptanceCriteria
         ? `Confirmar os critérios de aceite: ${acceptanceCriteria}`
         : 'Nenhum critério de aceite explícito — inferir o resultado esperado a partir do objetivo.',
+      ...(knowledgeContext.length > 0
+        ? [`Considerar ${knowledgeContext.length} trecho(s) de conhecimento persistido recuperados para o projeto.`]
+        : []),
       'Localizar no repositório os arquivos relevantes para o objetivo.',
       'Avaliar se alguma alteração de código é necessária e, em caso positivo, propor um patch mínimo.',
       'Rodar a suíte de testes relevante e revisar o resultado antes de qualquer aprovação.',
     ];
-    const output = { plan, estimatedRisk: acceptanceCriteria ? 'medium' : 'low' };
+    const output = {
+      plan,
+      estimatedRisk: acceptanceCriteria ? 'medium' : 'low',
+      knowledgeSourcesUsed: knowledgeContext.map((chunk) => ({
+        sourceId: chunk.sourceId,
+        title: chunk.title,
+        uri: chunk.uri,
+        kind: chunk.kind,
+        chunkIndex: chunk.chunkIndex,
+        score: chunk.score,
+        hasPromptInjectionRisk: chunk.hasPromptInjectionRisk,
+      })),
+    };
     const summary = `Plano com ${plan.length} passos definido a partir do objetivo.`;
 
     return {
       summary,
       toolCalls,
       output,
-      usage: usageFor(`${objective}${acceptanceCriteria ?? ''}`, summary + JSON.stringify(output)),
+      usage: usageFor(
+        `${objective}${acceptanceCriteria ?? ''}${knowledgeContext.map((chunk) => chunk.wrappedContent).join('\n')}`,
+        summary + JSON.stringify(output),
+      ),
     };
   }
 

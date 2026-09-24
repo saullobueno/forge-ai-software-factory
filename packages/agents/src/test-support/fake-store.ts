@@ -1,6 +1,7 @@
 import type { AgentRole, AgentRunStatus, AgentToolName } from '@forge/types';
 import type {
   AgentConfig,
+  AgentKnowledgeContext,
   AgentRunContext,
   AgentRunEventPublisher,
   AgentRunGovernanceSink,
@@ -60,6 +61,7 @@ export class FakeAgentRunStore {
     private readonly agentsByRole: Partial<Record<AgentRole, AgentConfig | undefined>>,
     private readonly repository: RepositoryContext | undefined,
     private readonly projectRules: ProjectRulesContext | undefined = { codeRules: null, architectureNotes: null },
+    private readonly knowledgeContext: AgentKnowledgeContext[] = [],
   ) {
     this.status = run.status;
     this.statusHistory.push(run.status);
@@ -86,6 +88,10 @@ export class FakeAgentRunStore {
 
   async getRepositoryForProject(): Promise<RepositoryContext | undefined> {
     return this.repository;
+  }
+
+  async getKnowledgeContext(): Promise<AgentKnowledgeContext[]> {
+    return this.knowledgeContext;
   }
 
   async getAgentByRole(organizationId: string, role: AgentRole): Promise<AgentConfig | undefined> {

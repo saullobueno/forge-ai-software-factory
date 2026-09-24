@@ -43,6 +43,7 @@ function baseRequest(overrides: Partial<AiGenerateRequest> & { role: AgentRole }
     acceptanceCriteria: 'formatCurrency preserva o sinal negativo para estornos.',
     availableTools: ALL_READ_TOOLS,
     repositoryFiles: REPOSITORY_FILES,
+    knowledgeContext: [],
     priorSteps: [],
     ...overrides,
   };
@@ -81,6 +82,33 @@ describe('MockAiProvider', () => {
       const provider = new MockAiProvider();
       const result = await provider.generate(baseRequest({ role: 'planner', availableTools: ['get_issue'] }));
       expect(result.toolCalls.map((call) => call.toolName)).toEqual(['get_issue']);
+    });
+
+    it('inclui as fontes de conhecimento recuperadas no plano sem tratá-las como ferramenta executável', async () => {
+      const provider = new MockAiProvider();
+      const result = await provider.generate(
+        baseRequest({
+          role: 'planner',
+          knowledgeContext: [
+            {
+              sourceId: 'source-1',
+              title: 'ADR de arquitetura',
+              uri: 'demo://adr',
+              kind: 'adr',
+              content: 'Usar organizationId em todos os WHERE.',
+              wrappedContent: '<untrusted_knowledge>\nUsar organizationId em todos os WHERE.\n</untrusted_knowledge>',
+              chunkIndex: 0,
+              score: 2,
+              hasPromptInjectionRisk: false,
+            },
+          ],
+        }),
+      );
+
+      expect(result.output['knowledgeSourcesUsed']).toEqual([
+        expect.objectContaining({ title: 'ADR de arquitetura', kind: 'adr', score: 2 }),
+      ]);
+      expect(JSON.stringify(result.output['plan'])).toContain('conhecimento persistido');
     });
   });
 

@@ -15,8 +15,8 @@ Este documento é um resumo operacional para retomada. O mapa completo e mais de
 | Preparação de produção | Implementada nesta sessão, ainda não commitada | `.env.production.example`, checklist de deploy e validação fail-fast da API para produção. |
 | Correção do login local | Implementada nesta sessão, ainda não commitada | Default do PGlite agora é `<repo>/.data/forge-dev.pglite`, evitando migrate/seed em arquivo diferente do usado pela API dev. |
 | Fase 11: deployments demo | Implementada nesta sessão, ainda não commitada | Platform/admin solicitam deployments; ambientes protegidos criam approval pendente e audit log. |
-| Fase 12: conhecimento integrado | Implementada nesta sessão, ainda não commitada | Seed persiste fontes/chunks; API lista/busca conhecimento; UI no detalhe do projeto. |
-| Fase 15: responsividade e Lighthouse | Implementada nesta sessão, ainda não commitada | Drawer mobile acessível, testes responsivos, axe ampliado e Lighthouse com budgets reais. |
+| Fase 12: conhecimento integrado | Implementada e continuada nesta sessão | Seed persiste fontes/chunks; API lista/busca conhecimento; UI no detalhe do projeto; orquestrador injeta conhecimento recuperado nos agentes. |
+| Fase 15: responsividade e Lighthouse | Implementada e commitada | Drawer mobile acessível, testes responsivos, axe ampliado e Lighthouse com budgets reais. |
 
 ## Como Ver A Demo Local
 
@@ -91,6 +91,11 @@ Resultados confirmados nesta sessão:
 | `pnpm --filter @forge/web test:e2e -- axe-accessibility.spec.ts` | 3 testes passaram |
 | `pnpm --filter @forge/web test:e2e -- lighthouse-budgets.spec.ts` | 1 teste passou; scores: 99/100/100, 91/100/100, 100/100/100 |
 | `pnpm --filter @forge/web test:e2e` | 21/21 passaram; Lighthouse na suíte completa: 100/100/100, 96/100/100, 100/100/100 |
+| `pnpm --filter @forge/ai typecheck` | passou |
+| `pnpm --filter @forge/ai test` | 14/14 testes passaram |
+| `pnpm --filter @forge/agents typecheck` | passou |
+| `pnpm --filter @forge/agents test` | 9/9 testes passaram |
+| `pnpm --filter @forge/api test:e2e -- tasks.e2e-spec.ts` | 10/10 testes passaram, incluindo conhecimento injetado no run real |
 | `pnpm turbo run build lint typecheck test` | 31/34 passaram; `@forge/database#test` estourou hook PGlite sob carga |
 | `pnpm --filter @forge/database test` | rerun isolado passou: 6 arquivos / 18 testes |
 
@@ -104,7 +109,7 @@ Observação desta sessão: `pnpm --filter @forge/api test:e2e` completo foi ten
 - `run_command`/`run_tests` continuam simulados depois da aprovação. Para execução real com segurança, precisa de runner isolado com rede bloqueada, idealmente no ambiente de produção/staging, não no host local.
 - `@forge/testing` e `@forge/git` existem como base, mas ainda não estão conectados ao orquestrador principal nem persistindo resultados reais do pipeline.
 - Deploy real, decisão approve/reject de approvals de deployment, provedores reais de IA, GitHub real, OpenTelemetry/exporters e dashboards continuam pendentes.
-- Conhecimento já está persistido e buscável na demo, mas ainda falta indexador automático, embeddings/vector store e conexão direta com agentes.
+- Conhecimento já está persistido, buscável na demo e conectado ao orquestrador de agentes; ainda faltam indexador automático, embeddings/vector store e ranking semântico.
 - A tabela `approvals` registra a decisão já tomada; ainda não existe uma fila/painel cross-execução de aprovações pendentes baseada em linhas `pending`.
 
 ## Próximas Frentes Seguras
@@ -114,7 +119,7 @@ Observação desta sessão: `pnpm --filter @forge/api test:e2e` completo foi ten
 | Alta | UI de entrada/demo | Commitar a correção de `/` -> `/projects` e documentação do README. |
 | Alta | Produção sem Docker local | `.env.production.example` e `docs/production-deployment.md` preparados; ainda falta configurar serviços reais e validar deploy. |
 | Média | Fase 11 | Implementar approve/reject para approvals de deployment e plugar execução real em provedor externo. |
-| Média | Fase 12 | Criar indexador automático de docs/repositório, adicionar embeddings/vector store e conectar recuperação aos agentes. |
+| Média | Fase 12 | Criar indexador automático de docs/repositório, adicionar embeddings/vector store e evoluir o ranking além da recuperação lexical. |
 | Média | Fase 13 | Adicionar fronteira para provedores reais Gemini/Groq com feature flag e histórico persistido. |
 | Média | Fases 9/10/18 | Conectar testes/Git/comandos reais apenas quando houver runner isolado adequado. |
 | Baixa | Fase 15 | Levar budgets de bundle/chunk para CI e repetir refinamentos responsivos nas telas futuras. |
