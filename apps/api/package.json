@@ -28,6 +28,7 @@
     "@forge/ai": "workspace:*",
     "@forge/database": "workspace:*",
     "@forge/domain": "workspace:*",
+    "@forge/knowledge": "workspace:*",
     "@forge/sandbox": "workspace:*",
     "@forge/types": "workspace:*",
     "@nestjs/common": "^12.0.1",

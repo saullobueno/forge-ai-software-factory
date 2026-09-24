@@ -25,7 +25,7 @@ export function retrieveKnowledge(input: RetrieveKnowledgeInput): RetrievedKnowl
         projectId: document.projectId,
         workspaceId: document.workspaceId,
         content: document.content,
-        chunkIndex: 0,
+        chunkIndex: document.chunkIndex ?? 0,
         score,
         hasPromptInjectionRisk: hasPromptInjectionRisk(document.content),
       };

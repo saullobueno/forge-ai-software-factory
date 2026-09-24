@@ -10,6 +10,7 @@ export interface KnowledgeDocument {
   uri: string;
   version: string | null;
   content: string;
+  chunkIndex?: number;
 }
 
 export interface KnowledgeChunkInput {

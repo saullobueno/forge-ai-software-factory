@@ -10,6 +10,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CodeModule } from './modules/code/code.module.js';
 import { EnvironmentsModule } from './modules/environments/environments.module.js';
+import { KnowledgeModule } from './modules/knowledge/knowledge.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { TasksModule } from './modules/tasks/tasks.module.js';
 
@@ -26,6 +27,7 @@ import { TasksModule } from './modules/tasks/tasks.module.js';
     ArtifactsModule,
     AuditLogsModule,
     EnvironmentsModule,
+    KnowledgeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

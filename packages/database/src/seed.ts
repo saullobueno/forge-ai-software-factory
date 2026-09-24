@@ -13,14 +13,17 @@ async function main() {
   const summary = await runSeed(db);
 
   if (summary.alreadySeeded) {
-    console.log(`Organização "acme-platform" já existe (id=${summary.organizationId}); nada a fazer.`);
+    console.log(`Organização "acme-platform" já existe (id=${summary.organizationId}); seed demo conferido/atualizado.`);
     await close();
     return;
   }
 
   console.log('Seed aplicado com sucesso:');
   console.log(`  organization: Acme Platform (${summary.organizationId})`);
-  console.log(`  users: tech-lead@acme-platform.example, dev@acme-platform.example (senha de demo: "${DEMO_PASSWORD}")`);
+  console.log(
+    `  users: tech-lead@acme-platform.example, dev@acme-platform.example, platform@acme-platform.example ` +
+      `(senha de demo: "${DEMO_PASSWORD}")`,
+  );
   console.log(`  project: Forge Web App (${summary.projectId})`);
   console.log(`  repository: acme-platform/acme-platform-web (${summary.repositoryId})`);
   console.log(`  demo task: "Estornos aparecem como cobrança positiva na fatura" (${summary.demoTaskId})`);

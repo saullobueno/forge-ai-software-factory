@@ -148,6 +148,9 @@ importers:
       '@forge/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@forge/knowledge':
+        specifier: workspace:*
+        version: link:../../packages/knowledge
       '@forge/sandbox':
         specifier: workspace:*
         version: link:../../packages/sandbox
@@ -353,6 +356,9 @@ importers:
       '@forge/domain':
         specifier: workspace:*
         version: link:../domain
+      '@forge/knowledge':
+        specifier: workspace:*
+        version: link:../knowledge
       '@forge/types':
         specifier: workspace:*
         version: link:../types

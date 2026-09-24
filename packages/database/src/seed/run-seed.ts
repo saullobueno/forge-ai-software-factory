@@ -1,5 +1,6 @@
 import { authorizeToolCall, hashPassword } from '@forge/domain';
-import type { AgentRole } from '@forge/types';
+import { chunkKnowledge } from '@forge/knowledge';
+import type { AgentRole, KnowledgeSourceKind } from '@forge/types';
 import { and, eq } from 'drizzle-orm';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -16,6 +17,8 @@ import {
   diffs,
   environments,
   fileSnapshots,
+  knowledgeChunks,
+  knowledgeSources,
   notifications,
   organizations,
   projects,
@@ -75,6 +78,7 @@ export type SeedSummary =
       organizationId: string;
       techLeadUserId: string;
       developerUserId: string;
+      platformEngineerUserId: string;
       projectId: string;
       repositoryId: string;
       demoTaskId: string;
@@ -281,6 +285,131 @@ async function ensureDemoEnvironments(db: Database, organizationId: string): Pro
   ]);
 }
 
+async function ensureDemoPlatformEngineer(
+  db: Database,
+  organizationId: string,
+  passwordHash: string,
+): Promise<{ id: string }> {
+  const existing = await db.query.users.findFirst({
+    where: and(eq(users.organizationId, organizationId), eq(users.email, 'platform@acme-platform.example')),
+  });
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(users)
+    .values({
+      organizationId,
+      email: 'platform@acme-platform.example',
+      name: 'Clara Platform',
+      role: 'platform_engineer',
+      passwordHash,
+    })
+    .returning();
+  if (!created) throw new Error('Falha ao inserir o platform engineer de seed');
+  return created;
+}
+
+interface DemoKnowledgeDocument {
+  kind: KnowledgeSourceKind;
+  title: string;
+  uri: string;
+  version: string;
+  content: string;
+}
+
+const DEMO_KNOWLEDGE_DOCUMENTS: readonly DemoKnowledgeDocument[] = [
+  {
+    kind: 'adr',
+    title: 'ADR-001 Arquitetura modular do Forge',
+    uri: 'demo://forge-web-app/adr/001-arquitetura-modular',
+    version: '2026-09-18',
+    content:
+      'O Forge é organizado como monorepo TypeScript com apps Next.js e NestJS, além de pacotes compartilhados para database, domain, ai, agents, sandbox, knowledge e types.\n\n' +
+      'A regra central de arquitetura é manter contratos compartilhados em @forge/types, lógica reutilizável em packages/* e superfícies HTTP nos módulos NestJS. Repositórios sempre filtram por organizationId no WHERE para preservar isolamento multi-tenant.\n\n' +
+      'Em desenvolvimento local, PGlite é usado como banco padrão. Em produção, a decisão prevista é Postgres gerenciado, Redis/Upstash para filas e deploy separado para web/API.',
+  },
+  {
+    kind: 'code_rules',
+    title: 'Regras de código do Forge Web App',
+    uri: 'demo://forge-web-app/rules/code',
+    version: '2026-09-18',
+    content:
+      'Manter mudanças pequenas e testáveis. Preferir APIs tipadas, schemas Zod e validação explícita de entrada.\n\n' +
+      'No frontend, buscar dados com TanStack Query, invalidar caches após mutações e preservar UX de erro/carregamento. Não duplicar lógica de autorização do backend: a UI pode esconder ações por UX, mas a segurança fica nos guards.\n\n' +
+      'No backend, todo endpoint de projeto precisa validar UUID, confirmar pertencimento à organização atual e responder 404 genérico para recursos fora do tenant.',
+  },
+  {
+    kind: 'readme',
+    title: 'README operacional do repositório demo',
+    uri: 'demo://forge-web-app/readme',
+    version: '2026-09-24',
+    content:
+      'Contas demo: tech-lead@acme-platform.example, dev@acme-platform.example e platform@acme-platform.example, todas com senha demo1234.\n\n' +
+      'Fluxos já demonstráveis: login, listagem de projetos/tarefas, execução de agente seedada, exploração de código, playground de IA mock, auditoria, ambientes e solicitação de deployment com aprovação em produção.\n\n' +
+      'Sem Docker local por preferência do projeto. Validação de produção será feita no final com serviços gerenciados como Neon, Vercel, Render e Upstash.',
+  },
+  {
+    kind: 'repository_doc',
+    title: 'Handoff de QA e continuidade',
+    uri: 'demo://forge-web-app/docs/final-qa-handoff',
+    version: '2026-09-24',
+    content:
+      'O handoff atual registra que builds, lint, typecheck e testes direcionados passam. A suíte agregada pode sofrer timeout em PGlite quando múltiplos pacotes disputam banco em paralelo; rodar database isolado confirma estabilidade.\n\n' +
+      'Próximas frentes: conectar conhecimento persistido aos agentes, substituir mocks por provedores reais, configurar produção sem Docker local e completar aprovações operacionais.',
+  },
+];
+
+async function ensureDemoKnowledge(db: Database, organizationId: string): Promise<void> {
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.organizationId, organizationId), eq(projects.slug, 'forge-web-app')),
+  });
+  if (!project) return;
+
+  for (const document of DEMO_KNOWLEDGE_DOCUMENTS) {
+    const existing = await db.query.knowledgeSources.findFirst({
+      where: and(
+        eq(knowledgeSources.organizationId, organizationId),
+        eq(knowledgeSources.projectId, project.id),
+        eq(knowledgeSources.uri, document.uri),
+      ),
+      with: { chunks: true },
+    });
+
+    const source =
+      existing ??
+      (
+        await db
+          .insert(knowledgeSources)
+          .values({
+            organizationId,
+            projectId: project.id,
+            workspaceId: null,
+            kind: document.kind,
+            title: document.title,
+            uri: document.uri,
+            version: document.version,
+          })
+          .returning()
+      )[0];
+    if (!source) throw new Error(`Falha ao inserir knowledge source "${document.title}"`);
+    if (existing && existing.chunks.length > 0) continue;
+
+    await db.insert(knowledgeChunks).values(
+      chunkKnowledge({
+        sourceId: source.id,
+        content: document.content,
+        maxTokens: 120,
+        overlapTokens: 16,
+      }).map((chunk) => ({
+        knowledgeSourceId: chunk.knowledgeSourceId,
+        content: chunk.content,
+        chunkIndex: chunk.chunkIndex,
+        tokenCount: chunk.tokenCount,
+      })),
+    );
+  }
+}
+
 /**
  * Popula um cenário completo e coerente de demonstração (spec §21): 1
  * organization, 2 users, 1 project, o repositório demo
@@ -298,7 +427,10 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     where: eq(organizations.slug, 'acme-platform'),
   });
   if (existing) {
+    const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
+    await ensureDemoPlatformEngineer(db, existing.id, demoPasswordHash);
     await ensureDemoEnvironments(db, existing.id);
+    await ensureDemoKnowledge(db, existing.id);
     return { alreadySeeded: true, organizationId: existing.id };
   }
 
@@ -333,6 +465,8 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     })
     .returning();
   if (!developer) throw new Error('Falha ao inserir o developer de seed');
+
+  const platformEngineer = await ensureDemoPlatformEngineer(db, organization.id, demoPasswordHash);
 
   const [project] = await db
     .insert(projects)
@@ -965,6 +1099,8 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     },
   ]);
 
+  await ensureDemoKnowledge(db, organization.id);
+
   const approvalReason =
     'Diff mínimo e correto; testes passando (6/6); revisão sem findings críticos ou altos — aprovado para merge.';
 
@@ -1054,6 +1190,7 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     organizationId: organization.id,
     techLeadUserId: techLead.id,
     developerUserId: developer.id,
+    platformEngineerUserId: platformEngineer.id,
     projectId: project.id,
     repositoryId: repository.id,
     demoTaskId: demoTask.id,
