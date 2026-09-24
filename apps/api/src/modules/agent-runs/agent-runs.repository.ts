@@ -6,8 +6,9 @@ import { DatabaseService } from '../../infrastructure/database/database.service.
 export type AgentRunRow = typeof schema.agentRuns.$inferSelect;
 export type AgentStepRow = typeof schema.agentSteps.$inferSelect;
 export type ToolCallRow = typeof schema.toolCalls.$inferSelect;
+export type AiUsageRow = typeof schema.aiUsages.$inferSelect;
 
-export type AgentStepWithToolCalls = AgentStepRow & { toolCalls: ToolCallRow[] };
+export type AgentStepWithToolCalls = AgentStepRow & { toolCalls: ToolCallRow[]; usages: AiUsageRow[] };
 export type AgentRunWithSteps = AgentRunRow & { steps: AgentStepWithToolCalls[] };
 
 export interface CreateAgentRunInput {
@@ -66,6 +67,7 @@ export class AgentRunsRepository {
           orderBy: [asc(schema.agentSteps.createdAt)],
           with: {
             toolCalls: { orderBy: [asc(schema.toolCalls.createdAt)] },
+            usages: { orderBy: [asc(schema.aiUsages.createdAt)] },
           },
         },
       },

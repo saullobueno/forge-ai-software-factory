@@ -375,6 +375,32 @@ beforeAll(async () => {
     .returning();
   if (!reviewerStep) throw new Error('agentStep não inserido');
 
+  const [reviewerAiMessage] = await testApp.db
+    .insert(testApp.schema.aiMessages)
+    .values({
+      organizationId: organizationA.id,
+      agentStepId: reviewerStep.id,
+      role: 'assistant',
+      content: JSON.stringify({ summary: 'Revisão concluída.', output: { verdict: 'approve' } }),
+      provider: 'mock',
+      model: 'mock-deterministic',
+    })
+    .returning();
+  if (!reviewerAiMessage) throw new Error('aiMessage não inserida');
+
+  await testApp.db.insert(testApp.schema.aiUsages).values({
+    organizationId: organizationA.id,
+    agentRunId: runCompleted.id,
+    agentStepId: reviewerStep.id,
+    aiMessageId: reviewerAiMessage.id,
+    provider: 'mock',
+    model: 'mock-deterministic',
+    promptTokens: 120,
+    completionTokens: 80,
+    totalTokens: 200,
+    costUsd: '0.000600',
+  });
+
   await testApp.db.insert(testApp.schema.toolCalls).values({
     agentStepId: reviewerStep.id,
     toolName: 'inspect_diff',
@@ -498,6 +524,13 @@ describe('GET /agent-runs/:id', () => {
     expect(response.body.steps[0].output.findings).toHaveLength(1);
     expect(response.body.steps[0].toolCalls).toHaveLength(1);
     expect(response.body.steps[0].toolCalls[0].toolName).toBe('inspect_diff');
+    expect(response.body.steps[0].usages).toEqual([
+      expect.objectContaining({
+        provider: 'mock',
+        model: 'mock-deterministic',
+        totalTokens: 200,
+      }),
+    ]);
   });
 
   it('retorna 404 (não 403) para uma execução de OUTRA organização', async () => {

@@ -16,7 +16,7 @@ Este documento é um resumo operacional para retomada. O mapa completo e mais de
 | Correção do login local | Implementada nesta sessão, ainda não commitada | Default do PGlite agora é `<repo>/.data/forge-dev.pglite`, evitando migrate/seed em arquivo diferente do usado pela API dev. |
 | Fase 11: deployments demo | Implementada nesta sessão, ainda não commitada | Platform/admin solicitam deployments; ambientes protegidos criam approval pendente e audit log. |
 | Fase 12: conhecimento integrado | Implementada e continuada nesta sessão | Seed persiste fontes/chunks; API lista/busca conhecimento; UI no detalhe do projeto; orquestrador injeta conhecimento recuperado nos agentes. |
-| Fase 13: providers reais de IA | Implementada e continuada nesta sessão | `@forge/ai` suporta `AI_PROVIDER=gemini`/`groq` por HTTP, com `mock` como default; chamadas de agente persistem `ai_messages`/`ai_usages`. |
+| Fase 13: providers reais de IA | Implementada e continuada nesta sessão | `@forge/ai` suporta `AI_PROVIDER=gemini`/`groq` por HTTP, com `mock` como default; chamadas de agente persistem e aparecem no detalhe do run. |
 | Fase 15: responsividade e Lighthouse | Implementada e commitada | Drawer mobile acessível, testes responsivos, axe ampliado e Lighthouse com budgets reais. |
 
 ## Como Ver A Demo Local
@@ -103,6 +103,9 @@ Resultados confirmados nesta sessão:
 | `pnpm --filter @forge/api test:e2e -- runtime-smoke.e2e-spec.ts` | rerun passou: 2/2 testes |
 | `pnpm --filter @forge/agents lint` | passou |
 | `pnpm --filter @forge/api test:e2e -- tasks.e2e-spec.ts` | 10/10 passaram após persistência de `ai_usages` |
+| `pnpm --filter @forge/web typecheck` | passou |
+| `pnpm --filter @forge/web lint` | passou |
+| `pnpm --filter @forge/api test:e2e -- agent-runs.e2e-spec.ts` | rerun isolado passou: 27/27 testes |
 | `pnpm turbo run build lint typecheck test` | 31/34 passaram; `@forge/database#test` estourou hook PGlite sob carga |
 | `pnpm --filter @forge/database test` | rerun isolado passou: 6 arquivos / 18 testes |
 

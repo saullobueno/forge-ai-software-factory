@@ -251,6 +251,21 @@ export interface ApiToolCall {
   createdAt: string;
 }
 
+export interface ApiAiUsage {
+  id: string;
+  organizationId: string;
+  agentRunId: string | null;
+  agentStepId: string | null;
+  aiMessageId: string | null;
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: string;
+  createdAt: string;
+}
+
 export interface ApiAgentStep {
   id: string;
   agentRunId: string;
@@ -266,6 +281,7 @@ export interface ApiAgentStep {
   costUsd: string;
   createdAt: string;
   toolCalls: ApiToolCall[];
+  usages: ApiAiUsage[];
 }
 
 export interface ApiAgentRunDetail extends ApiAgentRun {

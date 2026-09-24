@@ -44,9 +44,20 @@ function formatDuration(durationMs: number | null): string {
 
 function StepDetails({ step }: { step: ApiAgentStep }) {
   const findings = step.role === 'reviewer' ? parseReviewerFindings(step.output) : null;
+  const primaryUsage = step.usages[0] ?? null;
 
   return (
     <div className="flex flex-col gap-3 border-t border-border p-3 text-sm">
+      {primaryUsage && (
+        <div className="rounded-md border border-border p-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{primaryUsage.provider}</span>
+          <span> / {primaryUsage.model}</span>
+          <span> · prompt {primaryUsage.promptTokens.toLocaleString('pt-BR')}</span>
+          <span> · completion {primaryUsage.completionTokens.toLocaleString('pt-BR')}</span>
+          <span> · ${Number(primaryUsage.costUsd).toFixed(4)}</span>
+        </div>
+      )}
+
       <div>
         <h4 className="text-xs font-medium text-muted-foreground">Entrada</h4>
         <pre className="mt-1 overflow-auto rounded-md bg-muted p-2 text-xs">
@@ -124,6 +135,7 @@ function StepDetails({ step }: { step: ApiAgentStep }) {
 
 function StepCard({ step }: { step: ApiAgentStep }) {
   const [expanded, setExpanded] = useState(false);
+  const primaryUsage = step.usages[0] ?? null;
 
   return (
     <li className="rounded-lg border border-border" data-testid="agent-step">
@@ -142,6 +154,7 @@ function StepCard({ step }: { step: ApiAgentStep }) {
         </div>
         <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
           <span>{formatDuration(step.durationMs)}</span>
+          {primaryUsage && <span className="hidden max-w-40 truncate sm:inline">{primaryUsage.provider}/{primaryUsage.model}</span>}
           <span>{step.tokens.toLocaleString('pt-BR')} tokens</span>
           <span>${Number(step.costUsd).toFixed(4)}</span>
           <span aria-hidden>{expanded ? '▾' : '▸'}</span>
