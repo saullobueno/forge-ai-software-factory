@@ -14,7 +14,13 @@
       "dependsOn": ["^build"]
     },
     "typecheck": {
-      "dependsOn": ["^build"],
+      // "build" (não só "^build"): `apps/web` usa rotas tipadas do Next.js
+      // (`PageProps`/`LayoutProps` globais, gerados em `.next/types/` só
+      // depois de um `next build`/`next dev`). Sem depender do PRÓPRIO
+      // build, `tsc --noEmit` falha num checkout limpo (CI) mesmo com o
+      // código correto — só não aparecia localmente porque `.next/` já
+      // existia de builds manuais anteriores.
+      "dependsOn": ["build", "^build"],
       "outputs": ["*.tsbuildinfo"]
     },
     "test": {
