@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -11,8 +12,14 @@ describe('LocalProcessSandboxRunner', () => {
     workspaceRoot = mkdtempSync(join(tmpdir(), 'forge-sandbox-local-'));
   });
 
-  afterEach(() => {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+  afterEach(async () => {
+    // `rm` assíncrono (não `rmSync`) com `maxRetries`/`retryDelay`: no
+    // Windows, matar a árvore de processos de um teste de timeout não
+    // libera o handle do diretório de workspace instantaneamente — uma
+    // limpeza síncrona imediatamente depois pode bater em `EPERM`. Essas
+    // opções existem no Node justamente para essa corrida (o mesmo
+    // problema que motivou `rimraf` a existir no ecossistema npm).
+    await rm(workspaceRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('executa um comando permitido dentro do workspace', async () => {
