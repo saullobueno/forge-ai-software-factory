@@ -13,7 +13,12 @@ import { E2E_API_PORT, E2E_API_URL, E2E_DATABASE_LOCAL_PATH, E2E_WEB_PORT } from
 // serviria dados obsoletos/vazios mesmo depois do seed "terminar". Reusa
 // os mesmos scripts CLI de `pnpm --filter @forge/database db:migrate`/
 // `db:seed` (idempotentes — seguro rodar em toda execução da suíte).
+// Apaga o PGlite isolado do e2e antes de migrar/seedar — sem isso, um
+// arquivo deixado por uma execução anterior da suíte faz o seed (idempotente
+// por design) pular dados novos adicionados ao seed depois daquela execução
+// (ver e2e/reset-e2e-db.mjs para o caso real que isso causou).
 const apiCommand = [
+  'node e2e/reset-e2e-db.mjs',
   'pnpm --filter @forge/database db:migrate',
   'pnpm --filter @forge/database db:seed',
   'pnpm --filter @forge/api run start',
