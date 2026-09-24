@@ -80,6 +80,19 @@ export interface CompleteToolCallInput {
   result: Record<string, unknown> | null;
 }
 
+export interface RecordAiUsageInput {
+  organizationId: string;
+  agentRunId: string;
+  agentStepId: string;
+  provider: string;
+  model: string;
+  content: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
 export interface AgentRunTraceEvent {
   name: 'agent.step' | 'tool.call';
   phase: 'start' | 'end';
@@ -140,6 +153,7 @@ export interface AgentRunStore {
   completeStep(stepId: string, update: CompleteStepInput): Promise<void>;
   createToolCall(input: CreateToolCallInput): Promise<{ id: string }>;
   completeToolCall(toolCallId: string, update: CompleteToolCallInput): Promise<void>;
+  recordAiUsage(input: RecordAiUsageInput): Promise<void>;
   accumulateUsage(agentRunId: string, tokens: number, costUsd: number): Promise<void>;
 }
 

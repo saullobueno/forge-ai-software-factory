@@ -13,6 +13,7 @@ import type {
   CreateStepInput,
   CreateToolCallInput,
   ProjectRulesContext,
+  RecordAiUsageInput,
   RepositoryContext,
   RepositoryFileContent,
   RepositoryReader,
@@ -50,6 +51,7 @@ export class FakeAgentRunStore {
   readonly statusHistory: AgentRunStatus[] = [];
   readonly steps: RecordedStep[] = [];
   readonly toolCalls: RecordedToolCall[] = [];
+  readonly aiUsages: RecordAiUsageInput[] = [];
   totalTokens = 0;
   totalCostUsd = 0;
 
@@ -138,6 +140,10 @@ export class FakeAgentRunStore {
     if (!toolCall) throw new Error('tool call desconhecida');
     toolCall.status = update.status;
     toolCall.result = update.result;
+  }
+
+  async recordAiUsage(input: RecordAiUsageInput): Promise<void> {
+    this.aiUsages.push(input);
   }
 
   async accumulateUsage(_agentRunId: string, tokens: number, costUsd: number): Promise<void> {

@@ -334,6 +334,18 @@ export class AgentRunOrchestrator {
             durationMs,
             attributes: { tokens: generation.usage.totalTokens, costUsd },
           });
+          await store.recordAiUsage({
+            organizationId: run.organizationId,
+            agentRunId,
+            agentStepId: stepRecord.id,
+            provider: this.deps.ai.name,
+            model: this.deps.ai.model ?? this.deps.ai.name,
+            content: JSON.stringify({ summary: generation.summary, output: generation.output }),
+            promptTokens: generation.usage.promptTokens,
+            completionTokens: generation.usage.completionTokens,
+            totalTokens: generation.usage.totalTokens,
+            costUsd,
+          });
           await store.accumulateUsage(agentRunId, generation.usage.totalTokens, costUsd);
 
           priorSteps.push({ role: stage.role, summary: generation.summary, output: generation.output });

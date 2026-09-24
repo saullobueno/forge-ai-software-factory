@@ -16,7 +16,7 @@ Este documento é um resumo operacional para retomada. O mapa completo e mais de
 | Correção do login local | Implementada nesta sessão, ainda não commitada | Default do PGlite agora é `<repo>/.data/forge-dev.pglite`, evitando migrate/seed em arquivo diferente do usado pela API dev. |
 | Fase 11: deployments demo | Implementada nesta sessão, ainda não commitada | Platform/admin solicitam deployments; ambientes protegidos criam approval pendente e audit log. |
 | Fase 12: conhecimento integrado | Implementada e continuada nesta sessão | Seed persiste fontes/chunks; API lista/busca conhecimento; UI no detalhe do projeto; orquestrador injeta conhecimento recuperado nos agentes. |
-| Fase 13: providers reais de IA | Implementada nesta sessão | `@forge/ai` suporta `AI_PROVIDER=gemini`/`groq` por HTTP, com `mock` como default e testes sem rede. |
+| Fase 13: providers reais de IA | Implementada e continuada nesta sessão | `@forge/ai` suporta `AI_PROVIDER=gemini`/`groq` por HTTP, com `mock` como default; chamadas de agente persistem `ai_messages`/`ai_usages`. |
 | Fase 15: responsividade e Lighthouse | Implementada e commitada | Drawer mobile acessível, testes responsivos, axe ampliado e Lighthouse com budgets reais. |
 
 ## Como Ver A Demo Local
@@ -101,6 +101,8 @@ Resultados confirmados nesta sessão:
 | `pnpm --filter @forge/ai lint` | passou |
 | `pnpm --filter @forge/api build` | passou |
 | `pnpm --filter @forge/api test:e2e -- runtime-smoke.e2e-spec.ts` | rerun passou: 2/2 testes |
+| `pnpm --filter @forge/agents lint` | passou |
+| `pnpm --filter @forge/api test:e2e -- tasks.e2e-spec.ts` | 10/10 passaram após persistência de `ai_usages` |
 | `pnpm turbo run build lint typecheck test` | 31/34 passaram; `@forge/database#test` estourou hook PGlite sob carga |
 | `pnpm --filter @forge/database test` | rerun isolado passou: 6 arquivos / 18 testes |
 
@@ -114,7 +116,7 @@ Observação desta sessão: `pnpm --filter @forge/api test:e2e` completo foi ten
 - `run_command`/`run_tests` continuam simulados depois da aprovação. Para execução real com segurança, precisa de runner isolado com rede bloqueada, idealmente no ambiente de produção/staging, não no host local.
 - `@forge/testing` e `@forge/git` existem como base, mas ainda não estão conectados ao orquestrador principal nem persistindo resultados reais do pipeline.
 - Deploy real, GitHub real, OpenTelemetry/exporters e dashboards continuam pendentes.
-- Providers reais Gemini/Groq já existem, mas ainda faltam histórico persistido de chamadas/custo/latência e limites por organização/usuário antes de liberar tráfego real amplo.
+- Providers reais Gemini/Groq já existem e registram histórico básico em `ai_messages`/`ai_usages`, mas ainda faltam limites por organização/usuário e telas/dashboards de custo/latência antes de liberar tráfego real amplo.
 - Conhecimento já está persistido, buscável na demo e conectado ao orquestrador de agentes; ainda faltam indexador automático, embeddings/vector store e ranking semântico.
 - A tabela `approvals` registra a decisão já tomada; ainda não existe uma fila/painel cross-execução de aprovações pendentes baseada em linhas `pending`.
 
@@ -126,6 +128,6 @@ Observação desta sessão: `pnpm --filter @forge/api test:e2e` completo foi ten
 | Alta | Produção sem Docker local | `.env.production.example` e `docs/production-deployment.md` preparados; ainda falta configurar serviços reais e validar deploy. |
 | Média | Fase 11 | Implementar approve/reject para approvals de deployment e plugar execução real em provedor externo. |
 | Média | Fase 12 | Criar indexador automático de docs/repositório, adicionar embeddings/vector store e evoluir o ranking além da recuperação lexical. |
-| Média | Fase 13 | Persistir histórico/custo/latência de chamadas reais e adicionar limites por organização/usuário. |
+| Média | Fase 13 | Adicionar limites por organização/usuário e UI/dashboards de custo/latência para chamadas reais. |
 | Média | Fases 9/10/18 | Conectar testes/Git/comandos reais apenas quando houver runner isolado adequado. |
 | Baixa | Fase 15 | Levar budgets de bundle/chunk para CI e repetir refinamentos responsivos nas telas futuras. |

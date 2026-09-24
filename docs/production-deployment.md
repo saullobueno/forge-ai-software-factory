@@ -77,7 +77,7 @@ GROQ_MODEL=llama-3.3-70b-versatile
 
 `AI_MODEL` também pode ser usado como fallback genérico para o modelo. `AI_REQUEST_TIMEOUT_MS` controla timeout por chamada (default: 30000). `AI_PROVIDER=mock` continua recomendado para demo local, testes e staging sem custo. Anthropic segue reservado como ponto futuro; `AI_PROVIDER=anthropic` falha cedo até existir adapter dedicado.
 
-Antes de abrir tráfego real, ainda falta persistir histórico detalhado de chamadas/custo/latência e definir limites por organização/usuário.
+As chamadas de agente já persistem uso básico em `ai_messages`/`ai_usages` (provider, modelo, tokens, custo estimado e resposta resumida). Antes de abrir tráfego real amplo, ainda faltam limites por organização/usuário e dashboards/consultas operacionais de custo/latência.
 
 ## Runner Real
 

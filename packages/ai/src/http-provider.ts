@@ -40,9 +40,9 @@ const SYSTEM_PROMPT = [
 
 export class HttpAiProvider implements AiProvider {
   readonly name: HttpAiProviderKind;
+  readonly model: string;
 
   private readonly apiKey: string;
-  private readonly model: string;
   private readonly timeoutMs: number;
   private readonly transport: HttpTransport;
 

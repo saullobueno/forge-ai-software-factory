@@ -102,6 +102,7 @@ function firstMatchingLine(content: string, keywords: readonly string[]): string
  */
 export class MockAiProvider implements AiProvider {
   readonly name = 'mock';
+  readonly model = 'mock-deterministic';
 
   async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
     switch (request.role) {

@@ -11,6 +11,7 @@ import type {
   CreateStepInput,
   CreateToolCallInput,
   ProjectRulesContext,
+  RecordAiUsageInput,
   RepositoryContext,
   TaskContext,
 } from '@forge/agents';
@@ -218,6 +219,34 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
         ...(update.status === 'pending' ? {} : { completedAt: new Date() }),
       })
       .where(eq(schema.toolCalls.id, toolCallId));
+  }
+
+  async recordAiUsage(input: RecordAiUsageInput): Promise<void> {
+    const [message] = await this.database.db
+      .insert(schema.aiMessages)
+      .values({
+        organizationId: input.organizationId,
+        agentStepId: input.agentStepId,
+        role: 'assistant',
+        content: input.content,
+        provider: input.provider,
+        model: input.model,
+      })
+      .returning();
+    if (!message) throw new Error('Falha ao inserir aiMessage.');
+
+    await this.database.db.insert(schema.aiUsages).values({
+      organizationId: input.organizationId,
+      agentRunId: input.agentRunId,
+      agentStepId: input.agentStepId,
+      aiMessageId: message.id,
+      provider: input.provider,
+      model: input.model,
+      promptTokens: input.promptTokens,
+      completionTokens: input.completionTokens,
+      totalTokens: input.totalTokens,
+      costUsd: input.costUsd.toFixed(6),
+    });
   }
 
   /**

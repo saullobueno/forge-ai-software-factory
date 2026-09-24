@@ -289,6 +289,17 @@ describe('POST /tasks/:id/agent-runs', () => {
         kind: 'adr',
       }),
     ]);
+
+    const { eq } = await import('@forge/database');
+    const usages = await testApp.db.query.aiUsages.findMany({
+      where: eq(testApp.schema.aiUsages.agentRunId, createResponse.body.id as string),
+    });
+    expect(usages.length).toBeGreaterThan(0);
+    expect(usages[0]).toMatchObject({
+      provider: 'mock',
+      model: 'mock-deterministic',
+      totalTokens: expect.any(Number),
+    });
   });
 });
 

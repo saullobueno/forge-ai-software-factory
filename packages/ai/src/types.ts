@@ -113,5 +113,6 @@ export interface AiGenerateResult {
  */
 export interface AiProvider {
   readonly name: string;
+  readonly model?: string;
   generate(request: AiGenerateRequest): Promise<AiGenerateResult>;
 }

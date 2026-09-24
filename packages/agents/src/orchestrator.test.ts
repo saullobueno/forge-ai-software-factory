@@ -119,6 +119,15 @@ describe('AgentRunOrchestrator', () => {
     ]);
     expect(store.steps).toHaveLength(6);
     expect(store.steps.every((step) => step.status === 'succeeded')).toBe(true);
+    expect(store.aiUsages).toHaveLength(6);
+    expect(store.aiUsages[0]).toEqual(
+      expect.objectContaining({
+        agentRunId: RUN_ID,
+        provider: 'mock',
+        model: 'mock-deterministic',
+        totalTokens: expect.any(Number),
+      }),
+    );
     expect(store.toolCalls.some((call) => call.status === 'pending')).toBe(false);
     expect(events.events.at(-1)).toEqual({ agentRunId: RUN_ID, status: 'completed' });
   });
