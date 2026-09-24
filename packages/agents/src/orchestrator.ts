@@ -5,7 +5,10 @@ import { estimateCostUsd } from './cost.ts';
 import { AGENT_PIPELINE } from './pipeline.ts';
 import type {
   AgentRunEventPublisher,
+  AgentRunGovernanceSink,
   AgentRunStore,
+  AgentRunTraceEvent,
+  AgentRunTraceSink,
   OrchestratorActor,
   RepositoryFileContent,
   RepositoryReader,
@@ -17,6 +20,8 @@ export interface AgentRunOrchestratorDeps {
   ai: AiProvider;
   repositoryReader: RepositoryReader;
   events: AgentRunEventPublisher;
+  traces?: AgentRunTraceSink;
+  governance?: AgentRunGovernanceSink;
   /** Injetável para testes; por padrão o relógio real. Só afeta `durationMs` (observabilidade), nunca decisões. */
   clock?: () => Date;
 }
@@ -121,6 +126,14 @@ export class AgentRunOrchestrator {
         });
 
         if (!agent || !agent.isEnabled) {
+          await this.recordTrace({
+            name: 'agent.step',
+            phase: 'start',
+            agentRunId,
+            stepId: stepRecord.id,
+            role: stage.role,
+            attributes: { stepName: stage.stepName },
+          });
           await store.completeStep(stepRecord.id, {
             status: 'skipped',
             output: { reason: agent ? 'Agente desabilitado para este papel.' : 'Nenhum agente configurado para este papel.' },
@@ -128,11 +141,29 @@ export class AgentRunOrchestrator {
             costUsd: 0,
             durationMs: 0,
           });
+          await this.recordTrace({
+            name: 'agent.step',
+            phase: 'end',
+            agentRunId,
+            stepId: stepRecord.id,
+            role: stage.role,
+            status: 'skipped',
+            durationMs: 0,
+            attributes: { reason: agent ? 'agent_disabled' : 'agent_missing' },
+          });
           events.publish({ agentRunId, status: stage.runStatus });
           continue;
         }
 
         const startedAt = clock().getTime();
+        await this.recordTrace({
+          name: 'agent.step',
+          phase: 'start',
+          agentRunId,
+          stepId: stepRecord.id,
+          role: stage.role,
+          attributes: { stepName: stage.stepName },
+        });
 
         try {
           const generation = await this.deps.ai.generate({
@@ -156,6 +187,16 @@ export class AgentRunOrchestrator {
               toolName: proposal.toolName,
               arguments: proposal.arguments,
             });
+            const toolCallStartedAt = clock().getTime();
+            await this.recordTrace({
+              name: 'tool.call',
+              phase: 'start',
+              agentRunId,
+              stepId: stepRecord.id,
+              toolCallId: toolCallRecord.id,
+              role: stage.role,
+              toolName: proposal.toolName,
+            });
 
             const authorization = authorizeToolCall({
               actor,
@@ -169,6 +210,29 @@ export class AgentRunOrchestrator {
                 status: 'rejected',
                 result: { policyDecision: authorization },
               });
+              await this.recordTrace({
+                name: 'tool.call',
+                phase: 'end',
+                agentRunId,
+                stepId: stepRecord.id,
+                toolCallId: toolCallRecord.id,
+                role: stage.role,
+                toolName: proposal.toolName,
+                status: 'rejected',
+                durationMs: Math.max(0, clock().getTime() - toolCallStartedAt),
+                attributes: { policyDecision: authorization.decision },
+              });
+              await this.recordPolicyDecision({
+                agentRunId,
+                organizationId: run.organizationId,
+                actorUserId: actor.userId ?? null,
+                stepId: stepRecord.id,
+                toolCallId: toolCallRecord.id,
+                role: stage.role,
+                toolName: proposal.toolName,
+                decision: 'deny',
+                reason: authorization.reason,
+              });
               continue;
             }
 
@@ -179,6 +243,29 @@ export class AgentRunOrchestrator {
                 result: { proposed: proposal.simulatedResult ?? null, policyDecision: authorization },
               });
               implementerPatch = this.extractSimulatedPatch(proposal.arguments, proposal.simulatedResult) ?? implementerPatch;
+              await this.recordTrace({
+                name: 'tool.call',
+                phase: 'end',
+                agentRunId,
+                stepId: stepRecord.id,
+                toolCallId: toolCallRecord.id,
+                role: stage.role,
+                toolName: proposal.toolName,
+                status: 'pending',
+                durationMs: Math.max(0, clock().getTime() - toolCallStartedAt),
+                attributes: { policyDecision: authorization.decision },
+              });
+              await this.recordPolicyDecision({
+                agentRunId,
+                organizationId: run.organizationId,
+                actorUserId: actor.userId ?? null,
+                stepId: stepRecord.id,
+                toolCallId: toolCallRecord.id,
+                role: stage.role,
+                toolName: proposal.toolName,
+                decision: 'require_approval',
+                reason: authorization.reason,
+              });
               continue;
             }
 
@@ -195,6 +282,18 @@ export class AgentRunOrchestrator {
               status: execution.ok ? 'succeeded' : 'failed',
               result: execution.result,
             });
+            await this.recordTrace({
+              name: 'tool.call',
+              phase: 'end',
+              agentRunId,
+              stepId: stepRecord.id,
+              toolCallId: toolCallRecord.id,
+              role: stage.role,
+              toolName: proposal.toolName,
+              status: execution.ok ? 'succeeded' : 'failed',
+              durationMs: Math.max(0, clock().getTime() - toolCallStartedAt),
+              attributes: { policyDecision: authorization.decision },
+            });
           }
 
           const durationMs = Math.max(0, clock().getTime() - startedAt);
@@ -205,6 +304,16 @@ export class AgentRunOrchestrator {
             tokens: generation.usage.totalTokens,
             costUsd,
             durationMs,
+          });
+          await this.recordTrace({
+            name: 'agent.step',
+            phase: 'end',
+            agentRunId,
+            stepId: stepRecord.id,
+            role: stage.role,
+            status: 'succeeded',
+            durationMs,
+            attributes: { tokens: generation.usage.totalTokens, costUsd },
           });
           await store.accumulateUsage(agentRunId, generation.usage.totalTokens, costUsd);
 
@@ -217,6 +326,16 @@ export class AgentRunOrchestrator {
             tokens: 0,
             costUsd: 0,
             durationMs: Math.max(0, clock().getTime() - startedAt),
+          });
+          await this.recordTrace({
+            name: 'agent.step',
+            phase: 'end',
+            agentRunId,
+            stepId: stepRecord.id,
+            role: stage.role,
+            status: 'failed',
+            durationMs: Math.max(0, clock().getTime() - startedAt),
+            attributes: { error: error instanceof Error ? error.message : 'Erro desconhecido.' },
           });
           await this.transitionToFailed(agentRunId);
           return;
@@ -303,5 +422,21 @@ export class AgentRunOrchestrator {
       additions: typeof additions === 'number' ? additions : 0,
       deletions: typeof deletions === 'number' ? deletions : 0,
     };
+  }
+
+  private async recordTrace(event: AgentRunTraceEvent): Promise<void> {
+    try {
+      await this.deps.traces?.record(event);
+    } catch {
+      // Observabilidade nunca deve alterar o resultado da execução.
+    }
+  }
+
+  private async recordPolicyDecision(event: Parameters<AgentRunGovernanceSink['recordPolicyDecision']>[0]): Promise<void> {
+    try {
+      await this.deps.governance?.recordPolicyDecision(event);
+    } catch {
+      // Auditoria auxiliar não deve alterar o resultado da execução.
+    }
   }
 }

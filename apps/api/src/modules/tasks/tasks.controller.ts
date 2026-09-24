@@ -42,7 +42,7 @@ export class TasksController {
       throw new NotFoundException('Tarefa não encontrada.');
     }
 
-    const agentRun = await this.tasksService.triggerAgentRun(id, user.organizationId, user.role);
+    const agentRun = await this.tasksService.triggerAgentRun(id, user.organizationId, user.role, user.userId);
     if (!agentRun) {
       throw new NotFoundException('Tarefa não encontrada.');
     }

@@ -9,6 +9,8 @@ import {
   FakeAgentRunStore,
   FakeRepositoryReader,
   RecordingEventPublisher,
+  RecordingGovernanceSink,
+  RecordingTraceSink,
 } from './test-support/fake-store.ts';
 
 const ORG_ID = 'org-1';
@@ -109,7 +111,14 @@ describe('AgentRunOrchestrator', () => {
   it('para em "approval_required" quando o implementer propõe uma alteração de escrita', async () => {
     const { store, repositoryReader } = buildStore();
     const events = new RecordingEventPublisher();
-    const orchestrator = new AgentRunOrchestrator({ store, ai: new MockAiProvider(), repositoryReader, events });
+    const governance = new RecordingGovernanceSink();
+    const orchestrator = new AgentRunOrchestrator({
+      store,
+      ai: new MockAiProvider(),
+      repositoryReader,
+      events,
+      governance,
+    });
 
     await orchestrator.run(RUN_ID, ACTOR);
 
@@ -124,6 +133,15 @@ describe('AgentRunOrchestrator', () => {
     expect(patchCall?.result?.['proposed']).toBeTruthy();
 
     expect(events.events.some((event) => event.status === 'completed')).toBe(false);
+    expect(governance.policyDecisions).toEqual([
+      expect.objectContaining({
+        agentRunId: RUN_ID,
+        organizationId: ORG_ID,
+        decision: 'require_approval',
+        role: 'implementer',
+        toolName: 'apply_patch',
+      }),
+    ]);
   });
 
   it('para de avançar quando a execução é cancelada por fora, sem sobrescrever o cancelamento', async () => {
@@ -197,6 +215,35 @@ describe('AgentRunOrchestrator', () => {
 
     const documentationStep = store.steps.find((step) => step.role === 'documentation_agent');
     expect(documentationStep?.status).toBe('skipped');
+  });
+
+  it('emite traces para etapas de agente e tool calls sem alterar o resultado da execução', async () => {
+    const { store, repositoryReader } = buildStore();
+    const events = new RecordingEventPublisher();
+    const traces = new RecordingTraceSink();
+    const orchestrator = new AgentRunOrchestrator({
+      store,
+      ai: new MockAiProvider(),
+      repositoryReader,
+      events,
+      traces,
+    });
+
+    await orchestrator.run(RUN_ID, ACTOR);
+
+    expect(traces.events.some((event) => event.name === 'agent.step' && event.phase === 'start')).toBe(true);
+    expect(
+      traces.events.some(
+        (event) => event.name === 'agent.step' && event.phase === 'end' && event.status === 'succeeded',
+      ),
+    ).toBe(true);
+    expect(traces.events.some((event) => event.name === 'tool.call' && event.phase === 'start')).toBe(true);
+    expect(
+      traces.events.some(
+        (event) => event.name === 'tool.call' && event.phase === 'end' && event.status === 'pending',
+      ),
+    ).toBe(true);
+    expect(store.statusHistory.at(-1)).toBe('approval_required');
   });
 
   it('não avança quando a execução já não está mais em "queued" ao ser processada', async () => {

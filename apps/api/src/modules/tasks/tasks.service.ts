@@ -35,11 +35,16 @@ export class TasksService {
     taskId: string,
     organizationId: string,
     actorRole: MemberRole,
+    actorUserId: string,
   ): Promise<AgentRunRow | undefined> {
     const task = await this.tasksRepository.findById(taskId, organizationId);
     if (!task) return undefined;
 
-    return this.agentRunsService.triggerForTask(task, { role: actorRole, organizationId });
+    return this.agentRunsService.triggerForTask(
+      task,
+      { role: actorRole, organizationId, userId: actorUserId },
+      actorUserId,
+    );
   }
 
   /**

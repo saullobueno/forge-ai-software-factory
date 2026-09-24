@@ -9,6 +9,8 @@ import type { TestApp } from './support/bootstrap-app.js';
  * enumeration e a rota protegida `GET /auth/me` via header e via cookie.
  */
 let testApp: TestApp;
+let organizationId: string;
+let userId: string;
 const password = 'demo1234';
 const userEmail = 'dev@acme-auth-e2e-test.example';
 
@@ -21,14 +23,20 @@ beforeAll(async () => {
     .values({ name: 'Acme Auth E2E', slug: 'acme-auth-e2e-test' })
     .returning();
   if (!organization) throw new Error('organization não inserida');
+  organizationId = organization.id;
 
-  await testApp.db.insert(testApp.schema.users).values({
-    organizationId: organization.id,
-    email: userEmail,
-    name: 'Dev E2E',
-    role: 'developer',
-    passwordHash: await hashPassword(password),
-  });
+  const [user] = await testApp.db
+    .insert(testApp.schema.users)
+    .values({
+      organizationId: organization.id,
+      email: userEmail,
+      name: 'Dev E2E',
+      role: 'developer',
+      passwordHash: await hashPassword(password),
+    })
+    .returning();
+  if (!user) throw new Error('user não inserido');
+  userId = user.id;
 }, 60_000);
 
 afterAll(async () => {
@@ -49,6 +57,24 @@ describe('POST /auth/login', () => {
     const setCookie = response.headers['set-cookie'] as unknown as string[] | undefined;
     expect(setCookie?.some((cookie) => cookie.startsWith('forge_session='))).toBe(true);
     expect(setCookie?.some((cookie) => /HttpOnly/i.test(cookie))).toBe(true);
+
+    const { and, eq } = await import('@forge/database');
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'auth.login_succeeded'),
+        eq(testApp.schema.auditLogs.actorUserId, userId),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId,
+      actorType: 'user',
+      actorUserId: userId,
+      action: 'auth.login_succeeded',
+      targetType: 'user',
+      targetId: userId,
+    });
+    expect(auditLog?.metadata).toEqual({ role: 'developer' });
   });
 
   it('retorna 401 genérico com senha errada', async () => {
@@ -58,6 +84,24 @@ describe('POST /auth/login', () => {
       .expect(401);
 
     expect(response.body.message).toBe('Credenciais inválidas.');
+
+    const { and, eq } = await import('@forge/database');
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'auth.login_failed'),
+        eq(testApp.schema.auditLogs.actorUserId, userId),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId,
+      actorType: 'user',
+      actorUserId: userId,
+      action: 'auth.login_failed',
+      targetType: 'user',
+      targetId: userId,
+    });
+    expect(auditLog?.metadata).toEqual({ role: 'developer', reason: 'invalid_credentials' });
   });
 
   it('retorna exatamente o mesmo 401 genérico para um email inexistente (sem account enumeration)', async () => {

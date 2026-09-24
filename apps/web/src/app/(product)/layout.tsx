@@ -13,12 +13,20 @@ const NAV_ITEMS: { label: string; href: string | null }[] = [
   { label: 'Projetos', href: '/projects' },
   { label: 'Tarefas', href: null },
   { label: 'Execuções de IA', href: null },
+  { label: 'Playground IA', href: '/ai-playground' },
+  { label: 'Auditoria', href: '/audit-logs' },
   { label: 'Configurações', href: null },
 ];
 
 export default function ProductLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-1 bg-background text-foreground">
+      <a
+        href="#conteudo"
+        className="sr-only fixed left-3 top-3 z-50 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only"
+      >
+        Ir para conteúdo
+      </a>
       <aside className="flex w-56 shrink-0 flex-col border-r border-border px-4 py-4">
         <span className="px-2 font-mono text-sm font-semibold tracking-tight">forge</span>
         <nav aria-label="navegação principal" className="mt-6 flex flex-col gap-1">
@@ -49,7 +57,9 @@ export default function ProductLayout({ children }: { children: ReactNode }) {
         <header className="flex items-center justify-end border-b border-border px-6 py-3">
           <ThemeToggle />
         </header>
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main id="conteudo" tabIndex={-1} className="flex-1 px-6 py-6 outline-none">
+          {children}
+        </main>
       </div>
     </div>
   );

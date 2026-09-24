@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aiUsageSchema } from './ai.ts';
+import { aiPlaygroundEvaluationRequestSchema, aiUsageSchema } from './ai.ts';
 
 const id = '11111111-1111-1111-1111-111111111111';
 const base = {
@@ -26,5 +26,27 @@ describe('aiUsageSchema', () => {
     expect(() =>
       aiUsageSchema.parse({ ...base, promptTokens: 100, completionTokens: 50, totalTokens: 200 }),
     ).toThrow(/totalTokens deve ser igual/);
+  });
+});
+
+describe('aiPlaygroundEvaluationRequestSchema', () => {
+  it('aplica defaults seguros para comparação de modelos', () => {
+    const parsed = aiPlaygroundEvaluationRequestSchema.parse({
+      prompt: 'Responda em JSON com summary e decision.',
+      dataset: [{ id: 'case-1', title: 'Caso 1', input: 'Validar estorno.', expectedKeywords: ['estorno'] }],
+    });
+
+    expect(parsed.models).toEqual(['forge-mock-fast', 'forge-mock-balanced']);
+    expect(parsed.requireStructuredOutput).toBe(true);
+  });
+
+  it('limita dataset e modelos aceitos', () => {
+    expect(() =>
+      aiPlaygroundEvaluationRequestSchema.parse({
+        prompt: 'Teste',
+        models: ['modelo-inexistente'],
+        dataset: [{ id: 'case-1', title: 'Caso 1', input: 'Entrada.' }],
+      }),
+    ).toThrow();
   });
 });

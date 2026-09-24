@@ -3,6 +3,10 @@ import type {
   AgentConfig,
   AgentRunContext,
   AgentRunEventPublisher,
+  AgentRunGovernanceSink,
+  AgentRunPolicyDecisionEvent,
+  AgentRunTraceEvent,
+  AgentRunTraceSink,
   CompleteStepInput,
   CompleteToolCallInput,
   CreateStepInput,
@@ -170,6 +174,22 @@ export class RecordingEventPublisher implements AgentRunEventPublisher {
 
   publish(event: { agentRunId: string; status: AgentRunStatus }): void {
     this.events.push(event);
+  }
+}
+
+export class RecordingTraceSink implements AgentRunTraceSink {
+  readonly events: AgentRunTraceEvent[] = [];
+
+  record(event: AgentRunTraceEvent): void {
+    this.events.push(event);
+  }
+}
+
+export class RecordingGovernanceSink implements AgentRunGovernanceSink {
+  readonly policyDecisions: AgentRunPolicyDecisionEvent[] = [];
+
+  recordPolicyDecision(event: AgentRunPolicyDecisionEvent): void {
+    this.policyDecisions.push(event);
   }
 }
 

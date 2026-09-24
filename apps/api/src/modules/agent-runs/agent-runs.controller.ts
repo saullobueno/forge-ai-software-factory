@@ -65,7 +65,7 @@ export class AgentRunsController {
       throw new NotFoundException('Execução de IA não encontrada.');
     }
 
-    return this.agentRunsService.cancel(id, user.organizationId);
+    return this.agentRunsService.cancel(id, user.organizationId, user.userId);
   }
 
   @Sse(':id/events')

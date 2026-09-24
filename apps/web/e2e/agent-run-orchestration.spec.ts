@@ -36,7 +36,7 @@ test.describe('orquestração de execução de IA: fila -> orquestrador -> SSE -
     test.setTimeout(60_000);
 
     await page.goto('/login');
-    await page.getByLabel('Email').fill('dev@acme-platform.example');
+    await page.getByLabel('Email').fill('tech-lead@acme-platform.example');
     await page.getByLabel('Senha').fill('demo1234');
     await page.getByRole('button', { name: 'Entrar' }).click();
 
@@ -88,5 +88,10 @@ test.describe('orquestração de execução de IA: fila -> orquestrador -> SSE -
     const reviewerStep = steps.filter({ hasText: 'Revisar alteração e produzir findings' });
     await reviewerStep.click();
     await expect(reviewerStep.getByText('Alteração proposta revisada')).toBeVisible();
+
+    await page.getByRole('link', { name: 'Auditoria' }).click();
+    await expect(page).toHaveURL('/audit-logs');
+    await expect(page.getByText('agent_run.policy_approval_required').first()).toBeVisible();
+    await expect(page.getByText('apply_patch').first()).toBeVisible();
   });
 });

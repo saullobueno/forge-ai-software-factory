@@ -5,9 +5,14 @@ import Link from 'next/link';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { apiFetch } from '@/lib/api-client';
-import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/labels';
-import { taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
-import type { ApiProject, ApiTask } from '@/lib/types';
+import {
+  DEPLOYMENT_STATUS_LABELS,
+  ENVIRONMENT_KIND_LABELS,
+  TASK_PRIORITY_LABELS,
+  TASK_STATUS_LABELS,
+} from '@/lib/labels';
+import { deploymentStatusTone, taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
+import type { ApiEnvironment, ApiProject, ApiTask } from '@/lib/types';
 
 export function ProjectDetailView({ projectId }: { projectId: string }) {
   const projectQuery = useQuery({
@@ -18,7 +23,11 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   const tasksQuery = useQuery({
     queryKey: ['projects', projectId, 'tasks'],
     queryFn: () => apiFetch<ApiTask[]>(`/projects/${projectId}/tasks`),
-    enabled: projectQuery.isSuccess,
+  });
+
+  const environmentsQuery = useQuery({
+    queryKey: ['projects', projectId, 'environments'],
+    queryFn: () => apiFetch<ApiEnvironment[]>(`/projects/${projectId}/environments`),
   });
 
   if (projectQuery.isLoading) {
@@ -108,6 +117,80 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
                 </Link>
               </li>
             ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">Ambientes</h2>
+          <span className="font-mono text-xs text-muted-foreground">deployments e saúde</span>
+        </div>
+
+        {environmentsQuery.isLoading && (
+          <p className="mt-2 text-sm text-muted-foreground">Carregando ambientes…</p>
+        )}
+        {environmentsQuery.isError && (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">Não foi possível carregar os ambientes.</p>
+        )}
+        {environmentsQuery.data && environmentsQuery.data.length === 0 && (
+          <p className="mt-2 text-sm text-muted-foreground">Nenhum ambiente configurado para este projeto.</p>
+        )}
+
+        {environmentsQuery.data && environmentsQuery.data.length > 0 && (
+          <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
+            {environmentsQuery.data.map((environment) => {
+              const latestDeployment = environment.deployments[0];
+
+              return (
+                <li key={environment.id} className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,24rem)]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-foreground">{environment.name}</span>
+                      <Badge>{ENVIRONMENT_KIND_LABELS[environment.kind]}</Badge>
+                      {environment.isProtected && <Badge tone="attention">Protegido</Badge>}
+                    </div>
+                    {environment.url ? (
+                      <a
+                        href={environment.url}
+                        className="mt-1 block truncate font-mono text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {environment.url}
+                      </a>
+                    ) : (
+                      <p className="mt-1 text-sm text-muted-foreground">Sem URL registrada.</p>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
+                    {latestDeployment ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={deploymentStatusTone(latestDeployment.status)}>
+                            {DEPLOYMENT_STATUS_LABELS[latestDeployment.status]}
+                          </Badge>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {latestDeployment.commitSha.slice(0, 12)}
+                          </span>
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {latestDeployment.pullRequest
+                            ? `PR #${latestDeployment.pullRequest.externalNumber ?? 'local'} · ${latestDeployment.pullRequest.title}`
+                            : 'Deployment sem pull request associado.'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {latestDeployment.deployedByUser
+                            ? `Por ${latestDeployment.deployedByUser.name}`
+                            : 'Autor não registrado'}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Nenhum deployment registrado.</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

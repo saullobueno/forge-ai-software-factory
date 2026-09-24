@@ -12,7 +12,9 @@ import {
   approvals,
   auditLogs,
   codeChanges,
+  deployments,
   diffs,
+  environments,
   fileSnapshots,
   notifications,
   organizations,
@@ -162,6 +164,123 @@ async function upsertAgentForRole(
   return created;
 }
 
+async function ensureDemoEnvironments(db: Database, organizationId: string): Promise<void> {
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.organizationId, organizationId), eq(projects.slug, 'forge-web-app')),
+  });
+  if (!project) return;
+
+  const existingEnvironment = await db.query.environments.findFirst({
+    where: and(eq(environments.organizationId, organizationId), eq(environments.projectId, project.id)),
+  });
+  if (existingEnvironment) return;
+
+  const [developer, techLead, pullRequest] = await Promise.all([
+    db.query.users.findFirst({
+      where: and(eq(users.organizationId, organizationId), eq(users.email, 'dev@acme-platform.example')),
+    }),
+    db.query.users.findFirst({
+      where: and(eq(users.organizationId, organizationId), eq(users.email, 'tech-lead@acme-platform.example')),
+    }),
+    db.query.pullRequests.findFirst({
+      where: and(
+        eq(pullRequests.organizationId, organizationId),
+        eq(pullRequests.projectId, project.id),
+        eq(pullRequests.externalNumber, 42),
+      ),
+    }),
+  ]);
+
+  const [developmentEnvironment, previewEnvironment, stagingEnvironment, productionEnvironment] = await db
+    .insert(environments)
+    .values([
+      {
+        organizationId,
+        projectId: project.id,
+        kind: 'development',
+        name: 'Development',
+        url: 'https://dev.acme-platform.example',
+        isProtected: false,
+      },
+      {
+        organizationId,
+        projectId: project.id,
+        kind: 'preview',
+        name: 'Preview',
+        url: 'https://pr-42.acme-platform.example',
+        isProtected: false,
+      },
+      {
+        organizationId,
+        projectId: project.id,
+        kind: 'staging',
+        name: 'Staging',
+        url: 'https://staging.acme-platform.example',
+        isProtected: true,
+      },
+      {
+        organizationId,
+        projectId: project.id,
+        kind: 'production',
+        name: 'Production',
+        url: 'https://app.acme-platform.example',
+        isProtected: true,
+      },
+    ])
+    .returning();
+  if (!developmentEnvironment || !previewEnvironment || !stagingEnvironment || !productionEnvironment) {
+    throw new Error('Falha ao garantir environments demo');
+  }
+
+  const baseMs = Date.parse('2026-09-18T14:00:00.000Z');
+  await db.insert(deployments).values([
+    {
+      organizationId,
+      projectId: project.id,
+      environmentId: developmentEnvironment.id,
+      pullRequestId: pullRequest?.id ?? null,
+      commitSha: 'b7c9f2a-demo-dev',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, 22 * 60 * 1000),
+      completedAt: timestampAt(baseMs, 23 * 60 * 1000),
+      deployedByUserId: developer?.id ?? null,
+    },
+    {
+      organizationId,
+      projectId: project.id,
+      environmentId: previewEnvironment.id,
+      pullRequestId: pullRequest?.id ?? null,
+      commitSha: 'b7c9f2a-demo-preview',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, 23 * 60 * 1000),
+      completedAt: timestampAt(baseMs, 24 * 60 * 1000),
+      deployedByUserId: developer?.id ?? null,
+    },
+    {
+      organizationId,
+      projectId: project.id,
+      environmentId: stagingEnvironment.id,
+      pullRequestId: pullRequest?.id ?? null,
+      commitSha: 'b7c9f2a-demo-staging',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, 25 * 60 * 1000),
+      completedAt: timestampAt(baseMs, 27 * 60 * 1000),
+      deployedByUserId: techLead?.id ?? null,
+    },
+    {
+      organizationId,
+      projectId: project.id,
+      environmentId: productionEnvironment.id,
+      pullRequestId: pullRequest?.id ?? null,
+      commitSha: 'a4f1d0e-demo-prod',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, -48 * 60 * 60 * 1000),
+      completedAt: timestampAt(baseMs, -48 * 60 * 60 * 1000 + 90_000),
+      deployedByUserId: techLead?.id ?? null,
+    },
+  ]);
+}
+
 /**
  * Popula um cenário completo e coerente de demonstração (spec §21): 1
  * organization, 2 users, 1 project, o repositório demo
@@ -179,6 +298,7 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     where: eq(organizations.slug, 'acme-platform'),
   });
   if (existing) {
+    await ensureDemoEnvironments(db, existing.id);
     return { alreadySeeded: true, organizationId: existing.id };
   }
 
@@ -756,6 +876,94 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
     })
     .returning();
   if (!pullRequest) throw new Error('Falha ao inserir o pullRequest de seed');
+
+  const [developmentEnvironment, previewEnvironment, stagingEnvironment, productionEnvironment] = await db
+    .insert(environments)
+    .values([
+      {
+        organizationId: organization.id,
+        projectId: project.id,
+        kind: 'development',
+        name: 'Development',
+        url: 'https://dev.acme-platform.example',
+        isProtected: false,
+      },
+      {
+        organizationId: organization.id,
+        projectId: project.id,
+        kind: 'preview',
+        name: 'Preview',
+        url: 'https://pr-42.acme-platform.example',
+        isProtected: false,
+      },
+      {
+        organizationId: organization.id,
+        projectId: project.id,
+        kind: 'staging',
+        name: 'Staging',
+        url: 'https://staging.acme-platform.example',
+        isProtected: true,
+      },
+      {
+        organizationId: organization.id,
+        projectId: project.id,
+        kind: 'production',
+        name: 'Production',
+        url: 'https://app.acme-platform.example',
+        isProtected: true,
+      },
+    ])
+    .returning();
+  if (!developmentEnvironment || !previewEnvironment || !stagingEnvironment || !productionEnvironment) {
+    throw new Error('Falha ao inserir environments de seed');
+  }
+
+  await db.insert(deployments).values([
+    {
+      organizationId: organization.id,
+      projectId: project.id,
+      environmentId: developmentEnvironment.id,
+      pullRequestId: pullRequest.id,
+      commitSha: 'b7c9f2a-demo-dev',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, stepOffsetMs + 11 * 60 * 1000),
+      completedAt: timestampAt(baseMs, stepOffsetMs + 12 * 60 * 1000),
+      deployedByUserId: developer.id,
+    },
+    {
+      organizationId: organization.id,
+      projectId: project.id,
+      environmentId: previewEnvironment.id,
+      pullRequestId: pullRequest.id,
+      commitSha: 'b7c9f2a-demo-preview',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, stepOffsetMs + 12 * 60 * 1000),
+      completedAt: timestampAt(baseMs, stepOffsetMs + 13 * 60 * 1000),
+      deployedByUserId: developer.id,
+    },
+    {
+      organizationId: organization.id,
+      projectId: project.id,
+      environmentId: stagingEnvironment.id,
+      pullRequestId: pullRequest.id,
+      commitSha: 'b7c9f2a-demo-staging',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, stepOffsetMs + 14 * 60 * 1000),
+      completedAt: timestampAt(baseMs, stepOffsetMs + 16 * 60 * 1000),
+      deployedByUserId: techLead.id,
+    },
+    {
+      organizationId: organization.id,
+      projectId: project.id,
+      environmentId: productionEnvironment.id,
+      pullRequestId: pullRequest.id,
+      commitSha: 'a4f1d0e-demo-prod',
+      status: 'succeeded',
+      startedAt: timestampAt(baseMs, stepOffsetMs - 48 * 60 * 60 * 1000),
+      completedAt: timestampAt(baseMs, stepOffsetMs - 48 * 60 * 60 * 1000 + 90_000),
+      deployedByUserId: techLead.id,
+    },
+  ]);
 
   const approvalReason =
     'Diff mínimo e correto; testes passando (6/6); revisão sem findings críticos ou altos — aprovado para merge.';

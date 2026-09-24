@@ -154,12 +154,16 @@ describe('API como processo Node real (fora do Vitest)', () => {
   it(
     '`nest start` (sem --watch) sobe e responde a uma requisição HTTP real',
     async () => {
-      await runServerProcessAndAssert(process.execPath, [nestCliEntry, 'start'], 45_000, async (baseUrl) => {
+      // `nest start` compila on-the-fly (sem passo de build separado) — com
+      // os pacotes adicionados nas Fases 8-16, a compilação a frio pode
+      // passar de 45s sob contenção (confirmado: falha ocasional aqui,
+      // sempre passa isolado). Margem ampliada, não um problema de lógica.
+      await runServerProcessAndAssert(process.execPath, [nestCliEntry, 'start'], 90_000, async (baseUrl) => {
         const response = await fetch(`${baseUrl}/`);
         expect(response.status).toBe(200);
         expect(await response.text()).toBe('Hello World!');
       });
     },
-    60_000,
+    100_000,
   );
 });

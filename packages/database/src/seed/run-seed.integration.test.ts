@@ -13,7 +13,9 @@ import {
   approvals,
   auditLogs,
   codeChanges,
+  deployments,
   diffs,
+  environments,
   fileSnapshots,
   notifications,
   organizations,
@@ -194,6 +196,14 @@ describe('runSeed (PGlite + migrações reais)', () => {
     expect(pullRequest.targetBranch).toBe(repository.defaultBranch);
     expect(pullRequest.status).toBe('merged');
 
+    const projectEnvironments = await db.query.environments.findMany({
+      where: and(eq(environments.organizationId, organization.id), eq(environments.projectId, project.id)),
+      with: { deployments: true },
+    });
+    expect(projectEnvironments).toHaveLength(4);
+    expect(projectEnvironments.some((environment) => environment.kind === 'production' && environment.isProtected)).toBe(true);
+    expect(projectEnvironments.flatMap((environment) => environment.deployments)).toHaveLength(4);
+
     // approval do agentRun
     const approval = await db.query.approvals.findFirst({ where: eq(approvals.id, firstSummary.approvalId) });
     if (!approval) throw new Error('approval não encontrada');
@@ -233,6 +243,16 @@ describe('runSeed (PGlite + migrações reais)', () => {
       where: eq(agentRuns.organizationId, firstSummary.organizationId),
     });
     expect(allAgentRuns).toHaveLength(1);
+
+    const allEnvironments = await db.query.environments.findMany({
+      where: eq(environments.organizationId, firstSummary.organizationId),
+    });
+    expect(allEnvironments).toHaveLength(4);
+
+    const allDeployments = await db.query.deployments.findMany({
+      where: eq(deployments.organizationId, firstSummary.organizationId),
+    });
+    expect(allDeployments).toHaveLength(4);
   });
 
   it('o toolCall sensível "apply_patch" tem status consistente com a política real de @forge/domain', async () => {

@@ -67,6 +67,44 @@ export interface CompleteToolCallInput {
   result: Record<string, unknown> | null;
 }
 
+export interface AgentRunTraceEvent {
+  name: 'agent.step' | 'tool.call';
+  phase: 'start' | 'end';
+  agentRunId: string;
+  stepId?: string;
+  toolCallId?: string;
+  role?: AgentRole;
+  toolName?: AgentToolName;
+  status?: AgentStepStatus | ToolCallStatus;
+  durationMs?: number;
+  attributes?: Record<string, unknown>;
+}
+
+/**
+ * Porta mínima de observabilidade (Fase 14). Mantém `@forge/agents`
+ * desacoplado de Nest/OpenTelemetry: a API pode gravar logs estruturados
+ * hoje e trocar por um exporter real depois, preservando o contrato.
+ */
+export interface AgentRunTraceSink {
+  record(event: AgentRunTraceEvent): void | Promise<void>;
+}
+
+export interface AgentRunPolicyDecisionEvent {
+  agentRunId: string;
+  organizationId: string;
+  actorUserId?: string | null;
+  stepId: string;
+  toolCallId: string;
+  role: AgentRole;
+  toolName: AgentToolName;
+  decision: 'deny' | 'require_approval';
+  reason: string;
+}
+
+export interface AgentRunGovernanceSink {
+  recordPolicyDecision(event: AgentRunPolicyDecisionEvent): void | Promise<void>;
+}
+
 /**
  * Porta de acesso a dados usada pelo orquestrador (Fase 7). Implementada em
  * `apps/api` por cima de Drizzle/Postgres (ver
@@ -141,4 +179,5 @@ export interface AgentRunEventPublisher {
 export interface OrchestratorActor {
   role: MemberRole;
   organizationId: string;
+  userId?: string;
 }

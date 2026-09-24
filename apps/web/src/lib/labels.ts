@@ -2,6 +2,8 @@ import type {
   AgentRole,
   AgentRunStatus,
   AgentStepStatus,
+  DeploymentStatus,
+  EnvironmentKind,
   FindingSeverity,
   TaskPriority,
   TaskStatus,
@@ -88,4 +90,19 @@ export const TEST_ARTIFACT_KIND_LABELS: Record<TestArtifactKind, string> = {
   coverage: 'Cobertura',
   screenshot: 'Captura de tela',
   report: 'Relatório',
+};
+
+export const ENVIRONMENT_KIND_LABELS: Record<EnvironmentKind, string> = {
+  development: 'Development',
+  preview: 'Preview',
+  staging: 'Staging',
+  production: 'Production',
+};
+
+export const DEPLOYMENT_STATUS_LABELS: Record<DeploymentStatus, string> = {
+  queued: 'Na fila',
+  running: 'Em deploy',
+  succeeded: 'Saudável',
+  failed: 'Falhou',
+  rolled_back: 'Rollback',
 };

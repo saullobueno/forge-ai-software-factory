@@ -4,6 +4,7 @@ import { eq, schema } from '@forge/database';
 import { verifyPassword } from '@forge/domain';
 import { userSchema, type LoginRequest, type LoginResponse, type User } from '@forge/types';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
+import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 
 /**
  * Mensagem única para qualquer falha de autenticação (email inexistente,
@@ -17,6 +18,7 @@ export class AuthService {
   constructor(
     private readonly database: DatabaseService,
     private readonly jwtService: JwtService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async login(input: LoginRequest): Promise<LoginResponse> {
@@ -30,6 +32,7 @@ export class AuthService {
 
     const passwordMatches = await verifyPassword(input.password, row.passwordHash);
     if (!passwordMatches) {
+      await this.recordLoginAudit(row, 'auth.login_failed', { reason: 'invalid_credentials' });
       throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     }
 
@@ -38,6 +41,7 @@ export class AuthService {
       organizationId: row.organizationId,
       role: row.role,
     });
+    await this.recordLoginAudit(row, 'auth.login_succeeded');
 
     // userSchema.parse descarta passwordHash (campo não declarado no
     // schema) junto com qualquer outro campo de persistência que não
@@ -57,5 +61,21 @@ export class AuthService {
     }
 
     return userSchema.parse(row);
+  }
+
+  private async recordLoginAudit(
+    user: typeof schema.users.$inferSelect,
+    action: 'auth.login_succeeded' | 'auth.login_failed',
+    metadata: Record<string, unknown> = {},
+  ): Promise<void> {
+    await this.auditLogsService.record({
+      organizationId: user.organizationId,
+      actorType: 'user',
+      actorUserId: user.id,
+      action,
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { role: user.role, ...metadata },
+    });
   }
 }

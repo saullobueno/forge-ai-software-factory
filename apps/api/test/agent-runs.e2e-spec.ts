@@ -34,6 +34,7 @@ let developerAToken: string;
 let qaEngineerAToken: string;
 let productManagerAToken: string;
 let developerBToken: string;
+let qaEngineerAId: string;
 
 let runQueuedId: string;
 let runCompletedId: string;
@@ -134,7 +135,7 @@ beforeAll(async () => {
   organizationAId = organizationA.id;
 
   const passwordHash = await hashPassword(password);
-  await testApp.db.insert(testApp.schema.users).values([
+  const users = await testApp.db.insert(testApp.schema.users).values([
     {
       organizationId: organizationA.id,
       email: 'dev@org-a-agent-runs-e2e-test.example',
@@ -163,7 +164,10 @@ beforeAll(async () => {
       role: 'developer',
       passwordHash,
     },
-  ]);
+  ]).returning();
+  const qaEngineerA = users.find((user) => user.email === 'qa@org-a-agent-runs-e2e-test.example');
+  if (!qaEngineerA) throw new Error('qa engineer A não inserido');
+  qaEngineerAId = qaEngineerA.id;
 
   const [projectA] = await testApp.db
     .insert(testApp.schema.projects)
@@ -429,6 +433,28 @@ describe('POST /agent-runs/:id/cancel', () => {
       .set('Authorization', `Bearer ${developerAToken}`)
       .expect(200);
     expect(persisted.body.status).toBe('cancelled');
+
+    const { and, eq } = await import('@forge/database');
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'agent_run.cancelled'),
+        eq(testApp.schema.auditLogs.targetId, runQueuedId),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId: organizationAId,
+      actorType: 'user',
+      actorUserId: qaEngineerAId,
+      action: 'agent_run.cancelled',
+      targetType: 'agent_run',
+      targetId: runQueuedId,
+    });
+    expect(auditLog?.metadata).toMatchObject({
+      previousStatus: 'queued',
+      status: 'cancelled',
+      taskId: taskAId,
+    });
 
     // Já terminal agora — uma segunda tentativa de cancelamento é 409, não
     // um segundo 200 silencioso.

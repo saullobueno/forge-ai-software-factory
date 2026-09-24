@@ -2,6 +2,11 @@ import type {
   AgentRole,
   AgentRunStatus,
   AgentStepStatus,
+  AIPlaygroundDatasetItem,
+  AIPlaygroundEvaluationResponse,
+  AIPlaygroundModel,
+  DeploymentStatus,
+  EnvironmentKind,
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
@@ -67,6 +72,36 @@ export interface ApiTask {
   createdAt: string;
   updatedAt: string;
   dependencies: ApiTaskDependency[];
+}
+
+export interface ApiDeploymentSummary {
+  id: string;
+  organizationId: string;
+  environmentId: string;
+  projectId: string;
+  pullRequestId: string | null;
+  commitSha: string;
+  status: DeploymentStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  deployedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deployedByUser: { id: string; name: string; email: string } | null;
+  pullRequest: { id: string; externalNumber: number | null; title: string; externalUrl: string | null } | null;
+}
+
+export interface ApiEnvironment {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  kind: EnvironmentKind;
+  name: string;
+  url: string | null;
+  isProtected: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deployments: ApiDeploymentSummary[];
 }
 
 export interface ApiAgentRun {
@@ -198,4 +233,24 @@ export interface ApiArtifactContent {
   kind: TestArtifactKind;
   content: string;
   sizeBytes: number;
+}
+
+export interface ApiAIPlaygroundConfig {
+  models: AIPlaygroundModel[];
+  defaultDataset: AIPlaygroundDatasetItem[];
+}
+
+export type ApiAIPlaygroundEvaluation = AIPlaygroundEvaluationResponse;
+
+export interface ApiAuditLog {
+  id: string;
+  organizationId: string;
+  actorType: 'user' | 'agent' | 'system';
+  actorUserId: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actorUser: { id: string; name: string; email: string; role: string } | null;
 }

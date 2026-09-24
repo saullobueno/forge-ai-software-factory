@@ -4,6 +4,7 @@ import { transitionAgentRunStatus } from '@forge/domain';
 import type { MessageEvent } from '@nestjs/common';
 import { concat, map, type Observable, of } from 'rxjs';
 import { AgentsRepository } from '../agents/agents.repository.js';
+import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunWorkerService } from './agent-run-worker.service.js';
 import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps } from './agent-runs.repository.js';
@@ -16,6 +17,7 @@ export class AgentRunsService {
     private readonly agentsRepository: AgentsRepository,
     private readonly agentRunEvents: AgentRunEventsService,
     private readonly agentRunWorker: AgentRunWorkerService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   /**
@@ -35,7 +37,7 @@ export class AgentRunsService {
    * o RBAC real desse usuário (spec §8/§20), não um papel de "sistema"
    * fixo.
    */
-  async triggerForTask(task: TaskRow, actor: OrchestratorActor): Promise<AgentRunRow> {
+  async triggerForTask(task: TaskRow, actor: OrchestratorActor, actorUserId: string): Promise<AgentRunRow> {
     const agent = await this.agentsRepository.findPlannerOrFirstEnabled(task.organizationId);
     if (!agent) {
       throw new UnprocessableEntityException(
@@ -51,6 +53,19 @@ export class AgentRunsService {
     });
 
     await this.agentRunWorker.enqueue(created.id, actor);
+    await this.auditLogsService.record({
+      organizationId: task.organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'agent_run.triggered',
+      targetType: 'agent_run',
+      targetId: created.id,
+      metadata: {
+        taskId: task.id,
+        agentId: agent.id,
+        status: created.status,
+      },
+    });
     return created;
   }
 
@@ -77,7 +92,7 @@ export class AgentRunsService {
    * status atual (não é informação sensível). Publica o evento no canal SSE
    * (`AgentRunEventsService`) só depois da escrita no banco ter sucesso.
    */
-  async cancel(id: string, organizationId: string): Promise<AgentRunRow> {
+  async cancel(id: string, organizationId: string, actorUserId: string): Promise<AgentRunRow> {
     const run = await this.agentRunsRepository.findById(id, organizationId);
     if (!run) {
       throw new NotFoundException('Execução de IA não encontrada.');
@@ -92,6 +107,19 @@ export class AgentRunsService {
 
     const updated = await this.agentRunsRepository.updateStatus(id, 'cancelled');
     this.agentRunEvents.publish({ agentRunId: id, status: updated.status });
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'agent_run.cancelled',
+      targetType: 'agent_run',
+      targetId: updated.id,
+      metadata: {
+        previousStatus: run.status,
+        status: updated.status,
+        taskId: updated.taskId,
+      },
+    });
     return updated;
   }
 

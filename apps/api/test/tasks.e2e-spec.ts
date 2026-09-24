@@ -15,6 +15,7 @@ let projectAId: string;
 let taskA1Id: string;
 let taskA2Id: string;
 let taskBId: string;
+let developerAId: string;
 let developerAToken: string;
 let qaEngineerAToken: string;
 let productManagerAToken: string;
@@ -38,7 +39,7 @@ beforeAll(async () => {
 
   const passwordHash = await hashPassword(password);
 
-  await testApp.db.insert(testApp.schema.users).values([
+  const users = await testApp.db.insert(testApp.schema.users).values([
     {
       organizationId: organizationA.id,
       email: 'dev@org-a-tasks-e2e-test.example',
@@ -67,7 +68,10 @@ beforeAll(async () => {
       role: 'developer',
       passwordHash,
     },
-  ]);
+  ]).returning();
+  const developerA = users.find((user) => user.email === 'dev@org-a-tasks-e2e-test.example');
+  if (!developerA) throw new Error('developer A não inserido');
+  developerAId = developerA.id;
 
   const [projectA] = await testApp.db
     .insert(testApp.schema.projects)
@@ -206,6 +210,27 @@ describe('POST /tasks/:id/agent-runs', () => {
     expect(response.body.status).toBe('queued');
     expect(response.body.startedAt).toBeNull();
     expect(response.body.completedAt).toBeNull();
+
+    const { and, eq } = await import('@forge/database');
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'agent_run.triggered'),
+        eq(testApp.schema.auditLogs.targetId, response.body.id as string),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId: expect.any(String),
+      actorType: 'user',
+      actorUserId: developerAId,
+      action: 'agent_run.triggered',
+      targetType: 'agent_run',
+      targetId: response.body.id,
+    });
+    expect(auditLog?.metadata).toMatchObject({
+      taskId: taskA1Id,
+      status: 'queued',
+    });
   });
 
   it('retorna 404 para uma tarefa de OUTRA organização', async () => {

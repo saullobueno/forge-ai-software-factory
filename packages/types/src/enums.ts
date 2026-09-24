@@ -210,6 +210,7 @@ export const permissionSchema = z.enum([
   'agent_run:trigger',
   'agent_run:approve',
   'agent_run:cancel',
+  'ai_playground:use',
   'environment:deploy',
   'policy:manage',
   'member:manage',

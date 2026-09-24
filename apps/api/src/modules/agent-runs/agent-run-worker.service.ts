@@ -5,6 +5,8 @@ import { QUEUE_ADAPTER, type QueueAdapter } from '../../infrastructure/queue/que
 import { RepositoryFsService } from '../../infrastructure/repository-fs/repository-fs.service.js';
 import { AgentRunOrchestrationStore } from './agent-run-orchestration.store.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
+import { AgentRunGovernanceAuditService } from './agent-run-governance-audit.service.js';
+import { AgentRunTraceLoggerService } from './agent-run-trace-logger.service.js';
 import { AI_PROVIDER } from './ai-provider.token.js';
 
 export interface AgentRunJobPayload {
@@ -41,6 +43,8 @@ export class AgentRunWorkerService implements OnModuleInit {
     private readonly store: AgentRunOrchestrationStore,
     private readonly repositoryFs: RepositoryFsService,
     private readonly events: AgentRunEventsService,
+    private readonly traces: AgentRunTraceLoggerService,
+    private readonly governance: AgentRunGovernanceAuditService,
     @Inject(AI_PROVIDER) private readonly ai: AiProvider,
   ) {
     this.orchestrator = new AgentRunOrchestrator({
@@ -48,6 +52,8 @@ export class AgentRunWorkerService implements OnModuleInit {
       ai: this.ai,
       repositoryReader: this.repositoryFs,
       events: this.events,
+      traces: this.traces,
+      governance: this.governance,
     });
   }
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { env } from '../../infrastructure/config/env.js';
+import { AuditLogWriterModule } from '../audit-logs/audit-log-writer.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
@@ -8,6 +9,7 @@ import { PermissionsGuard } from './permissions.guard.js';
 
 @Module({
   imports: [
+    AuditLogWriterModule,
     JwtModule.register({
       secret: env.JWT_SECRET,
       signOptions: { expiresIn: '8h' },

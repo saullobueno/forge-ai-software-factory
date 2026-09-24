@@ -21,6 +21,7 @@ describe('hasPermission', () => {
     expect(hasPermission('tech_lead', 'project:write')).toBe(true);
     expect(hasPermission('tech_lead', 'task:manage')).toBe(true);
     expect(hasPermission('tech_lead', 'agent_run:approve')).toBe(true);
+    expect(hasPermission('tech_lead', 'ai_playground:use')).toBe(true);
     expect(hasPermission('tech_lead', 'environment:deploy')).toBe(false);
     expect(hasPermission('tech_lead', 'member:manage')).toBe(false);
   });
@@ -62,6 +63,14 @@ describe('hasPermission', () => {
   it('member:manage é exclusivo de admin', () => {
     for (const role of memberRoleSchema.options) {
       expect(hasPermission(role, 'member:manage')).toBe(role === 'admin');
+    }
+  });
+
+  it('ai_playground:use fica restrito a papéis que governam modelos e arquitetura', () => {
+    for (const role of memberRoleSchema.options) {
+      expect(hasPermission(role, 'ai_playground:use')).toBe(
+        role === 'admin' || role === 'platform_engineer' || role === 'tech_lead',
+      );
     }
   });
 
