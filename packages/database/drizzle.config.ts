@@ -1,5 +1,10 @@
 import { defineConfig } from 'drizzle-kit';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const defaultDatabaseLocalPath = resolve(repoRoot, '.data', 'forge-dev.pglite');
 
 /**
  * drizzle-kit carrega este arquivo de config via um loader CJS próprio que
@@ -11,7 +16,7 @@ import { z } from 'zod';
  */
 const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
-  DATABASE_LOCAL_PATH: z.string().default('./.data/forge-dev.pglite'),
+  DATABASE_LOCAL_PATH: z.string().default(defaultDatabaseLocalPath),
 });
 
 const databaseEnv = envSchema.parse({
