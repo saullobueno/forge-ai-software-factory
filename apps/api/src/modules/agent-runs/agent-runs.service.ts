@@ -2,9 +2,11 @@ import { ConflictException, Injectable, NotFoundException, UnprocessableEntityEx
 import type { OrchestratorActor } from '@forge/agents';
 import { transitionAgentRunStatus } from '@forge/domain';
 import type { MessageEvent } from '@nestjs/common';
+import type { AgentRunStatus } from '@forge/types';
 import { concat, map, type Observable, of } from 'rxjs';
 import { AgentsRepository } from '../agents/agents.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
+import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunWorkerService } from './agent-run-worker.service.js';
 import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps } from './agent-runs.repository.js';
@@ -18,6 +20,7 @@ export class AgentRunsService {
     private readonly agentRunEvents: AgentRunEventsService,
     private readonly agentRunWorker: AgentRunWorkerService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly agentRunApprovalsRepository: AgentRunApprovalsRepository,
   ) {}
 
   /**
@@ -120,6 +123,103 @@ export class AgentRunsService {
         taskId: updated.taskId,
       },
     });
+    return updated;
+  }
+
+  /**
+   * Aprova uma execução parada em `approval_required` (spec §9/§18 —
+   * fluxo de aprovação humana): a decisão só é aceita se a execução ainda
+   * estiver nesse status exato (409 caso contrário, mesmo padrão de
+   * `cancel`), transiciona para `completed` via `transitionAgentRunStatus`
+   * e resolve toda tool call que ficou `pending` aguardando essa decisão
+   * para `succeeded` — o `result` simulado (`{ proposed, policyDecision }`)
+   * já gravado pelo orquestrador permanece como registro do que foi
+   * aceito; nenhuma execução real acontece aqui (`@forge/sandbox` etc.
+   * continuam desconectados, fora do escopo desta tarefa).
+   */
+  async approve(id: string, organizationId: string, actorUserId: string, reason: string | null): Promise<AgentRunRow> {
+    return this.decide(id, organizationId, actorUserId, 'approved', reason);
+  }
+
+  /**
+   * Rejeita uma execução parada em `approval_required`. Transiciona para
+   * `failed`, não `cancelled` — ambas as arestas existem no grafo de
+   * `@forge/domain` a partir de `approval_required`, mas `cancelled` já
+   * tem semântica própria e uma superfície de permissão diferente
+   * (`agent_run:cancel`, concedida a quase todo papel — inclusive quem
+   * disparou a execução — para interromper algo EM ANDAMENTO). Rejeitar
+   * uma proposta já concluída pelo pipeline (a execução chegou até o fim,
+   * só parou por exigir aprovação) não é "interromper" nada — é um veredito
+   * sobre um resultado que já existe, e `failed` é o status que a máquina
+   * de estados já usa para "esta execução não teve um desfecho aceito".
+   * Reaproveitar `cancelled` aqui misturaria duas trilhas de auditoria
+   * distintas sob o mesmo status; a diferença real entre "falhou por erro
+   * técnico" e "foi rejeitada por um humano" fica registrada onde deveria
+   * — na linha de `approvals` e no audit log (`agent_run.rejected`), não no
+   * enum grosso de `AgentRunStatus`.
+   */
+  async reject(id: string, organizationId: string, actorUserId: string, reason: string | null): Promise<AgentRunRow> {
+    return this.decide(id, organizationId, actorUserId, 'rejected', reason);
+  }
+
+  private async decide(
+    id: string,
+    organizationId: string,
+    actorUserId: string,
+    decision: 'approved' | 'rejected',
+    reason: string | null,
+  ): Promise<AgentRunRow> {
+    const run = await this.agentRunsRepository.findById(id, organizationId);
+    if (!run) {
+      throw new NotFoundException('Execução de IA não encontrada.');
+    }
+
+    if (run.status !== 'approval_required') {
+      throw new ConflictException(
+        `Não é possível ${decision === 'approved' ? 'aprovar' : 'rejeitar'} uma execução de IA em status "${run.status}".`,
+      );
+    }
+
+    const targetStatus: AgentRunStatus = decision === 'approved' ? 'completed' : 'failed';
+    const transition = transitionAgentRunStatus(run.status, targetStatus);
+    if (!transition.success) {
+      throw new ConflictException(transition.error);
+    }
+
+    await this.agentRunsRepository.resolvePendingToolCalls(id, decision === 'approved' ? 'succeeded' : 'rejected');
+    const updated = await this.agentRunsRepository.updateStatus(id, targetStatus);
+    this.agentRunEvents.publish({ agentRunId: id, status: updated.status });
+
+    const requestedByUserId = await this.auditLogsService.findLatestActorForTarget(
+      organizationId,
+      'agent_run',
+      id,
+      'agent_run.triggered',
+    );
+    await this.agentRunApprovalsRepository.create({
+      organizationId,
+      agentRunId: id,
+      status: decision,
+      requestedByUserId,
+      approvedByUserId: actorUserId,
+      reason,
+    });
+
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: decision === 'approved' ? 'agent_run.approved' : 'agent_run.rejected',
+      targetType: 'agent_run',
+      targetId: updated.id,
+      metadata: {
+        previousStatus: run.status,
+        status: updated.status,
+        taskId: updated.taskId,
+        reason,
+      },
+    });
+
     return updated;
   }
 

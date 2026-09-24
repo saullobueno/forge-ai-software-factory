@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
+import { canApproveAgentRuns } from '@/lib/agent-run-approval-permission';
 import { isAgentRunCancelable } from '@/lib/agent-run-cancelable';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import {
@@ -28,9 +29,11 @@ import type {
   ApiAgentRunDetail,
   ApiAgentStep,
   ApiArtifactContent,
+  ApiCurrentUser,
   ApiProject,
   ApiTask,
   ApiTestArtifact,
+  ApiToolCall,
 } from '@/lib/types';
 
 function formatDuration(durationMs: number | null): string {
@@ -190,6 +193,122 @@ function ArtifactRow({ artifact }: { artifact: ApiTestArtifact }) {
   );
 }
 
+function PendingToolCallCard({ toolCall }: { toolCall: ApiToolCall }) {
+  const proposed = toolCall.result && typeof toolCall.result === 'object' ? toolCall.result['proposed'] : null;
+
+  return (
+    <li className="rounded-md border border-border p-3" data-testid="pending-tool-call">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-xs font-medium text-foreground">{toolCall.toolName}</span>
+        <Badge tone="attention">{TOOL_CALL_STATUS_LABELS[toolCall.status]}</Badge>
+      </div>
+      <div className="mt-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Argumentos propostos</h4>
+        <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">
+          {JSON.stringify(toolCall.arguments, null, 2)}
+        </pre>
+      </div>
+      {proposed !== null && proposed !== undefined && (
+        <div className="mt-2">
+          <h4 className="text-xs font-medium text-muted-foreground">Resultado proposto</h4>
+          <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">{JSON.stringify(proposed, null, 2)}</pre>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * Painel de aprovação humana (spec §9/§18): só aparece quando a execução
+ * está parada em `approval_required`. Lista as tool calls `pending` — as
+ * mesmas que fizeram o orquestrador parar ali (ver `AgentRunOrchestrator`,
+ * `@forge/agents`) — com o argumento e o resultado simulado propostos
+ * (`toolCall.result.proposed`), e os botões de decisão. Os botões só
+ * aparecem para quem tem `agent_run:approve` (`canApproveAgentRuns`) — o
+ * backend valida de verdade (`RequirePermission`), isto é só para não
+ * oferecer uma ação que o usuário não pode de fato executar.
+ */
+function PendingApprovalPanel({
+  runId,
+  pendingToolCalls,
+  canDecide,
+  onDecided,
+}: {
+  runId: string;
+  pendingToolCalls: ApiToolCall[];
+  canDecide: boolean;
+  onDecided: (status: AgentRunStatus) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const approveRun = useMutation({
+    mutationFn: () =>
+      apiFetch<ApiAgentRunDetail>(`/agent-runs/${runId}/approve`, { method: 'POST', body: JSON.stringify({}) }),
+    onSuccess: (data) => {
+      onDecided(data.status);
+      void queryClient.invalidateQueries({ queryKey: ['agent-runs', runId] });
+    },
+  });
+
+  const rejectRun = useMutation({
+    mutationFn: () =>
+      apiFetch<ApiAgentRunDetail>(`/agent-runs/${runId}/reject`, { method: 'POST', body: JSON.stringify({}) }),
+    onSuccess: (data) => {
+      onDecided(data.status);
+      void queryClient.invalidateQueries({ queryKey: ['agent-runs', runId] });
+    },
+  });
+
+  const isPending = approveRun.isPending || rejectRun.isPending;
+
+  return (
+    <section className="rounded-lg border border-amber-600/40 bg-amber-500/5 p-4 dark:border-amber-400/40">
+      <h2 className="text-sm font-medium text-foreground">Aprovação necessária</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Esta execução propôs {pendingToolCalls.length === 1 ? 'uma alteração' : `${pendingToolCalls.length} alterações`} que
+        exigem aprovação humana antes de continuar.
+      </p>
+
+      <ul className="mt-3 flex flex-col gap-2">
+        {pendingToolCalls.map((toolCall) => (
+          <PendingToolCallCard key={toolCall.id} toolCall={toolCall} />
+        ))}
+      </ul>
+
+      {(approveRun.isError || rejectRun.isError) && (
+        <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+          {approveRun.error instanceof ApiError
+            ? approveRun.error.message
+            : rejectRun.error instanceof ApiError
+              ? rejectRun.error.message
+              : 'Não foi possível registrar a decisão.'}
+        </p>
+      )}
+
+      {canDecide && (
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => approveRun.mutate()}
+            disabled={isPending}
+            className="rounded-md border border-emerald-600/40 px-3 py-1.5 text-sm font-medium text-emerald-700 transition-opacity hover:opacity-80 disabled:opacity-60 dark:border-emerald-400/40 dark:text-emerald-400"
+          >
+            {approveRun.isPending ? 'Aprovando…' : 'Aprovar'}
+          </button>
+          <button
+            type="button"
+            onClick={() => rejectRun.mutate()}
+            disabled={isPending}
+            className="rounded-md border border-red-600/40 px-3 py-1.5 text-sm font-medium text-red-700 transition-opacity hover:opacity-80 disabled:opacity-60 dark:border-red-400/40 dark:text-red-400"
+          >
+            {rejectRun.isPending ? 'Rejeitando…' : 'Rejeitar'}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function AgentRunDetailView({
   projectId,
   taskId,
@@ -220,6 +339,13 @@ export function AgentRunDetailView({
   const artifactsQuery = useQuery({
     queryKey: ['agent-runs', runId, 'artifacts'],
     queryFn: () => apiFetch<ApiTestArtifact[]>(`/agent-runs/${runId}/artifacts`),
+  });
+
+  // Só para decidir se os botões "Aprovar"/"Rejeitar" aparecem
+  // (`canApproveAgentRuns`) — ver o comentário de `PendingApprovalPanel`.
+  const meQuery = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => apiFetch<ApiCurrentUser>('/auth/me'),
   });
 
   // Canal de tempo real (spec §9 — "transmitir logs e status via
@@ -267,6 +393,7 @@ export function AgentRunDetailView({
   const projectName = projectQuery.data?.name ?? '…';
   const taskTitle = taskQuery.data?.title ?? '…';
   const artifacts = artifactsQuery.data ?? [];
+  const pendingToolCalls = run.steps.flatMap((step) => step.toolCalls.filter((toolCall) => toolCall.status === 'pending'));
 
   return (
     <div className="flex flex-col gap-6">
@@ -305,6 +432,15 @@ export function AgentRunDetailView({
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {cancelRun.error instanceof ApiError ? cancelRun.error.message : 'Não foi possível cancelar a execução.'}
         </p>
+      )}
+
+      {currentStatus === 'approval_required' && pendingToolCalls.length > 0 && (
+        <PendingApprovalPanel
+          runId={runId}
+          pendingToolCalls={pendingToolCalls}
+          canDecide={meQuery.data !== undefined && canApproveAgentRuns(meQuery.data.role)}
+          onDecided={(status) => setLiveStatus(status)}
+        />
       )}
 
       <section className="grid grid-cols-3 gap-3 text-sm">

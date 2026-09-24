@@ -13,9 +13,9 @@ git log --oneline                          # confira se há commits depois do ú
 git status --short                         # confira se não há trabalho não commitado de uma sessão anterior
 ```
 
-Último commit confirmado nesta pausa: **`0059de4`** ("fix(web): wipe the e2e PGlite before each Playwright run"). Todas as Fases 0-16 do roadmap estão commitadas e verificadas — ver tabela abaixo.
+Último commit confirmado nesta pausa: **este commit** (Fase 17 — fluxo de aprovação humana; confira `git log --oneline -1` ao retomar). Todas as Fases 0-17 do roadmap estão commitadas e verificadas — ver tabela abaixo.
 
-Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **77/77**; suíte Playwright completa → **9/9**.
+Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **86/86**; suíte Playwright completa → **12/12**.
 
 ## Histórico da sessão (contexto importante, não repita o erro)
 
@@ -49,17 +49,23 @@ Esta sessão rodou de forma autônoma por ~1 dia inteiro. Em um certo ponto o us
 | 14 | Segurança/observabilidade | `bdeab10` | `docs/threat-model.md`, traces locais (`FORGE_TRACE_LOGS=1`), redaction, `/audit-logs` com escrita em login/trigger/cancel/playground/política. **Sem OpenTelemetry real** |
 | 15 | Performance/acessibilidade | `bdeab10` | Skip link, foco visível, testes de teclado + axe-core. **Sem Lighthouse/budgets** |
 | 16 | QA final/documentação | `0c4d3a4` | `docs/threat-model.md`, `docs/final-qa-handoff.md`, este arquivo |
+| 17 | Fluxo de aprovação humana | *(este commit)* | `POST /agent-runs/:id/approve`/`:id/reject`, tabela `approvals` (reaproveitada), UI de decisão na página de execução, SSE, audit log. Detalhe abaixo. |
 
-**O motor central do produto funciona de ponta a ponta**: login → projeto → tarefa → "Iniciar execução de IA" → orquestrador real processa via fila → timeline atualiza ao vivo via SSE → para em "Aguardando aprovação" quando a política de ferramentas exige.
+**O motor central do produto funciona de ponta a ponta**: login → projeto → tarefa → "Iniciar execução de IA" → orquestrador real processa via fila → timeline atualiza ao vivo via SSE → para em "Aguardando aprovação" quando a política de ferramentas exige → **um `tech_lead`/`platform_engineer`/`admin` aprova ou rejeita as tool calls pendentes** → execução termina em `completed` (aprovada) ou `failed` (rejeitada).
+
+## Fase 17 — Fluxo de aprovação humana (detalhe)
+
+Implementado nesta sessão: `POST /agent-runs/:id/approve` e `POST /agent-runs/:id/reject` (`apps/api/src/modules/agent-runs/agent-runs.controller.ts`/`.service.ts`), restritos a `agent_run:approve` (409 se a execução não estiver em `approval_required`, 404 genérico cross-tenant, mesmo padrão de `cancel`). Cada decisão: (1) transiciona o `agentRun` via `transitionAgentRunStatus` (`@forge/domain`) — aprovação vai para `completed`, rejeição para `failed`; (2) resolve toda `toolCall` que ficou `pending` aguardando aprovação para `succeeded`/`rejected` (`AgentRunsRepository.resolvePendingToolCalls`) — nenhuma fica "pendente" para sempre numa execução já terminal; (3) grava uma linha em `approvals` (reaproveitada, `subjectType: 'agent_run'`) via `AgentRunApprovalsRepository`, recuperando `requestedByUserId` do audit log `agent_run.triggered` mais recente para aquele `agentRun` (`AuditLogsService.findLatestActorForTarget`) — `null` se não existir; (4) publica no canal SSE existente (`AgentRunEventsService`); (5) grava audit log `agent_run.approved`/`agent_run.rejected`.
+
+**Rejeição vai para `failed`, não `cancelled`** (decisão deliberada, ambas as arestas existem no grafo de `@forge/domain` a partir de `approval_required`): `cancelled` já tem semântica própria (interromper algo EM ANDAMENTO, `agent_run:cancel`, concedida a quase todo papel incluindo quem disparou a execução). Rejeitar uma proposta de uma execução que já rodou o pipeline inteiro (só parou por exigir aprovação) não é "interromper" nada — é um veredito sobre um resultado que já existe. Reaproveitar `cancelled` misturaria duas trilhas de auditoria/permissão distintas sob o mesmo status; a diferença real entre "falhou tecnicamente" e "foi rejeitada por um humano" fica na linha de `approvals` e no audit log, não no enum `AgentRunStatus`.
+
+Frontend: `apps/web/src/app/(product)/projects/[id]/tasks/[taskId]/runs/[runId]/agent-run-detail-view.tsx` ganhou um painel "Aprovação necessária" (visível quando `status === 'approval_required'` e há tool calls pendentes) com os argumentos/resultado propostos e botões "Aprovar"/"Rejeitar" — só renderizados para quem tem `agent_run:approve` no cliente (`apps/web/src/lib/agent-run-approval-permission.ts`, mirror do RBAC do backend, mesmo padrão de `agent-run-cancelable.ts`; busca o papel via `GET /auth/me`, endpoint que já existia mas nunca tinha sido consumido pelo frontend). O backend é sempre a autorização real — o mirror só evita oferecer um botão que renderia 403.
+
+Testes novos: `apps/api/test/agent-runs.e2e-spec.ts` (+9 casos: sucesso/409/403/404 para approve e reject, incluindo o teste do canal SSE), `apps/web/e2e/agent-run-approval.spec.ts` (3 cenários reais via Playwright: aprovar, rejeitar, esconder botões para `developer` — todos verificando a mudança de status via SSE, sem `page.reload()`). Um teste pré-existente (`login-to-agent-run.spec.ts`) tinha uma asserção frágil (`getByText('agent_run.approved')` sem `.first()`) que só nunca tinha quebrado porque nenhum outro teste até então escrevia essa ação de verdade no banco compartilhado de e2e — corrigido com `.first()`, mesmo idioma já usado em `agent-run-orchestration.spec.ts` para o mesmo tipo de colisão entre specs rodando em paralelo.
 
 ## O que falta (decisão consciente, não esquecimento)
 
-O roadmap formal (Fases 0-16) está com uma entrega em cada fase, mas **várias fases (8, 9, 10, 12) ficaram deliberadamente isoladas/não conectadas** — o motivo se repete em todas: conectar sandbox/testes/Git real ao orquestrador de agentes exige um **fluxo de aprovação humana de verdade** na frente, que ainda não existe. Hoje `approval_required` é um estado terminal que só fica lá parado — não há UI/endpoint pra um `tech_lead`/`platform_engineer` aprovar ou rejeitar.
-
-**Isso é o próximo passo de maior alavancagem** (desbloqueia várias fases de uma vez, não só uma):
-1. `POST /agent-runs/:id/approve` e `POST /agent-runs/:id/reject` (permissão `agent_run:approve`, já existe), gravando em `approvals` (já existe a tabela) e transicionando o `agentRun` (`transitionAgentRunStatus`, `@forge/domain`) para `completed` ou `failed`/`cancelled` conforme a decisão.
-2. UI na página de detalhe da execução (`/projects/[id]/tasks/[taskId]/runs/[runId]`) mostrando os tool calls pendentes de aprovação com o diff/comando proposto, e botões Aprovar/Rejeitar.
-3. Só depois disso faz sentido revisitar se/como conectar `@forge/sandbox`/`@forge/testing`/`@forge/git` para execução real atrás dessa aprovação — não antes.
+O roadmap formal (Fases 0-17) está com uma entrega em cada fase, mas **as Fases 8, 9, 10, 12 continuam deliberadamente isoladas/não conectadas** — o fluxo de aprovação humana que as bloqueava (Fase 17) agora existe, então **o próximo passo de maior alavancagem passa a ser conectar `@forge/sandbox`/`@forge/testing`/`@forge/git` para execução real ATRÁS dessa aprovação** (ex.: ao aprovar um `apply_patch`, de fato rodar o sandbox e aplicar o patch no workspace, em vez de só marcar a tool call como `succeeded` com o resultado simulado que já estava lá). Isso não foi feito nesta sessão de propósito — o escopo desta tarefa era só o mecanismo de decisão humana em si.
 
 Outras lacunas menores, por fase (detalhe em cada seção do `docs/final-qa-handoff.md` anterior, ainda útil como referência):
 - Fase 9: persistir execuções em `test_runs`/`test_suites`/`test_artifacts`.
@@ -69,6 +75,7 @@ Outras lacunas menores, por fase (detalhe em cada seção do `docs/final-qa-hand
 - Fase 13: provedores de IA reais; histórico persistido.
 - Fase 14: exporter OpenTelemetry real; audit log em mais endpoints.
 - Fase 15: Lighthouse/budgets; testes responsivos.
+- Fase 17: a `approval` gravada nasce já decidida (aprovada/rejeitada) — não existe hoje um registro `pending` da própria aprovação criado quando a execução entra em `approval_required` (o estado "pendente" é representado pelo `agentRun.status`/`toolCall.status`, não por uma linha própria em `approvals`); um painel "aprovações pendentes" cross-execução (fora da página de uma execução específica) exigiria isso.
 
 ## Convenções estabelecidas (leia antes de escrever código novo)
 

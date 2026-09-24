@@ -34,3 +34,24 @@ export const approvalSchema = z
     path: ['approvedByUserId'],
   });
 export type Approval = z.infer<typeof approvalSchema>;
+
+/**
+ * Corpo de `POST /agent-runs/:id/approve` e `POST /agent-runs/:id/reject`
+ * (fluxo de aprovação humana sobre uma execução parada em
+ * `approval_required` — spec §9/§18). `reason` é sempre opcional: uma
+ * aprovação normalmente não precisa de justificativa, e mesmo uma rejeição
+ * pode ser óbvia o suficiente para dispensar uma. `.default({})` no nível do
+ * objeto (não só em `reason`) é necessário porque um cliente que não envia
+ * corpo nenhum (sem `Content-Type: application/json`, ex.: `fetch(url, {
+ * method: 'POST' })` sem `body`, ou `supertest.post(url)` sem `.send()`)
+ * nunca faz o Express popular `req.body` — o valor que chega ao
+ * `ZodValidationPipe` é `undefined`, não `{}`. Um `z.object({...})` comum
+ * rejeita `undefined` na raiz (só teria `reason` opcional DENTRO de um
+ * objeto que precisa existir); `.default({})` cobre esse caso.
+ */
+export const agentRunDecisionRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2000).optional(),
+  })
+  .default({});
+export type AgentRunDecisionRequest = z.infer<typeof agentRunDecisionRequestSchema>;

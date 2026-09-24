@@ -29,7 +29,16 @@ test.describe('login -> projeto -> tarefa -> execução de IA', () => {
     await page.getByRole('link', { name: 'Auditoria' }).click();
     await expect(page).toHaveURL('/audit-logs');
     await expect(page.getByRole('heading', { name: 'Auditoria' })).toBeVisible();
-    await expect(page.getByText('agent_run.approved')).toBeVisible();
+    // `.first()`: o seed sempre grava uma entrada `agent_run.approved` (a
+    // aprovação demo já decidida), mas outras specs deste mesmo `pnpm exec
+    // playwright test` (Fase 17 — `agent-run-approval.spec.ts`) rodam em
+    // paralelo (`workers: 2`) contra o MESMO banco e também aprovam
+    // execuções de verdade, produzindo mais entradas com a mesma ação —
+    // mesmo raciocínio/idioma já usado em `agent-run-orchestration.spec.ts`
+    // para `agent_run.policy_approval_required`/`apply_patch`. A intenção
+    // aqui sempre foi "existe uma entrada de auditoria para uma aprovação",
+    // nunca "existe exatamente uma".
+    await expect(page.getByText('agent_run.approved').first()).toBeVisible();
 
     await page.getByRole('link', { name: 'Projetos' }).click();
     await expect(page).toHaveURL('/projects');

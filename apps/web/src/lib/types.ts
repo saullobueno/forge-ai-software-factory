@@ -7,6 +7,7 @@ import type {
   AIPlaygroundModel,
   DeploymentStatus,
   EnvironmentKind,
+  MemberRole,
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
@@ -27,6 +28,21 @@ import type {
  * string simples, sem coerção, por isso esses SIM são reaproveitados de
  * `@forge/types` diretamente.
  */
+
+/**
+ * Resposta de `GET /auth/me` (Fase 2) — usada aqui só para decidir se os
+ * botões "Aprovar"/"Rejeitar" aparecem para o usuário logado (Fase 17). O
+ * backend continua sendo a única fonte de verdade de autorização (`
+ * RequirePermission('agent_run:approve')`); esconder o botão de quem não
+ * tem a permissão é UX, não segurança.
+ */
+export interface ApiCurrentUser {
+  id: string;
+  organizationId: string;
+  email: string;
+  name: string;
+  role: MemberRole;
+}
 
 export interface ApiTechProfile {
   languages: string[];

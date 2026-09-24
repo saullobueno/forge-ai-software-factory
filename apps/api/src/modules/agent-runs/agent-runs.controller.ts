@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -9,8 +10,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
-import { idSchema } from '@forge/types';
+import { agentRunDecisionRequestSchema, idSchema, type AgentRunDecisionRequest } from '@forge/types';
 import type { Observable } from 'rxjs';
+import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { ArtifactsService } from '../artifacts/artifacts.service.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -66,6 +68,44 @@ export class AgentRunsController {
     }
 
     return this.agentRunsService.cancel(id, user.organizationId, user.userId);
+  }
+
+  /**
+   * Fluxo de aprovação humana (spec §9/§18): só quem tem `agent_run:approve`
+   * (`tech_lead`/`platform_engineer`/`admin`, ver `packages/domain/src/permissions.ts`)
+   * decide o destino de uma execução parada em `approval_required` — nunca
+   * quem só pode `agent_run:trigger`/`agent_run:cancel`. `reason` é
+   * opcional (`agentRunDecisionRequestSchema`); um corpo vazio (`{}` ou
+   * ausente) é válido.
+   */
+  @Post(':id/approve')
+  @HttpCode(200)
+  @RequirePermission('agent_run:approve')
+  async approve(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(agentRunDecisionRequestSchema)) body: AgentRunDecisionRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Execução de IA não encontrada.');
+    }
+
+    return this.agentRunsService.approve(id, user.organizationId, user.userId, body.reason ?? null);
+  }
+
+  @Post(':id/reject')
+  @HttpCode(200)
+  @RequirePermission('agent_run:approve')
+  async reject(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(agentRunDecisionRequestSchema)) body: AgentRunDecisionRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Execução de IA não encontrada.');
+    }
+
+    return this.agentRunsService.reject(id, user.organizationId, user.userId, body.reason ?? null);
   }
 
   @Sse(':id/events')

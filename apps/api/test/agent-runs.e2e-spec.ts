@@ -33,12 +33,20 @@ let agentAId: string;
 let developerAToken: string;
 let qaEngineerAToken: string;
 let productManagerAToken: string;
+let techLeadAToken: string;
 let developerBToken: string;
 let qaEngineerAId: string;
+let techLeadAId: string;
+let developerAId: string;
 
 let runQueuedId: string;
 let runCompletedId: string;
 let runOrgBId: string;
+let runApprovalForApproveId: string;
+let runApprovalForRejectId: string;
+let runApprovalForConflictId: string;
+let toolCallForApproveId: string;
+let toolCallForRejectId: string;
 
 let artifactContentId: string;
 let artifactTraversalId: string;
@@ -158,6 +166,13 @@ beforeAll(async () => {
       passwordHash,
     },
     {
+      organizationId: organizationA.id,
+      email: 'tech-lead@org-a-agent-runs-e2e-test.example',
+      name: 'Tech Lead A',
+      role: 'tech_lead',
+      passwordHash,
+    },
+    {
       organizationId: organizationB.id,
       email: 'dev@org-b-agent-runs-e2e-test.example',
       name: 'Dev B',
@@ -168,6 +183,12 @@ beforeAll(async () => {
   const qaEngineerA = users.find((user) => user.email === 'qa@org-a-agent-runs-e2e-test.example');
   if (!qaEngineerA) throw new Error('qa engineer A não inserido');
   qaEngineerAId = qaEngineerA.id;
+  const techLeadA = users.find((user) => user.email === 'tech-lead@org-a-agent-runs-e2e-test.example');
+  if (!techLeadA) throw new Error('tech lead A não inserido');
+  techLeadAId = techLeadA.id;
+  const developerA = users.find((user) => user.email === 'dev@org-a-agent-runs-e2e-test.example');
+  if (!developerA) throw new Error('dev A não inserido');
+  developerAId = developerA.id;
 
   const [projectA] = await testApp.db
     .insert(testApp.schema.projects)
@@ -238,6 +259,105 @@ beforeAll(async () => {
   runQueuedId = runQueued.id;
   runCompletedId = runCompleted.id;
   runOrgBId = runOrgB.id;
+
+  // Três execuções em `approval_required` para os testes do fluxo de
+  // aprovação humana: uma decidida com aprovação, uma com rejeição, e uma
+  // terceira mantida em `approval_required` só para os testes de 409
+  // (evita reusar `runQueuedId`, cujo status "queued" já teria um motivo
+  // de conflito diferente).
+  const [runApprovalForApprove, runApprovalForReject, runApprovalForConflict] = await testApp.db
+    .insert(testApp.schema.agentRuns)
+    .values([
+      {
+        organizationId: organizationA.id,
+        taskId: taskA.id,
+        agentId: agentA.id,
+        status: 'approval_required',
+        objective: 'Execução aguardando aprovação (caminho de aprovação)',
+      },
+      {
+        organizationId: organizationA.id,
+        taskId: taskA.id,
+        agentId: agentA.id,
+        status: 'approval_required',
+        objective: 'Execução aguardando aprovação (caminho de rejeição)',
+      },
+      {
+        organizationId: organizationA.id,
+        taskId: taskA.id,
+        agentId: agentA.id,
+        status: 'approval_required',
+        objective: 'Execução aguardando aprovação (só para teste de 409)',
+      },
+    ])
+    .returning();
+  if (!runApprovalForApprove || !runApprovalForReject || !runApprovalForConflict) {
+    throw new Error('agentRuns de approval_required não inseridos');
+  }
+  runApprovalForApproveId = runApprovalForApprove.id;
+  runApprovalForRejectId = runApprovalForReject.id;
+  runApprovalForConflictId = runApprovalForConflict.id;
+
+  const [implementerStepForApprove, implementerStepForReject] = await testApp.db
+    .insert(testApp.schema.agentSteps)
+    .values([
+      {
+        agentRunId: runApprovalForApprove.id,
+        name: 'Implementar mudança',
+        role: 'implementer',
+        status: 'succeeded',
+        input: {},
+        output: {},
+      },
+      {
+        agentRunId: runApprovalForReject.id,
+        name: 'Implementar mudança',
+        role: 'implementer',
+        status: 'succeeded',
+        input: {},
+        output: {},
+      },
+    ])
+    .returning();
+  if (!implementerStepForApprove || !implementerStepForReject) throw new Error('agentSteps não inseridos');
+
+  const [toolCallForApprove, toolCallForReject] = await testApp.db
+    .insert(testApp.schema.toolCalls)
+    .values([
+      {
+        agentStepId: implementerStepForApprove.id,
+        toolName: 'apply_patch',
+        arguments: { path: 'src/format-currency.ts' },
+        result: { proposed: { patch: '--- a\n+++ b\n' }, policyDecision: { decision: 'require_approval' } },
+        status: 'pending',
+      },
+      {
+        agentStepId: implementerStepForReject.id,
+        toolName: 'apply_patch',
+        arguments: { path: 'src/invoice.ts' },
+        result: { proposed: { patch: '--- a\n+++ b\n' }, policyDecision: { decision: 'require_approval' } },
+        status: 'pending',
+      },
+    ])
+    .returning();
+  if (!toolCallForApprove || !toolCallForReject) throw new Error('toolCalls não inseridos');
+  toolCallForApproveId = toolCallForApprove.id;
+  toolCallForRejectId = toolCallForReject.id;
+
+  // Audit log de disparo (`agent_run.triggered`) só para a execução do
+  // caminho de aprovação — prova que `AgentRunsService.approve` consegue
+  // recuperar `requestedByUserId` a partir dele. A execução do caminho de
+  // rejeição NÃO tem esse audit log, de propósito: prova o fallback para
+  // `null` quando a informação não existe.
+  await testApp.db.insert(testApp.schema.auditLogs).values({
+    organizationId: organizationA.id,
+    actorType: 'user',
+    actorUserId: developerA.id,
+    action: 'agent_run.triggered',
+    targetType: 'agent_run',
+    targetId: runApprovalForApprove.id,
+    metadata: { taskId: taskA.id, agentId: agentA.id, status: 'queued' },
+  });
 
   const [reviewerStep] = await testApp.db
     .insert(testApp.schema.agentSteps)
@@ -335,6 +455,7 @@ beforeAll(async () => {
   developerAToken = await login('dev@org-a-agent-runs-e2e-test.example');
   qaEngineerAToken = await login('qa@org-a-agent-runs-e2e-test.example');
   productManagerAToken = await login('pm@org-a-agent-runs-e2e-test.example');
+  techLeadAToken = await login('tech-lead@org-a-agent-runs-e2e-test.example');
   developerBToken = await login('dev@org-b-agent-runs-e2e-test.example');
 }, 60_000);
 
@@ -465,6 +586,191 @@ describe('POST /agent-runs/:id/cancel', () => {
   });
 });
 
+/**
+ * Fluxo de aprovação humana (spec §9/§18, Fase 17): `POST
+ * /agent-runs/:id/approve` e `POST /agent-runs/:id/reject`, restritos a
+ * `agent_run:approve` (`tech_lead`/`platform_engineer`/`admin` — nunca
+ * `developer`, mesmo que ele tenha `agent_run:trigger`/`agent_run:cancel`).
+ * Cada teste de sucesso usa uma execução `approval_required` própria (ver
+ * `beforeAll`) porque a decisão é terminal — não dá pra reusar a mesma
+ * execução entre testes de aprovação e rejeição.
+ */
+describe('POST /agent-runs/:id/approve', () => {
+  it('retorna 403 para um usuário sem agent_run:approve (developer tem agent_run:trigger/cancel, não approve)', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runApprovalForConflictId}/approve`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(403);
+
+    expect(response.body.message).toMatch(/permissão/i);
+  });
+
+  it('retorna 404 para uma execução de OUTRA organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runOrgBId}/approve`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(404);
+  });
+
+  it('retorna 409 ao tentar aprovar uma execução que não está em approval_required', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runCompletedId}/approve`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(409);
+
+    expect(response.body.message).toContain('completed');
+  });
+
+  it('aprova uma execução em approval_required: transiciona para completed, resolve tool calls pendentes, grava approval e audit log', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runApprovalForApproveId}/approve`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .send({ reason: 'Diff revisado, seguro para aplicar.' })
+      .expect(200);
+
+    expect(response.body.status).toBe('completed');
+
+    const persisted = await request(testApp.app.getHttpServer())
+      .get(`/agent-runs/${runApprovalForApproveId}`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+    expect(persisted.body.status).toBe('completed');
+    const toolCall = persisted.body.steps
+      .flatMap((step: { toolCalls: { id: string; status: string }[] }) => step.toolCalls)
+      .find((call: { id: string }) => call.id === toolCallForApproveId);
+    expect(toolCall?.status).toBe('succeeded');
+
+    const { and, eq } = await import('@forge/database');
+    const [approval] = await testApp.db.query.approvals.findMany({
+      where: and(
+        eq(testApp.schema.approvals.subjectType, 'agent_run'),
+        eq(testApp.schema.approvals.subjectId, runApprovalForApproveId),
+      ),
+      limit: 1,
+    });
+    expect(approval).toMatchObject({
+      organizationId: organizationAId,
+      subjectType: 'agent_run',
+      subjectId: runApprovalForApproveId,
+      status: 'approved',
+      // `requestedByUserId` recuperado do audit log `agent_run.triggered`
+      // inserido no `beforeAll` para esta execução especificamente.
+      requestedByUserId: developerAId,
+      approvedByUserId: techLeadAId,
+      reason: 'Diff revisado, seguro para aplicar.',
+    });
+    expect(approval?.decidedAt).not.toBeNull();
+
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'agent_run.approved'),
+        eq(testApp.schema.auditLogs.targetId, runApprovalForApproveId),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId: organizationAId,
+      actorType: 'user',
+      actorUserId: techLeadAId,
+      action: 'agent_run.approved',
+      targetType: 'agent_run',
+      targetId: runApprovalForApproveId,
+    });
+    expect(auditLog?.metadata).toMatchObject({
+      previousStatus: 'approval_required',
+      status: 'completed',
+      taskId: taskAId,
+    });
+
+    // Já terminal agora — uma segunda decisão é 409, não um segundo 200.
+    await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runApprovalForApproveId}/approve`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(409);
+  });
+});
+
+describe('POST /agent-runs/:id/reject', () => {
+  it('retorna 403 para um usuário sem agent_run:approve', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runApprovalForConflictId}/reject`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(403);
+  });
+
+  it('retorna 404 para uma execução de OUTRA organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runOrgBId}/reject`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(404);
+  });
+
+  it('retorna 409 ao tentar rejeitar uma execução que não está em approval_required', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runQueuedId}/reject`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(409);
+  });
+
+  it('rejeita uma execução em approval_required: transiciona para failed (não cancelled), resolve tool calls pendentes, grava approval e audit log', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runApprovalForRejectId}/reject`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(200);
+
+    expect(response.body.status).toBe('failed');
+
+    const persisted = await request(testApp.app.getHttpServer())
+      .get(`/agent-runs/${runApprovalForRejectId}`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .expect(200);
+    expect(persisted.body.status).toBe('failed');
+    const toolCall = persisted.body.steps
+      .flatMap((step: { toolCalls: { id: string; status: string }[] }) => step.toolCalls)
+      .find((call: { id: string }) => call.id === toolCallForRejectId);
+    expect(toolCall?.status).toBe('rejected');
+
+    const { and, eq } = await import('@forge/database');
+    const [approval] = await testApp.db.query.approvals.findMany({
+      where: and(
+        eq(testApp.schema.approvals.subjectType, 'agent_run'),
+        eq(testApp.schema.approvals.subjectId, runApprovalForRejectId),
+      ),
+      limit: 1,
+    });
+    expect(approval).toMatchObject({
+      organizationId: organizationAId,
+      status: 'rejected',
+      // Nenhum audit log `agent_run.triggered` foi inserido para esta
+      // execução no `beforeAll` — prova o fallback para `null` quando a
+      // origem do disparo não pode ser recuperada.
+      requestedByUserId: null,
+      approvedByUserId: techLeadAId,
+    });
+
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'agent_run.rejected'),
+        eq(testApp.schema.auditLogs.targetId, runApprovalForRejectId),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId: organizationAId,
+      actorType: 'user',
+      actorUserId: techLeadAId,
+      action: 'agent_run.rejected',
+      targetType: 'agent_run',
+      targetId: runApprovalForRejectId,
+    });
+
+    await request(testApp.app.getHttpServer())
+      .post(`/agent-runs/${runApprovalForRejectId}/reject`)
+      .set('Authorization', `Bearer ${techLeadAToken}`)
+      .expect(409);
+  });
+});
+
 describe('GET /agent-runs/:id/events (SSE)', () => {
   it('emite o status atual na conexão e, na sequência, o novo status quando a execução é cancelada por outra chamada', async () => {
     const [runForSse] = await testApp.db
@@ -504,6 +810,24 @@ describe('GET /agent-runs/:id/events (SSE)', () => {
       .get(`/agent-runs/${runOrgBId}/events`)
       .set('Authorization', `Bearer ${developerAToken}`)
       .expect(404);
+  });
+
+  it('emite o novo status quando a execução é aprovada por outra chamada (mesmo canal usado por cancel)', async () => {
+    const listener = createSseListener(`/agent-runs/${runApprovalForConflictId}/events`, developerAToken);
+    try {
+      const [initialStatus] = await listener.waitForCount(1);
+      expect(initialStatus).toBe('approval_required');
+
+      await request(testApp.app.getHttpServer())
+        .post(`/agent-runs/${runApprovalForConflictId}/approve`)
+        .set('Authorization', `Bearer ${techLeadAToken}`)
+        .expect(200);
+
+      const [, secondStatus] = await listener.waitForCount(2);
+      expect(secondStatus).toBe('completed');
+    } finally {
+      listener.destroy();
+    }
   });
 });
 

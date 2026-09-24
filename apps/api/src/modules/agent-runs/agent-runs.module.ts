@@ -5,6 +5,7 @@ import { AgentsModule } from '../agents/agents.module.js';
 import { ArtifactsModule } from '../artifacts/artifacts.module.js';
 import { AuditLogWriterModule } from '../audit-logs/audit-log-writer.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunGovernanceAuditService } from './agent-run-governance-audit.service.js';
 import { AgentRunOrchestrationStore } from './agent-run-orchestration.store.js';
@@ -28,6 +29,7 @@ import { AI_PROVIDER } from './ai-provider.token.js';
   controllers: [AgentRunsController],
   providers: [
     AgentRunsRepository,
+    AgentRunApprovalsRepository,
     AgentRunsService,
     AgentRunEventsService,
     AgentRunGovernanceAuditService,
