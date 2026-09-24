@@ -5,6 +5,7 @@ import type {
   DeploymentStatus,
   EnvironmentKind,
   FindingSeverity,
+  KnowledgeSourceKind,
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
@@ -105,4 +106,15 @@ export const DEPLOYMENT_STATUS_LABELS: Record<DeploymentStatus, string> = {
   succeeded: 'Saudável',
   failed: 'Falhou',
   rolled_back: 'Rollback',
+};
+
+export const KNOWLEDGE_SOURCE_KIND_LABELS: Record<KnowledgeSourceKind, string> = {
+  repository_doc: 'Documento',
+  adr: 'ADR',
+  code_rules: 'Regras',
+  agents_md: 'AGENTS.md',
+  claude_md: 'CLAUDE.md',
+  readme: 'README',
+  issue: 'Issue',
+  pull_request: 'Pull request',
 };

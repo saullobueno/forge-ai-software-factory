@@ -7,6 +7,7 @@ import type {
   AIPlaygroundModel,
   DeploymentStatus,
   EnvironmentKind,
+  KnowledgeSourceKind,
   MemberRole,
   TaskPriority,
   TaskStatus,
@@ -105,6 +106,15 @@ export interface ApiDeploymentSummary {
   updatedAt: string;
   deployedByUser: { id: string; name: string; email: string } | null;
   pullRequest: { id: string; externalNumber: number | null; title: string; externalUrl: string | null } | null;
+  latestApproval: {
+    id: string;
+    status: 'pending' | 'approved' | 'rejected';
+    requestedByUserId: string | null;
+    approvedByUserId: string | null;
+    reason: string | null;
+    decidedAt: string | null;
+    createdAt: string;
+  } | null;
 }
 
 export interface ApiEnvironment {
@@ -187,6 +197,36 @@ export interface ApiDiffEntry {
   beforeSizeBytes: number | null;
   afterSizeBytes: number | null;
   createdAt: string;
+}
+
+export interface ApiKnowledgeSourceSummary {
+  id: string;
+  organizationId: string;
+  projectId: string | null;
+  workspaceId: string | null;
+  kind: KnowledgeSourceKind;
+  title: string;
+  uri: string;
+  version: string | null;
+  chunkCount: number;
+  totalTokens: number;
+  riskyChunkCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiKnowledgeSearchResult {
+  sourceId: string;
+  title: string;
+  uri: string;
+  kind: KnowledgeSourceKind;
+  projectId: string | null;
+  workspaceId: string | null;
+  content: string;
+  wrappedContent: string;
+  chunkIndex: number;
+  score: number;
+  hasPromptInjectionRisk: boolean;
 }
 
 /**

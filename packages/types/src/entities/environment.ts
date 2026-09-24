@@ -39,3 +39,14 @@ export const deploymentSchema = z
     { message: 'Deployments em estado terminal exigem completedAt', path: ['completedAt'] },
   );
 export type Deployment = z.infer<typeof deploymentSchema>;
+
+export const requestDeploymentSchema = z.object({
+  commitSha: z
+    .string()
+    .min(7)
+    .max(64)
+    .regex(/^[A-Za-z0-9._-]+$/, 'commitSha deve conter apenas letras, números, ponto, underline ou hífen')
+    .optional(),
+  pullRequestId: idSchema.nullish(),
+});
+export type RequestDeployment = z.infer<typeof requestDeploymentSchema>;

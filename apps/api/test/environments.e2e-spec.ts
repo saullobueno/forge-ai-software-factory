@@ -6,11 +6,25 @@ import type { TestApp } from './support/bootstrap-app.js';
 let testApp: TestApp;
 let projectAId: string;
 let projectBId: string;
+let protectedEnvironmentAId: string;
+let openEnvironmentAId: string;
+let environmentBId: string;
 let developerAToken: string;
+let platformEngineerAToken: string;
 let qaEngineerAToken: string;
 let developerBToken: string;
 
 const password = 'demo1234';
+
+interface EnvironmentResponse {
+  name: string;
+  isProtected: boolean;
+  deployments: Array<{
+    commitSha: string;
+    latestApproval: unknown;
+    deployedByUser: unknown;
+  }>;
+}
 
 beforeAll(async () => {
   const { bootstrapTestApp } = await import('./support/bootstrap-app.js');
@@ -28,7 +42,7 @@ beforeAll(async () => {
 
   const passwordHash = await hashPassword(password);
 
-  const [developerA, qaEngineerA, developerB] = await testApp.db
+  const [developerA, platformEngineerA, qaEngineerA, developerB] = await testApp.db
     .insert(testApp.schema.users)
     .values([
       {
@@ -36,6 +50,13 @@ beforeAll(async () => {
         email: 'dev@org-a-environments-e2e-test.example',
         name: 'Dev A',
         role: 'developer',
+        passwordHash,
+      },
+      {
+        organizationId: organizationA.id,
+        email: 'platform@org-a-environments-e2e-test.example',
+        name: 'Platform A',
+        role: 'platform_engineer',
         passwordHash,
       },
       {
@@ -54,7 +75,7 @@ beforeAll(async () => {
       },
     ])
     .returning();
-  if (!developerA || !qaEngineerA || !developerB) throw new Error('users não inseridos');
+  if (!developerA || !platformEngineerA || !qaEngineerA || !developerB) throw new Error('users não inseridos');
 
   const [projectA] = await testApp.db
     .insert(testApp.schema.projects)
@@ -68,16 +89,26 @@ beforeAll(async () => {
   projectAId = projectA.id;
   projectBId = projectB.id;
 
-  const [environmentA] = await testApp.db
+  const [environmentA, openEnvironmentA] = await testApp.db
     .insert(testApp.schema.environments)
-    .values({
-      organizationId: organizationA.id,
-      projectId: projectA.id,
-      kind: 'production',
-      name: 'Production',
-      url: 'https://project-a.example',
-      isProtected: true,
-    })
+    .values([
+      {
+        organizationId: organizationA.id,
+        projectId: projectA.id,
+        kind: 'production',
+        name: 'Production',
+        url: 'https://project-a.example',
+        isProtected: true,
+      },
+      {
+        organizationId: organizationA.id,
+        projectId: projectA.id,
+        kind: 'preview',
+        name: 'Preview',
+        url: 'https://preview.project-a.example',
+        isProtected: false,
+      },
+    ])
     .returning();
   const [environmentB] = await testApp.db
     .insert(testApp.schema.environments)
@@ -90,7 +121,10 @@ beforeAll(async () => {
       isProtected: false,
     })
     .returning();
-  if (!environmentA || !environmentB) throw new Error('environments não inseridos');
+  if (!environmentA || !openEnvironmentA || !environmentB) throw new Error('environments não inseridos');
+  protectedEnvironmentAId = environmentA.id;
+  openEnvironmentAId = openEnvironmentA.id;
+  environmentBId = environmentB.id;
 
   await testApp.db.insert(testApp.schema.deployments).values([
     {
@@ -124,6 +158,7 @@ beforeAll(async () => {
   };
 
   developerAToken = await login('dev@org-a-environments-e2e-test.example');
+  platformEngineerAToken = await login('platform@org-a-environments-e2e-test.example');
   qaEngineerAToken = await login('qa@org-a-environments-e2e-test.example');
   developerBToken = await login('dev@org-b-environments-e2e-test.example');
 }, 60_000);
@@ -139,12 +174,14 @@ describe('GET /projects/:id/environments', () => {
       .set('Authorization', `Bearer ${developerAToken}`)
       .expect(200);
 
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0].name).toBe('Production');
-    expect(response.body[0].isProtected).toBe(true);
-    expect(response.body[0].deployments).toHaveLength(1);
-    expect(response.body[0].deployments[0].commitSha).toBe('abcdef123456');
-    expect(response.body[0].deployments[0].deployedByUser).toEqual({
+    expect(response.body).toHaveLength(2);
+    const production = (response.body as EnvironmentResponse[]).find((environment) => environment.name === 'Production');
+    if (!production) throw new Error('Production não retornado');
+    expect(production.isProtected).toBe(true);
+    expect(production.deployments).toHaveLength(1);
+    expect(production.deployments[0].commitSha).toBe('abcdef123456');
+    expect(production.deployments[0].latestApproval).toBeNull();
+    expect(production.deployments[0].deployedByUser).toEqual({
       id: expect.any(String),
       name: 'Dev A',
       email: 'dev@org-a-environments-e2e-test.example',
@@ -174,6 +211,66 @@ describe('GET /projects/:id/environments', () => {
     await request(testApp.app.getHttpServer())
       .get('/projects/nao-e-uuid/environments')
       .set('Authorization', `Bearer ${developerBToken}`)
+      .expect(404);
+  });
+
+  it('solicita deployment em ambiente aberto e conclui a demo imediatamente', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${openEnvironmentAId}/deployments`)
+      .set('Authorization', `Bearer ${platformEngineerAToken}`)
+      .send({ commitSha: 'feedface1234' })
+      .expect(201);
+
+    expect(response.body.status).toBe('succeeded');
+    expect(response.body.commitSha).toBe('feedface1234');
+    expect(response.body.completedAt).toEqual(expect.any(String));
+    expect(response.body.latestApproval).toBeNull();
+
+    const auditLogs = await testApp.db.query.auditLogs.findMany({
+      where: (auditLogs, { and, eq }) =>
+        and(eq(auditLogs.targetType, 'deployment'), eq(auditLogs.targetId, response.body.id)),
+    });
+    expect(auditLogs.map((auditLog) => auditLog.action)).toEqual(
+      expect.arrayContaining(['deployment.requested', 'deployment.succeeded']),
+    );
+  });
+
+  it('solicita deployment em ambiente protegido e cria approval pendente', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments`)
+      .set('Authorization', `Bearer ${platformEngineerAToken}`)
+      .send({ commitSha: 'cafebabe1234' })
+      .expect(201);
+
+    expect(response.body.status).toBe('queued');
+    expect(response.body.startedAt).toBeNull();
+    expect(response.body.completedAt).toBeNull();
+    expect(response.body.latestApproval).toMatchObject({
+      status: 'pending',
+      requestedByUserId: expect.any(String),
+      approvedByUserId: null,
+    });
+
+    const approval = await testApp.db.query.approvals.findFirst({
+      where: (approvals, { and, eq }) =>
+        and(eq(approvals.subjectType, 'deployment'), eq(approvals.subjectId, response.body.id)),
+    });
+    expect(approval?.status).toBe('pending');
+  });
+
+  it('retorna 403 para usuário sem environment:deploy', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${openEnvironmentAId}/deployments`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .send({ commitSha: 'feedface9999' })
+      .expect(403);
+  });
+
+  it('retorna 404 ao tentar deploy em ambiente de outra organização', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectBId}/environments/${environmentBId}/deployments`)
+      .set('Authorization', `Bearer ${platformEngineerAToken}`)
+      .send({ commitSha: 'feedface9999' })
       .expect(404);
   });
 });
