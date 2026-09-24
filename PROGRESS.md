@@ -13,9 +13,44 @@ git log --oneline                          # confira se há commits depois do ú
 git status --short                         # confira se não há trabalho não commitado de uma sessão anterior
 ```
 
-Último commit confirmado: **este commit** (conectar execução real, limitada, atrás da aprovação humana — ver Fase 18 abaixo). Todas as Fases 0-17 do roadmap estão commitadas e verificadas, e a Fase 18 (fora do roadmap formal original, mas a lacuna de maior alavancagem identificada ao final da Fase 17) também — ver tabela abaixo.
+Último commit confirmado: **`88e0bf2`** ("feat(api): fail fast on production boot without real DATABASE_URL/REDIS_URL/JWT_SECRET"). Todas as Fases 0-18 do roadmap estão commitadas e verificadas — ver tabela abaixo. O repositório agora também tem um remote real e público: `https://github.com/saullobueno/forge-ai-software-factory` (CI verde, incluindo o teste real do Docker rodando em `ubuntu-latest`).
 
-Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **89/89** (86 + 3 da Fase 18, em arquivo próprio); suíte Playwright completa → **12/12**.
+Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **100/100** (7 skipped por design — ver Fase 18); suíte Playwright completa → **14/14**.
+
+## Episódio: sessão paralela retomou o trabalho a partir deste arquivo (2026-09-24)
+
+Depois da Fase 18, o usuário pediu explicitamente para outra sessão (fora desta conversa) se atualizar a partir deste `PROGRESS.md` e continuar. Essa sessão testou o app manualmente no navegador (não só automatizado) e achou + corrigiu bugs reais de uso — ver seção abaixo. Ao retomar esta sessão (Claude), o mesmo protocolo de sempre: `git status --short` primeiro (achou ~20 arquivos não commitados), verificação independente completa (build/lint/typecheck/test + e2e + Playwright, todos verdes, incluindo confirmar que uma falha isolada em `knowledge.e2e-spec.ts` era o mesmo flake de contenção de PGlite já documentado, não uma regressão), leitura do código dos pontos sensíveis (fluxo de deployment, módulo de conhecimento), e separação em commits temáticos antes de dar o retrato ao usuário.
+
+## Trabalho commitado nesta rodada (antes descrito como "não commitado")
+
+O usuário reportou que abrir `http://localhost:3000` mostrava só o placeholder antigo da Fase 0. Correção aplicada nesta sessão: `apps/web/src/app/page.tsx` agora redireciona `/` para `/projects`; sem sessão, o `proxy.ts` encaminha para `/login`. O proxy também passou a proteger `/ai-playground` e `/audit-logs`. O teste `theme-toggle.spec.ts` foi ajustado para entrar por `/login`.
+
+Também foi preparada a frente "produção sem Docker local": `.env.production.example`, `docs/production-deployment.md`, ajustes em `.env.example`/`README.md`, e validação fail-fast em `apps/api/src/infrastructure/config/env.ts` para impedir `NODE_ENV=production` sem `DATABASE_URL`, `REDIS_URL` e `JWT_SECRET` real.
+
+Correção adicional após teste manual do usuário: login local falhava com `Não foi possível entrar.` porque o default antigo de `DATABASE_LOCAL_PATH` era relativo ao diretório de execução. Assim, `pnpm db:migrate`/`db:seed` podiam alimentar um PGlite, enquanto a API dev lia outro (`apps/api/.data/forge-dev.pglite`). `packages/database/src/env.ts` e `packages/database/drizzle.config.ts` agora usam como default absoluto `<repo>/.data/forge-dev.pglite`, independente do CWD. Após parar os processos antigos do Forge, rodar `pnpm db:migrate` + `pnpm --filter @forge/database db:seed` e subir `pnpm dev`, login foi confirmado via API direta e via proxy do Next.
+
+Continuação da Fase 11 nesta sessão: `POST /projects/:projectId/environments/:environmentId/deployments` solicita deployment demo para papéis com `environment:deploy`. Ambientes abertos concluem como `succeeded`; ambientes protegidos ficam `queued` e criam `approvals.pending` (`subjectType: deployment`) com audit logs `deployment.requested`/`deployment.approval_required`. A tela de projeto mostra botão "Solicitar deploy" para `platform_engineer`/`admin` e badge "Aguardando aprovação" quando há gate pendente. Seed agora garante `platform@acme-platform.example` / `demo1234` para testar esta frente.
+
+Continuação da Fase 12 nesta sessão: `knowledge_sources`/`knowledge_chunks` agora são populados pelo seed demo com 4 fontes do projeto "Forge Web App"; `apps/api` ganhou `KnowledgeModule` com `GET /projects/:id/knowledge` e `GET /projects/:id/knowledge/search`; a tela de projeto ganhou a seção "Conhecimento" com fontes indexadas e busca contextual. A recuperação segue lexical via `@forge/knowledge`, escopada por tenant/projeto, com `wrappedContent` para uso futuro seguro por agentes. Ainda não há indexador automático, embeddings/vector store ou conexão direta com o orquestrador.
+
+Nota operacional desta sessão: uma tentativa de rodar `db:seed` enquanto a API dev segurava o PGlite deixou o banco local em estado parcial. A API foi parada, a pasta `.data/forge-dev.pglite` foi preservada em backup (`.data/forge-dev.pglite.backup-20260924-174614`) e a base demo foi recriada com `pnpm --filter @forge/database db:migrate` + `pnpm --filter @forge/database db:seed`. Evite rodar seed/migrate no mesmo PGlite aberto pela API dev.
+
+Validações desta sessão:
+- `pnpm --filter @forge/web typecheck` → passou.
+- `pnpm --filter @forge/web lint` → passou.
+- `pnpm --filter @forge/web test:e2e` → **12/12** passou.
+- `pnpm --filter @forge/api test` → **4 arquivos / 8 testes** passaram.
+- `pnpm --filter @forge/api lint` → passou.
+- `pnpm --filter @forge/api typecheck` → passou.
+- `pnpm turbo run build lint typecheck test` → **34/34** passou.
+- `pnpm --filter @forge/api test:e2e -- runtime-smoke.e2e-spec.ts` → **1 arquivo / 2 testes** passou.
+- Login manual por HTTP: `POST http://127.0.0.1:3001/auth/login` com `tech-lead@acme-platform.example` → passou; `POST http://127.0.0.1:3000/api/auth/login` com `dev@acme-platform.example` → passou.
+- Após a correção do caminho default do PGlite: `pnpm --filter @forge/database typecheck` → passou; `pnpm --filter @forge/database lint` → passou; `pnpm --filter @forge/api typecheck` → passou; `pnpm --filter @forge/api test` → **4 arquivos / 8 testes** passaram; `pnpm --filter @forge/database test` com `DATABASE_LOCAL_PATH` temporário → **6 arquivos / 18 testes** passaram.
+- Após o fluxo de deployment demo: `pnpm --filter @forge/types typecheck` → passou; `pnpm --filter @forge/api typecheck` → passou; `pnpm --filter @forge/web typecheck` → passou; `pnpm --filter @forge/database typecheck` → passou; `pnpm --filter @forge/api lint` → passou; `pnpm --filter @forge/web lint` → passou; `pnpm --filter @forge/database lint` → passou; `pnpm --filter @forge/api test` → **4 arquivos / 8 testes** passaram; `pnpm --filter @forge/database test -- src/seed/run-seed.integration.test.ts` com PGlite temporário → **1 arquivo / 4 testes** passou; `pnpm --filter @forge/api test:e2e -- environments.e2e-spec.ts` → **1 arquivo / 9 testes** passou; `pnpm --filter @forge/web test:e2e -- environment-deployments.spec.ts` → **1 teste** passou.
+- `pnpm turbo run build lint typecheck test` foi tentado após o fluxo de deployment: **31/34 tasks passaram**, mas `@forge/database#test` estourou `beforeAll` (120s) em duas specs PGlite sob carga. Rerun isolado logo em seguida: `pnpm --filter @forge/database test` → **6 arquivos / 18 testes** passaram em 48s. `pnpm --filter @forge/api typecheck`, `pnpm --filter @forge/web typecheck` e `pnpm --filter @forge/web lint` também passaram depois do timeout agregado.
+- Após a integração inicial da Fase 12: `pnpm --filter @forge/knowledge typecheck` → passou; `pnpm --filter @forge/knowledge test` → **1 arquivo / 6 testes** passou; `pnpm --filter @forge/api typecheck` → passou; `pnpm --filter @forge/database typecheck` → passou; `pnpm --filter @forge/web typecheck` → passou; `pnpm --filter @forge/api lint` → passou; `pnpm --filter @forge/database lint` → passou; `pnpm --filter @forge/web lint` → passou; `pnpm --filter @forge/api test:e2e -- knowledge.e2e-spec.ts` → **1 arquivo / 7 testes** passou; `pnpm --filter @forge/web test:e2e -- project-knowledge.spec.ts` → **1 teste** passou; verificação manual via proxy `:3000/api` retornou `KNOWLEDGE_COUNT=4` e `SEARCH_COUNT=1`.
+
+Nota: `pnpm --filter @forge/api test:e2e` completo foi tentado depois da mudança de env, mas ficou preso no encerramento sem reportar resultado; o processo foi interrompido e limpo. O runtime-smoke direcionado passou em seguida e cobre a inicialização real do Nest fora do Vitest.
 
 Depois de commitar a Fase 17, a mesma verificação apontou mais um bug real (não relacionado à Fase 17): `packages/sandbox` tinha um teste com `afterEach` chamando `rmSync` imediatamente após matar um processo por timeout — no Windows, o handle do diretório não é liberado de forma síncrona com o kill, causando `EPERM` esporádico sob carga (reproduzido de forma consistente rodando a suíte inteira; sempre passava isolado). Corrigido trocando por `fs/promises.rm` com `maxRetries`/`retryDelay` (`fd68696`).
 
@@ -47,14 +82,15 @@ Esta sessão rodou de forma autônoma por ~1 dia inteiro. Em um certo ponto o us
 | 8 | Runner/Sandbox | `29c2acf` | `@forge/sandbox`: Docker + fallback local. **Não conectado ao orquestrador** (ver seção abaixo) |
 | 9 | Testes | `ce73e88` | `@forge/testing`: `TestSuiteRunner` sobre `SandboxRunner`. **Não integrado** (sem persistência/API/UI) |
 | 10 | Integração Git | `ec63833` | `@forge/git`: `GitProvider`, `MockGitProvider`, `GitHubGitProvider`. **Não integrado** |
-| 11 | Ambientes | `bdeab10` | `GET /projects/:id/environments`, UI no detalhe do projeto, seed. **Deploy real pendente** |
-| 12 | Conhecimento | `0c06396` | `@forge/knowledge`: chunking, retrieval lexical, defesa contra prompt injection. **Não integrado** |
+| 11 | Ambientes | `bdeab10`, `4386a97` | `GET /projects/:id/environments`, `POST .../deployments` (com gate de aprovação para ambientes protegidos), UI no detalhe do projeto, seed. **Decisão approve/reject do gate e deploy real pendentes** |
+| 12 | Conhecimento | `0c06396`, `80fb194` | `@forge/knowledge`; persistência seedada em `knowledge_sources`/`knowledge_chunks`; endpoints tenant-scoped; UI de fontes e busca. **Indexer/embeddings/agentes pendentes** |
 | 13 | Playground de IA | `bdeab10` | `/ai-playground`, avaliação determinística mock, permissão `ai_playground:use`. **Sem provedores reais** |
 | 14 | Segurança/observabilidade | `bdeab10` | `docs/threat-model.md`, traces locais (`FORGE_TRACE_LOGS=1`), redaction, `/audit-logs` com escrita em login/trigger/cancel/playground/política. **Sem OpenTelemetry real** |
 | 15 | Performance/acessibilidade | `bdeab10` | Skip link, foco visível, testes de teclado + axe-core. **Sem Lighthouse/budgets** |
 | 16 | QA final/documentação | `0c4d3a4` | `docs/threat-model.md`, `docs/final-qa-handoff.md`, este arquivo |
 | 17 | Fluxo de aprovação humana | `1de2c5c` | `POST /agent-runs/:id/approve`/`:id/reject`, tabela `approvals` (reaproveitada), UI de decisão na página de execução, SSE, audit log. Detalhe na seção da Fase 17 abaixo. |
-| 18 | Execução real (limitada) atrás da aprovação | *(este commit)* | `write_file`/`apply_patch` aprovados escrevem de verdade numa cópia isolada e descartável do repositório (`@forge/sandbox` conectado); `run_command`/`run_tests`/Git continuam simulados de propósito (sem Docker nesta máquina). Detalhe na seção da Fase 18 abaixo. |
+| 18 | Execução real (limitada) atrás da aprovação | `ea66116` | `write_file`/`apply_patch` aprovados escrevem de verdade numa cópia isolada e descartável do repositório (`@forge/sandbox` conectado); `run_command`/`run_tests`/Git continuam simulados de propósito (sem Docker nesta máquina). Detalhe na seção da Fase 18 abaixo. |
+| — | Correções pós-push (CI real, bugs de uso manual) | `94f9365`, `766d3cb`, `f8d3f08`, `10d707a`, `88e0bf2` | CI corrigido (typecheck dependia só do build de dependências, não do próprio; timeout curto no teste real do Docker); home redireciona pra `/projects`; caminho default do PGlite absoluto (era relativo ao CWD, causava banco "duplicado" entre seed e API dev); validação fail-fast de env em produção |
 
 **O motor central do produto funciona de ponta a ponta**: login → projeto → tarefa → "Iniciar execução de IA" → orquestrador real processa via fila → timeline atualiza ao vivo via SSE → para em "Aguardando aprovação" quando a política de ferramentas exige → **um `tech_lead`/`platform_engineer`/`admin` aprova ou rejeita as tool calls pendentes** → execução termina em `completed` (aprovada) ou `failed` (rejeitada).
 
@@ -99,8 +135,8 @@ Testes novos (todos reais, sem mock de fs):
 Outras lacunas menores, por fase (detalhe em cada seção do `docs/final-qa-handoff.md` anterior, ainda útil como referência):
 - Fase 9: persistir execuções em `test_runs`/`test_suites`/`test_artifacts`.
 - Fase 10: persistir operações Git nas tabelas existentes; cliente GitHub real.
-- Fase 11: fluxo de criação de deployment; approvals de ambiente protegido.
-- Fase 12: indexador real de docs/ADRs; persistência; conexão com agentes.
+- Fase 11: decisão approve/reject para approvals de deployment; execução real em provedor externo; logs/saúde reais de ambiente.
+- Fase 12: indexador automático de docs/ADRs/repositório; embeddings/vector store; conexão da recuperação com agentes.
 - Fase 13: provedores de IA reais; histórico persistido.
 - Fase 14: exporter OpenTelemetry real; audit log em mais endpoints.
 - Fase 15: Lighthouse/budgets; testes responsivos.
@@ -122,6 +158,7 @@ Outras lacunas menores, por fase (detalhe em cada seção do `docs/final-qa-hand
 
 Organização "Acme Platform":
 - `tech-lead@acme-platform.example` / `demo1234` (role `tech_lead`, tem `agent_run:approve`)
+- `platform@acme-platform.example` / `demo1234` (role `platform_engineer`, tem `environment:deploy`)
 - `dev@acme-platform.example` / `demo1234` (role `developer`)
 
 ## Requisito do usuário registrado no prompt mestre
