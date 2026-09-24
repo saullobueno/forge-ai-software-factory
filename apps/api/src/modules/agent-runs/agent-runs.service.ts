@@ -9,7 +9,8 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunWorkerService } from './agent-run-worker.service.js';
-import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps } from './agent-runs.repository.js';
+import { AgentRunWorkspaceService } from './agent-run-workspace.service.js';
+import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps, type ToolCallRow } from './agent-runs.repository.js';
 import type { TaskRow } from '../tasks/tasks.repository.js';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class AgentRunsService {
     private readonly agentRunWorker: AgentRunWorkerService,
     private readonly auditLogsService: AuditLogsService,
     private readonly agentRunApprovalsRepository: AgentRunApprovalsRepository,
+    private readonly agentRunWorkspace: AgentRunWorkspaceService,
   ) {}
 
   /**
@@ -130,12 +132,19 @@ export class AgentRunsService {
    * Aprova uma execução parada em `approval_required` (spec §9/§18 —
    * fluxo de aprovação humana): a decisão só é aceita se a execução ainda
    * estiver nesse status exato (409 caso contrário, mesmo padrão de
-   * `cancel`), transiciona para `completed` via `transitionAgentRunStatus`
-   * e resolve toda tool call que ficou `pending` aguardando essa decisão
-   * para `succeeded` — o `result` simulado (`{ proposed, policyDecision }`)
-   * já gravado pelo orquestrador permanece como registro do que foi
-   * aceito; nenhuma execução real acontece aqui (`@forge/sandbox` etc.
-   * continuam desconectados, fora do escopo desta tarefa).
+   * `cancel`), e toda tool call que ficou `pending` aguardando essa decisão
+   * é resolvida.
+   *
+   * Execução real, limitada e deliberada (ver `AgentRunWorkspaceService`):
+   * toda tool call `write_file`/`apply_patch` pendente É aplicada de
+   * verdade contra uma cópia isolada e descartável do repositório
+   * (`.data/workspaces/<repositoryId>/`, nunca `fixtures/<repositoryName>/`
+   * original) ANTES da execução ser marcada como `completed` — se algum
+   * patch não aplicar limpo, a aprovação não "funciona" silenciosamente: a
+   * execução vai para `failed` mesmo tendo sido aprovada pelo humano (ver
+   * `applyApprovedWrites` abaixo). `run_command`/`run_tests`/
+   * `create_commit`/`create_pull_request` continuam simulados — só o
+   * `result` já gravado pelo orquestrador é preservado para essas.
    */
   async approve(id: string, organizationId: string, actorUserId: string, reason: string | null): Promise<AgentRunRow> {
     return this.decide(id, organizationId, actorUserId, 'approved', reason);
@@ -180,12 +189,23 @@ export class AgentRunsService {
       );
     }
 
-    const targetStatus: AgentRunStatus = decision === 'approved' ? 'completed' : 'failed';
+    // Execução real (limitada a `write_file`/`apply_patch`) acontece SÓ na
+    // aprovação, e ANTES de qualquer transição de status ser persistida —
+    // se algo falhar de verdade, o status final precisa refletir isso, não
+    // um "completed" otimista escrito antes de saber o resultado real.
+    const applied = decision === 'approved' ? await this.applyApprovedWrites(run, organizationId) : null;
+
+    const targetStatus: AgentRunStatus = decision === 'rejected' || applied?.anyFailed ? 'failed' : 'completed';
     const transition = transitionAgentRunStatus(run.status, targetStatus);
     if (!transition.success) {
       throw new ConflictException(transition.error);
     }
 
+    // `resolvePendingToolCalls` só enxerga tool calls ainda `pending` — as
+    // que `applyApprovedWrites` já processou (sucesso ou falha real) já
+    // saíram de `pending` (ver `updateToolCallResult`), então este UPDATE
+    // em massa nunca as sobrescreve; ele resolve o que sobrou (ex.:
+    // `run_command`, que continua simulado) com a decisão humana genérica.
     await this.agentRunsRepository.resolvePendingToolCalls(id, decision === 'approved' ? 'succeeded' : 'rejected');
     const updated = await this.agentRunsRepository.updateStatus(id, targetStatus);
     this.agentRunEvents.publish({ agentRunId: id, status: updated.status });
@@ -217,10 +237,109 @@ export class AgentRunsService {
         status: updated.status,
         taskId: updated.taskId,
         reason,
+        ...(applied && applied.processed.length > 0
+          ? { appliedWrites: applied.processed.map(({ toolCallId, path, ok }) => ({ toolCallId, path, ok })) }
+          : {}),
       },
     });
 
+    if (applied && applied.processed.length > 0) {
+      // Evento auxiliar dedicado (em vez de só sobrecarregar
+      // `agent_run.approved` acima): torna "esta aprovação teve efeito real
+      // em arquivos" localizável por ação no audit log sem precisar
+      // inspecionar `metadata` de todo `agent_run.approved`. Nunca inclui
+      // conteúdo de arquivo/patch — só caminho, sucesso/falha e hash (não
+      // sensível) já presentes no `result` real da tool call.
+      await this.auditLogsService.record({
+        organizationId,
+        actorType: 'user',
+        actorUserId,
+        action: 'agent_run.changes_applied',
+        targetType: 'agent_run',
+        targetId: updated.id,
+        metadata: {
+          repositoryId: applied.repositoryId,
+          appliedWrites: applied.processed.map(({ toolCallId, path, ok, error }) => ({
+            toolCallId,
+            path,
+            ok,
+            ...(error ? { error } : {}),
+          })),
+        },
+      });
+    }
+
     return updated;
+  }
+
+  /**
+   * Aplica de verdade toda tool call `write_file`/`apply_patch` que ficou
+   * `pending` nesta execução (spec §18 — conectar execução real, limitada,
+   * atrás da aprovação humana). Retorna `null` implicitamente via
+   * `processed: []` quando não há nada a aplicar (nenhuma tool call de
+   * escrita pendente, ou o projeto não tem repositório configurado — o
+   * mesmo `undefined` gracioso que `AgentRunOrchestrator` já usa para
+   * "sem repositório", não uma falha).
+   *
+   * Cada tool call processada tem seu `toolCall.result` REESCRITO com o
+   * resultado real da escrita (`AgentRunWorkspaceService.applyApprovedWrite`),
+   * substituindo o resultado simulado `{ proposed, policyDecision }` — o
+   * resultado final nunca finge ter aplicado algo que não aplicou.
+   */
+  private async applyApprovedWrites(
+    run: AgentRunRow,
+    organizationId: string,
+  ): Promise<{ processed: Array<{ toolCallId: string; path: string; ok: boolean; error?: string }>; anyFailed: boolean; repositoryId: string | null }> {
+    const pendingWrites = await this.agentRunsRepository.findPendingWriteToolCalls(run.id);
+    if (pendingWrites.length === 0) {
+      return { processed: [], anyFailed: false, repositoryId: null };
+    }
+
+    const repository = await this.agentRunsRepository.findRepositoryForTask(run.taskId, organizationId);
+    if (!repository) {
+      // Sem repositório configurado para o projeto: não há workspace para
+      // aplicar nada de verdade — degrada graciosamente (mesmo padrão de
+      // `root: null` em `AgentRunOrchestrator`/`executeRealTool`). Estas
+      // tool calls permanecem `pending` e caem no caminho simulado genérico
+      // (`resolvePendingToolCalls`), exatamente como antes desta mudança.
+      return { processed: [], anyFailed: false, repositoryId: null };
+    }
+
+    const processed: Array<{ toolCallId: string; path: string; ok: boolean; error?: string }> = [];
+    let anyFailed = false;
+
+    for (const toolCall of pendingWrites) {
+      const proposed = this.extractProposed(toolCall);
+      const outcome = await this.agentRunWorkspace.applyApprovedWrite({
+        repositoryId: repository.id,
+        repositoryName: repository.name,
+        proposedPath: proposed?.path,
+        proposedPatch: proposed?.patch,
+      });
+
+      const rawArgumentPath = toolCall.arguments['path'];
+      const path =
+        typeof proposed?.path === 'string' ? proposed.path : typeof rawArgumentPath === 'string' ? rawArgumentPath : 'desconhecido';
+      await this.agentRunsRepository.updateToolCallResult(toolCall.id, outcome.ok ? 'succeeded' : 'failed', {
+        ...outcome.result,
+        policyDecision: (toolCall.result as { policyDecision?: unknown } | null)?.policyDecision ?? null,
+      });
+
+      if (!outcome.ok) anyFailed = true;
+      processed.push({
+        toolCallId: toolCall.id,
+        path,
+        ok: outcome.ok,
+        ...(outcome.ok ? {} : { error: outcome.result.error }),
+      });
+    }
+
+    return { processed, anyFailed, repositoryId: repository.id };
+  }
+
+  private extractProposed(toolCall: ToolCallRow): { path?: unknown; patch?: unknown } | null {
+    const result = toolCall.result as { proposed?: { path?: unknown; patch?: unknown } } | null;
+    return result?.proposed ?? null;
   }
 
   /**

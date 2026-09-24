@@ -13,11 +13,13 @@ git log --oneline                          # confira se há commits depois do ú
 git status --short                         # confira se não há trabalho não commitado de uma sessão anterior
 ```
 
-Último commit confirmado: **`fd68696`** ("fix(sandbox): retry temp workspace cleanup to avoid Windows EPERM flake"). Todas as Fases 0-17 do roadmap estão commitadas e verificadas — ver tabela abaixo.
+Último commit confirmado: **este commit** (conectar execução real, limitada, atrás da aprovação humana — ver Fase 18 abaixo). Todas as Fases 0-17 do roadmap estão commitadas e verificadas, e a Fase 18 (fora do roadmap formal original, mas a lacuna de maior alavancagem identificada ao final da Fase 17) também — ver tabela abaixo.
 
-Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **86/86**; suíte Playwright completa → **12/12**.
+Validação final confirmada de forma independente (não só pelo autorrelato de quem implementou): `pnpm turbo run build lint typecheck test` → **34/34**; `pnpm --filter @forge/api test:e2e` → **89/89** (86 + 3 da Fase 18, em arquivo próprio); suíte Playwright completa → **12/12**.
 
 Depois de commitar a Fase 17, a mesma verificação apontou mais um bug real (não relacionado à Fase 17): `packages/sandbox` tinha um teste com `afterEach` chamando `rmSync` imediatamente após matar um processo por timeout — no Windows, o handle do diretório não é liberado de forma síncrona com o kill, causando `EPERM` esporádico sob carga (reproduzido de forma consistente rodando a suíte inteira; sempre passava isolado). Corrigido trocando por `fs/promises.rm` com `maxRetries`/`retryDelay` (`fd68696`).
+
+**Nota de ambiente (Fase 18)**: rodar `pnpm --filter @forge/api test:e2e` EM PARALELO com `pnpm turbo run build lint typecheck test` (que também sobe PGlite via `@forge/database`) nesta máquina produz falhas de `beforeAll` por `hookTimeout` (60s) em specs não relacionadas (`audit-logs.e2e-spec.ts`, `ai-playground.e2e-spec.ts`) por contenção de CPU/disco — sempre passam rodando isolado (confirmado: 89/89 rodando sozinho logo em seguida). Reforça a mesma lição já registrada abaixo sobre não rodar suítes PGlite pesadas em paralelo.
 
 ## Histórico da sessão (contexto importante, não repita o erro)
 
@@ -51,7 +53,8 @@ Esta sessão rodou de forma autônoma por ~1 dia inteiro. Em um certo ponto o us
 | 14 | Segurança/observabilidade | `bdeab10` | `docs/threat-model.md`, traces locais (`FORGE_TRACE_LOGS=1`), redaction, `/audit-logs` com escrita em login/trigger/cancel/playground/política. **Sem OpenTelemetry real** |
 | 15 | Performance/acessibilidade | `bdeab10` | Skip link, foco visível, testes de teclado + axe-core. **Sem Lighthouse/budgets** |
 | 16 | QA final/documentação | `0c4d3a4` | `docs/threat-model.md`, `docs/final-qa-handoff.md`, este arquivo |
-| 17 | Fluxo de aprovação humana | *(este commit)* | `POST /agent-runs/:id/approve`/`:id/reject`, tabela `approvals` (reaproveitada), UI de decisão na página de execução, SSE, audit log. Detalhe abaixo. |
+| 17 | Fluxo de aprovação humana | `1de2c5c` | `POST /agent-runs/:id/approve`/`:id/reject`, tabela `approvals` (reaproveitada), UI de decisão na página de execução, SSE, audit log. Detalhe na seção da Fase 17 abaixo. |
+| 18 | Execução real (limitada) atrás da aprovação | *(este commit)* | `write_file`/`apply_patch` aprovados escrevem de verdade numa cópia isolada e descartável do repositório (`@forge/sandbox` conectado); `run_command`/`run_tests`/Git continuam simulados de propósito (sem Docker nesta máquina). Detalhe na seção da Fase 18 abaixo. |
 
 **O motor central do produto funciona de ponta a ponta**: login → projeto → tarefa → "Iniciar execução de IA" → orquestrador real processa via fila → timeline atualiza ao vivo via SSE → para em "Aguardando aprovação" quando a política de ferramentas exige → **um `tech_lead`/`platform_engineer`/`admin` aprova ou rejeita as tool calls pendentes** → execução termina em `completed` (aprovada) ou `failed` (rejeitada).
 
@@ -65,9 +68,33 @@ Frontend: `apps/web/src/app/(product)/projects/[id]/tasks/[taskId]/runs/[runId]/
 
 Testes novos: `apps/api/test/agent-runs.e2e-spec.ts` (+9 casos: sucesso/409/403/404 para approve e reject, incluindo o teste do canal SSE), `apps/web/e2e/agent-run-approval.spec.ts` (3 cenários reais via Playwright: aprovar, rejeitar, esconder botões para `developer` — todos verificando a mudança de status via SSE, sem `page.reload()`). Um teste pré-existente (`login-to-agent-run.spec.ts`) tinha uma asserção frágil (`getByText('agent_run.approved')` sem `.first()`) que só nunca tinha quebrado porque nenhum outro teste até então escrevia essa ação de verdade no banco compartilhado de e2e — corrigido com `.first()`, mesmo idioma já usado em `agent-run-orchestration.spec.ts` para o mesmo tipo de colisão entre specs rodando em paralelo.
 
+## Fase 18 — Execução real (limitada) conectada atrás da aprovação humana
+
+Implementado nesta sessão, na sequência direta da Fase 17: quando um `tech_lead`/`platform_engineer`/`admin` aprova uma execução parada em `approval_required`, toda tool call `write_file`/`apply_patch` que ficou `pending` agora **escreve de verdade**, não só muda de status.
+
+**Fronteira de segurança (deliberada, releia antes de expandir isto)**:
+- Só `write_file`/`apply_patch` viram execução real, e só contra uma **cópia isolada e descartável** do repositório demo — `.data/workspaces/<repositoryId>/` (`repositoryId` = PK de `repositories`, não `agentRuns.id`: a cópia é **persistente entre execuções sobre o mesmo projeto**, criada de forma preguiçosa na primeira escrita aprovada, para que um patch aprovado numa execução possa legitimamente desalinhar e falhar numa execução seguinte se o arquivo já mudou — é exatamente esse cenário que os testes cobrem). `fixtures/<repositoryName>/` original **nunca** é tocado — só lido uma vez, na cópia inicial (`fs.cp` recursivo, nunca sobrescreve a origem).
+- `run_command`/`run_tests` e `create_commit`/`create_pull_request` **continuam simulados**, de propósito: o único runner disponível nesta máquina (`LocalProcessSandboxRunner`, `@forge/sandbox`, Fase 8) não isola rede — rodar um comando real a partir de uma proposta de IA exigiria `DockerSandboxRunner` com `--network=none` (ou equivalente), indisponível sem Docker aqui. Conectar isso é a lacuna que resta (ver abaixo).
+- Path safety reaproveita `resolveInsideWorkspace` (`@forge/sandbox/path-policy.ts`) — a mesma função que `LocalProcessSandboxRunner` já usava para validar `cwd` de `run_command`, agora também importada por `apps/api` (nova dependência `@forge/sandbox` do app) para validar o `path` proposto de cada escrita.
+- Aplicação de patch reaproveita `diff` (jsdiff, já dependência de `apps/web`/`packages/database`) — o mesmo formato de unified diff mínimo que `packages/ai/src/mock-provider.ts` já produzia (sem cabeçalho `Index:`/`===`), confirmado compatível com `applyPatch` antes de escrever qualquer código.
+
+**Arquitetura**: a lógica de fs real vive em `apps/api/src/modules/agent-runs/agent-run-workspace.service.ts` (`AgentRunWorkspaceService`), não em `@forge/agents` — mesma decisão de design de `RepositoryFsService`/`ArtifactStorageService` (fs real por trás de um serviço Nest em `apps/api`, nunca em um pacote framework-agnostic). Preserva intocada a garantia já testada de `AgentRunOrchestrator` ("`require_approval` NUNCA executa de verdade" — ver `orchestrator.test.ts`): o orquestrador continua gravando só o resultado simulado; a execução real acontece inteiramente em `AgentRunsService.decide()` (chamado por `approve()`/`reject()`), ANTES de qualquer transição de status ser persistida.
+
+**Falha real de patch = execução vai para `failed`, mesmo tendo sido aprovada**: se `applyPatch` não aplicar limpo (ex.: outra execução já alterou o arquivo desde então), a aprovação não "funciona" silenciosamente — `AgentRunsService.decide` computa o status final (`completed` vs `failed`) SÓ DEPOIS de tentar as escritas reais, não antes. A linha de `approvals` continua registrando a decisão HUMANA como `approved` (o tech lead realmente aprovou); é o status da EXECUÇÃO que diverge para `failed` pela falha técnica real — as duas coisas são conceitos distintos e ficam em colunas/tabelas distintas de propósito, sem inventar um terceiro valor no enum `AgentRunStatus`/`ApprovalStatus`.
+
+Audit log novo: `agent_run.changes_applied` (além do já existente `agent_run.approved`/`agent_run.rejected`), emitido só quando pelo menos uma tool call de escrita foi processada de verdade — metadata lista `{ toolCallId, path, ok, error? }` por escrita, nunca conteúdo de arquivo/patch.
+
+Testes novos (todos reais, sem mock de fs):
+- `packages/sandbox/src/path-policy.test.ts` — cobertura direta de `resolveInsideWorkspace` (antes só exercitada indiretamente via `LocalProcessSandboxRunner`), já que agora tem um segundo consumidor real.
+- `apps/api/src/modules/agent-runs/agent-run-workspace.service.test.ts` — cópia na primeira escrita, reaproveitamento idempotente, patch válido aplicado de verdade (com hash antes/depois do fixture original provando que nunca foi tocado), patch inválido tratado como erro real, path traversal rejeitado, patch ausente/inválido tratado sem lançar.
+- `apps/api/test/agent-run-approval-execution.e2e-spec.ts` (novo arquivo, 3 casos e2e reais via HTTP/PGlite): aprovação aplica o patch de verdade na cópia isolada E nunca no fixture original (hash comparado antes/depois); patch que não aplica limpo derruba a execução para `failed` mesmo aprovada; `run_command` aprovado continua com `result` bit-a-bit idêntico ao simulado (prova negativa explícita de que nada real rodou).
+- `apps/api/test/agent-runs.e2e-spec.ts` (pré-existente, não alterado) continua verde e agora também serve como regressão do caminho "sem repositório configurado" — prova que a nova lógica degrada graciosamente quando não há nada real para escrever.
+
 ## O que falta (decisão consciente, não esquecimento)
 
-O roadmap formal (Fases 0-17) está com uma entrega em cada fase, mas **as Fases 8, 9, 10, 12 continuam deliberadamente isoladas/não conectadas** — o fluxo de aprovação humana que as bloqueava (Fase 17) agora existe, então **o próximo passo de maior alavancagem passa a ser conectar `@forge/sandbox`/`@forge/testing`/`@forge/git` para execução real ATRÁS dessa aprovação** (ex.: ao aprovar um `apply_patch`, de fato rodar o sandbox e aplicar o patch no workspace, em vez de só marcar a tool call como `succeeded` com o resultado simulado que já estava lá). Isso não foi feito nesta sessão de propósito — o escopo desta tarefa era só o mecanismo de decisão humana em si.
+**Conectar `run_command`/`run_tests` a execução real exige `DockerSandboxRunner` com isolamento de rede** (`--network=none` ou equivalente) — não está disponível nesta máquina de desenvolvimento (sem Docker). Até lá, essas ferramentas continuam simuladas mesmo depois de aprovadas, por design (ver Fase 18 acima), não por lacuna esquecida.
+
+`@forge/testing`/`@forge/git` (Fases 9/10) continuam não conectados: nenhuma execução de teste real persiste em `test_runs`/`test_suites`, e nenhuma operação Git real (`create_commit`/`create_pull_request`) acontece — a Fase 18 conectou só a fatia de menor risco (escrita de arquivo num workspace isolado), deliberadamente, não o resto do pipeline.
 
 Outras lacunas menores, por fase (detalhe em cada seção do `docs/final-qa-handoff.md` anterior, ainda útil como referência):
 - Fase 9: persistir execuções em `test_runs`/`test_suites`/`test_artifacts`.

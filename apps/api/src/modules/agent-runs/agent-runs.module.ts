@@ -11,6 +11,7 @@ import { AgentRunGovernanceAuditService } from './agent-run-governance-audit.ser
 import { AgentRunOrchestrationStore } from './agent-run-orchestration.store.js';
 import { AgentRunTraceLoggerService } from './agent-run-trace-logger.service.js';
 import { AgentRunWorkerService } from './agent-run-worker.service.js';
+import { AgentRunWorkspaceService } from './agent-run-workspace.service.js';
 import { AgentRunsController } from './agent-runs.controller.js';
 import { AgentRunsRepository } from './agent-runs.repository.js';
 import { AgentRunsService } from './agent-runs.service.js';
@@ -36,6 +37,7 @@ import { AI_PROVIDER } from './ai-provider.token.js';
     AgentRunOrchestrationStore,
     AgentRunTraceLoggerService,
     AgentRunWorkerService,
+    AgentRunWorkspaceService,
     RepositoryFsService,
     { provide: AI_PROVIDER, useFactory: () => createAiProvider() },
   ],

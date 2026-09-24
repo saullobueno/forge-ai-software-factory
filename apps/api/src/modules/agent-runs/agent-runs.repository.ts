@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, schema } from '@forge/database';
-import type { AgentRunStatus, ToolCallStatus } from '@forge/types';
+import type { AgentRunStatus, AgentToolName, ToolCallStatus } from '@forge/types';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type AgentRunRow = typeof schema.agentRuns.$inferSelect;
@@ -115,16 +115,82 @@ export class AgentRunsRepository {
    * `agentRunId` direta na tabela, daí o `IN` sobre os ids dos steps.
    */
   async resolvePendingToolCalls(agentRunId: string, status: Extract<ToolCallStatus, 'succeeded' | 'rejected'>): Promise<void> {
-    const steps = await this.database.db.query.agentSteps.findMany({
-      where: eq(schema.agentSteps.agentRunId, agentRunId),
-      columns: { id: true },
-    });
-    const stepIds = steps.map((step) => step.id);
+    const stepIds = await this.stepIdsForRun(agentRunId);
     if (stepIds.length === 0) return;
 
     await this.database.db
       .update(schema.toolCalls)
       .set({ status, updatedAt: new Date(), completedAt: new Date() })
       .where(and(inArray(schema.toolCalls.agentStepId, stepIds), eq(schema.toolCalls.status, 'pending')));
+  }
+
+  /**
+   * Tool calls `write_file`/`apply_patch` que ficaram `pending` nesta
+   * execução — a lista que `AgentRunsService.decide` precisa ANTES de
+   * `resolvePendingToolCalls` rodar (que troca o status em massa), para
+   * saber quais linhas processar com execução real (`AgentRunWorkspaceService`)
+   * em vez de deixá-las cair no caminho simulado genérico.
+   */
+  async findPendingWriteToolCalls(agentRunId: string): Promise<ToolCallRow[]> {
+    const stepIds = await this.stepIdsForRun(agentRunId);
+    if (stepIds.length === 0) return [];
+
+    const writeToolNames: AgentToolName[] = ['write_file', 'apply_patch'];
+    return this.database.db.query.toolCalls.findMany({
+      where: and(
+        inArray(schema.toolCalls.agentStepId, stepIds),
+        eq(schema.toolCalls.status, 'pending'),
+        inArray(schema.toolCalls.toolName, writeToolNames),
+      ),
+    });
+  }
+
+  /**
+   * Grava o resultado REAL de uma escrita aprovada (Fase 18 — conectar
+   * execução real atrás da aprovação humana), substituindo o resultado
+   * simulado (`{ proposed, policyDecision }`) gravado pelo orquestrador.
+   * Chamado só para tool calls que `AgentRunWorkspaceService` de fato
+   * processou — nunca para `run_command`/`create_commit`/etc., que
+   * continuam resolvidas pelo caminho genérico (`resolvePendingToolCalls`).
+   */
+  async updateToolCallResult(
+    toolCallId: string,
+    status: Extract<ToolCallStatus, 'succeeded' | 'failed'>,
+    result: Record<string, unknown>,
+  ): Promise<void> {
+    await this.database.db
+      .update(schema.toolCalls)
+      .set({ status, result, updatedAt: new Date(), completedAt: new Date() })
+      .where(eq(schema.toolCalls.id, toolCallId));
+  }
+
+  /**
+   * Resolve o repositório do projeto de uma execução (via `taskId` ->
+   * `projectId` -> `repositories`), tenant-escopado por `organizationId`.
+   * `undefined` quando o projeto não tem repositório configurado —
+   * `AgentRunsService.decide` degrada graciosamente nesse caso (mesmo
+   * padrão de `root: string | null` em `AgentRunOrchestrator`): nada real
+   * para escrever, então a tool call cai no caminho simulado genérico.
+   */
+  async findRepositoryForTask(taskId: string, organizationId: string): Promise<{ id: string; name: string } | undefined> {
+    const task = await this.database.db.query.tasks.findFirst({
+      where: and(eq(schema.tasks.id, taskId), eq(schema.tasks.organizationId, organizationId)),
+      columns: { projectId: true },
+    });
+    if (!task) return undefined;
+
+    const repository = await this.database.db.query.repositories.findFirst({
+      where: and(eq(schema.repositories.projectId, task.projectId), eq(schema.repositories.organizationId, organizationId)),
+      columns: { id: true, name: true },
+    });
+    return repository;
+  }
+
+  private async stepIdsForRun(agentRunId: string): Promise<string[]> {
+    const steps = await this.database.db.query.agentSteps.findMany({
+      where: eq(schema.agentSteps.agentRunId, agentRunId),
+      columns: { id: true },
+    });
+    return steps.map((step) => step.id);
   }
 }
