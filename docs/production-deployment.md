@@ -12,7 +12,7 @@ Este checklist prepara deploy sem Docker local. Ele documenta o que já pode ser
 | Redis/BullMQ | Upstash Redis com URL `rediss://` | `REDIS_URL` |
 | API NestJS | Render Web Service | `NODE_ENV`, `API_PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` |
 | Web Next.js | Vercel | `API_INTERNAL_URL` |
-| IA real | Gemini/Groq/Anthropic | Pendente de implementação de provider real |
+| IA real | Gemini ou Groq | `AI_PROVIDER`, `GEMINI_API_KEY`/`GEMINI_MODEL` ou `GROQ_API_KEY`/`GROQ_MODEL` |
 
 ## API
 
@@ -59,14 +59,25 @@ pnpm --filter @forge/web build
 
 ## IA Real
 
-Hoje o orquestrador usa `MockAiProvider` determinístico. `ANTHROPIC_API_KEY` existe como ponto de extensão documentado, mas ainda não há provider real conectado; se essa variável for definida agora, a API falha cedo por design.
+O orquestrador usa `MockAiProvider` determinístico por padrão. Para habilitar chamadas reais na API, configure explicitamente um provider:
 
-Próxima implementação segura:
+```bash
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<sua-chave>
+GEMINI_MODEL=gemini-2.0-flash
+```
 
-1. Adicionar `AI_PROVIDER` (`mock`, `gemini`, `groq`, etc.) e schemas de env por provider.
-2. Implementar providers reais atrás da interface `AiProvider` em `packages/ai`.
-3. Manter `mock` como default local/teste.
-4. Gravar histórico de chamadas/custo/latência antes de habilitar em produção.
+ou:
+
+```bash
+AI_PROVIDER=groq
+GROQ_API_KEY=<sua-chave>
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+`AI_MODEL` também pode ser usado como fallback genérico para o modelo. `AI_REQUEST_TIMEOUT_MS` controla timeout por chamada (default: 30000). `AI_PROVIDER=mock` continua recomendado para demo local, testes e staging sem custo. Anthropic segue reservado como ponto futuro; `AI_PROVIDER=anthropic` falha cedo até existir adapter dedicado.
+
+Antes de abrir tráfego real, ainda falta persistir histórico detalhado de chamadas/custo/latência e definir limites por organização/usuário.
 
 ## Runner Real
 
@@ -89,5 +100,5 @@ Para executar comandos reais em produção, implemente um runner isolado fora do
 | 2 | Validar migrations/seed em banco Neon de staging | pendente |
 | 3 | Deploy API Render e health check | pendente |
 | 4 | Deploy Web Vercel com `API_INTERNAL_URL` correto | pendente |
-| 5 | Implementar provider IA real com feature flag | pendente |
+| 5 | Configurar `AI_PROVIDER=gemini` ou `groq` e validar uma execução de staging | pronto para configuração |
 | 6 | Implementar runner real seguro para comandos/testes | pendente |

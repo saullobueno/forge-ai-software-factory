@@ -7,6 +7,13 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().url().optional(),
   REDIS_URL: z.string().url().optional(),
+  AI_PROVIDER: z.enum(['mock', 'gemini', 'groq', 'anthropic']).optional(),
+  AI_MODEL: z.string().optional(),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   /**
    * Segredo de assinatura dos JWTs de sessão (Fase 2 — Auth/RBAC). O

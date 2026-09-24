@@ -30,10 +30,10 @@ Nesta máquina o Docker não está instalado. Para não bloquear o desenvolvimen
 
 1. **Banco de dados**: sem `DATABASE_URL` definido, o `@forge/database` usa [PGlite](https://pglite.dev) — um Postgres real compilado para WASM, embarcado no processo, sem instalação nenhuma. O arquivo local default fica em `<repo>/.data/forge-dev.pglite`, independente do diretório de onde API, migrations ou seed rodam. O mesmo schema Drizzle roda sem alterações contra um Postgres real (`pg`) assim que `DATABASE_URL` for definido — por exemplo, Neon/Render Postgres em staging/produção.
 2. **Fila/Redis**: sem `REDIS_URL` definido, a API usa uma fila em memória (`InMemoryQueueAdapter`, mesma interface do BullMQ). Com `REDIS_URL` definido, passa a usar `BullMqQueueAdapter` (BullMQ + ioredis) automaticamente.
-3. **IA**: nenhuma chave de provedor foi configurada. Até que `ANTHROPIC_API_KEY` (ou similar) seja definida, os agentes de IA (Fase 7) usam um adaptador mock determinístico, alinhado ao modo demo descrito na spec (§21).
+3. **IA**: sem `AI_PROVIDER` explícito, os agentes de IA usam um adaptador mock determinístico, alinhado ao modo demo descrito na spec (§21). Para chamadas reais, configure `AI_PROVIDER=gemini` com `GEMINI_API_KEY`/`GEMINI_MODEL` ou `AI_PROVIDER=groq` com `GROQ_API_KEY`/`GROQ_MODEL`.
 4. **Runner/Sandbox**: `@forge/sandbox` fornece `DockerSandboxRunner` e `LocalProcessSandboxRunner`. O fallback local é útil para desenvolvimento sem Docker, mas não é isolamento de kernel; por isso segue desacoplado do orquestrador até existir fluxo de aprovação humana para ações reais.
 
-Banco e fila reais não exigem mudança de código quando a infraestrutura estiver disponível — apenas variáveis de ambiente. Provider de IA real e runner seguro para comandos/testes ainda são frentes próprias de implementação. Ver `.env.example`, `.env.production.example` e [docs/production-deployment.md](docs/production-deployment.md).
+Banco, fila e providers de IA reais não exigem mudança de código quando a infraestrutura estiver disponível — apenas variáveis de ambiente. Runner seguro para comandos/testes ainda é uma frente própria de implementação. Ver `.env.example`, `.env.production.example` e [docs/production-deployment.md](docs/production-deployment.md).
 
 ## Como rodar
 
