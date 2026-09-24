@@ -12,6 +12,7 @@ let environmentBId: string;
 let developerAToken: string;
 let platformEngineerAToken: string;
 let qaEngineerAToken: string;
+let adminAToken: string;
 let developerBToken: string;
 
 const password = 'demo1234';
@@ -42,7 +43,7 @@ beforeAll(async () => {
 
   const passwordHash = await hashPassword(password);
 
-  const [developerA, platformEngineerA, qaEngineerA, developerB] = await testApp.db
+  const [developerA, platformEngineerA, qaEngineerA, adminA, developerB] = await testApp.db
     .insert(testApp.schema.users)
     .values([
       {
@@ -67,6 +68,13 @@ beforeAll(async () => {
         passwordHash,
       },
       {
+        organizationId: organizationA.id,
+        email: 'admin@org-a-environments-e2e-test.example',
+        name: 'Admin A',
+        role: 'admin',
+        passwordHash,
+      },
+      {
         organizationId: organizationB.id,
         email: 'dev@org-b-environments-e2e-test.example',
         name: 'Dev B',
@@ -75,7 +83,7 @@ beforeAll(async () => {
       },
     ])
     .returning();
-  if (!developerA || !platformEngineerA || !qaEngineerA || !developerB) throw new Error('users não inseridos');
+  if (!developerA || !platformEngineerA || !qaEngineerA || !adminA || !developerB) throw new Error('users não inseridos');
 
   const [projectA] = await testApp.db
     .insert(testApp.schema.projects)
@@ -160,6 +168,7 @@ beforeAll(async () => {
   developerAToken = await login('dev@org-a-environments-e2e-test.example');
   platformEngineerAToken = await login('platform@org-a-environments-e2e-test.example');
   qaEngineerAToken = await login('qa@org-a-environments-e2e-test.example');
+  adminAToken = await login('admin@org-a-environments-e2e-test.example');
   developerBToken = await login('dev@org-b-environments-e2e-test.example');
 }, 60_000);
 
@@ -271,6 +280,143 @@ describe('GET /projects/:id/environments', () => {
       .post(`/projects/${projectBId}/environments/${environmentBId}/deployments`)
       .set('Authorization', `Bearer ${platformEngineerAToken}`)
       .send({ commitSha: 'feedface9999' })
+      .expect(404);
+  });
+});
+
+/**
+ * Decisão humana sobre o gate de deploy protegido (spec §13), mesmo padrão
+ * de `agent-runs.e2e-spec.ts` approve/reject: 200 em sucesso, 409 fora do
+ * estado esperado, 403 sem a permissão de decisão, 404 genérico
+ * cross-tenant. `environment:approve_deployment` é restrita só a `admin`
+ * (ver `packages/domain/src/permissions.ts`) — inclusive `platformEngineerA`,
+ * que PODE solicitar (`environment:deploy`), não pode decidir o próprio
+ * pedido.
+ */
+describe('POST /projects/:id/environments/:environmentId/deployments/:deploymentId/approve|reject', () => {
+  async function requestProtectedDeployment(commitSha: string): Promise<string> {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments`)
+      .set('Authorization', `Bearer ${platformEngineerAToken}`)
+      .send({ commitSha })
+      .expect(201);
+    return response.body.id as string;
+  }
+
+  it('aprova um deployment protegido pendente e conclui como succeeded', async () => {
+    const deploymentId = await requestProtectedDeployment('deadbeef0001');
+
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/${deploymentId}/approve`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({})
+      .expect(200);
+
+    expect(response.body.status).toBe('succeeded');
+    expect(response.body.completedAt).toEqual(expect.any(String));
+    expect(response.body.latestApproval).toMatchObject({
+      status: 'approved',
+      approvedByUserId: expect.any(String),
+    });
+
+    const deploymentRow = await testApp.db.query.deployments.findFirst({
+      where: (deployments, { eq }) => eq(deployments.id, deploymentId),
+    });
+    expect(deploymentRow?.status).toBe('succeeded');
+
+    const auditLogs = await testApp.db.query.auditLogs.findMany({
+      where: (auditLogs, { and, eq }) => and(eq(auditLogs.targetType, 'deployment'), eq(auditLogs.targetId, deploymentId)),
+    });
+    expect(auditLogs.map((auditLog) => auditLog.action)).toEqual(expect.arrayContaining(['deployment.approved']));
+  });
+
+  it('rejeita um deployment protegido pendente e conclui como failed', async () => {
+    const deploymentId = await requestProtectedDeployment('deadbeef0002');
+
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/${deploymentId}/reject`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({ reason: 'Commit ainda não passou por revisão de segurança.' })
+      .expect(200);
+
+    expect(response.body.status).toBe('failed');
+    expect(response.body.latestApproval).toMatchObject({
+      status: 'rejected',
+      approvedByUserId: expect.any(String),
+      reason: 'Commit ainda não passou por revisão de segurança.',
+    });
+
+    const auditLogs = await testApp.db.query.auditLogs.findMany({
+      where: (auditLogs, { and, eq }) => and(eq(auditLogs.targetType, 'deployment'), eq(auditLogs.targetId, deploymentId)),
+    });
+    expect(auditLogs.map((auditLog) => auditLog.action)).toEqual(expect.arrayContaining(['deployment.rejected']));
+  });
+
+  it('retorna 409 ao tentar decidir um deployment que não está mais queued', async () => {
+    const deploymentId = await requestProtectedDeployment('deadbeef0003');
+
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/${deploymentId}/approve`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({})
+      .expect(200);
+
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/${deploymentId}/approve`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({})
+      .expect(409);
+  });
+
+  it('retorna 409 ao tentar decidir um deployment de ambiente não-protegido (nunca teve approval pendente)', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${openEnvironmentAId}/deployments`)
+      .set('Authorization', `Bearer ${platformEngineerAToken}`)
+      .send({ commitSha: 'deadbeef0004' })
+      .expect(201);
+
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${openEnvironmentAId}/deployments/${response.body.id}/approve`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({})
+      .expect(409);
+  });
+
+  it('retorna 403 para quem só pode solicitar deploy (environment:deploy), não decidir', async () => {
+    const deploymentId = await requestProtectedDeployment('deadbeef0005');
+
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/${deploymentId}/approve`)
+      .set('Authorization', `Bearer ${platformEngineerAToken}`)
+      .send({})
+      .expect(403);
+  });
+
+  it('retorna 403 sem nenhuma permissão de deploy', async () => {
+    const deploymentId = await requestProtectedDeployment('deadbeef0006');
+
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/${deploymentId}/reject`)
+      .set('Authorization', `Bearer ${developerAToken}`)
+      .send({})
+      .expect(403);
+  });
+
+  it('retorna 404 genérico ao tentar decidir um deployment de outra organização', async () => {
+    const deploymentId = await requestProtectedDeployment('deadbeef0007');
+
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectBId}/environments/${environmentBId}/deployments/${deploymentId}/approve`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({})
+      .expect(404);
+  });
+
+  it('retorna 404 para deploymentId malformado', async () => {
+    await request(testApp.app.getHttpServer())
+      .post(`/projects/${projectAId}/environments/${protectedEnvironmentAId}/deployments/nao-e-uuid/approve`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({})
       .expect(404);
   });
 });

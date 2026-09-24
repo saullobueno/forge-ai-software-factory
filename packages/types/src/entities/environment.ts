@@ -50,3 +50,19 @@ export const requestDeploymentSchema = z.object({
   pullRequestId: idSchema.nullish(),
 });
 export type RequestDeployment = z.infer<typeof requestDeploymentSchema>;
+
+/**
+ * Corpo de `POST /projects/:projectId/environments/:environmentId/deployments/:deploymentId/approve`
+ * e `.../reject` (spec §13 — "deploy para ambientes protegidos exige
+ * aprovação"). Mesmo formato e mesmo motivo de `agentRunDecisionRequestSchema`
+ * (`entities/approval.ts`) — `reason` opcional, `.default({})` na raiz para
+ * aceitar corpo ausente — mantido como schema próprio (em vez de reaproveitar
+ * o outro) porque semanticamente pertence à entidade `Deployment`, não a
+ * `AgentRun`.
+ */
+export const deploymentDecisionRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2000).optional(),
+  })
+  .default({});
+export type DeploymentDecisionRequest = z.infer<typeof deploymentDecisionRequestSchema>;

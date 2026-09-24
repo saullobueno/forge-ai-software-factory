@@ -27,6 +27,22 @@ import { permissionSchema } from '@forge/types';
  * continua restrita a `tech_lead`/`platform_engineer`). `product_manager`
  * não dispara execuções, então também não cancela.
  *
+ * `environment:approve_deployment` (Fase 11 continuação — decisão sobre o
+ * gate de ambientes protegidos, spec §13: "Deploy para ambientes protegidos
+ * exige aprovação") é uma permissão NOVA, deliberadamente separada de
+ * `environment:deploy` — e não reaproveitada, ao contrário do que se poderia
+ * copiar do padrão de `agent_run` à primeira vista. Motivo: em
+ * `agent_run:trigger`/`agent_run:approve` já existe uma separação real de
+ * papéis (developer/qa_engineer disparam mas não aprovam), mas
+ * `environment:deploy` hoje só é concedida a `platform_engineer` e `admin` —
+ * se a decisão de aprovar reaproveitasse a mesma permissão, o único papel
+ * não-admin capaz de solicitar um deploy protegido (`platform_engineer`)
+ * também seria o único capaz de aprovar o próprio pedido, esvaziando o
+ * sentido do gate (spec §13/§18: aprovação existe para exigir um segundo
+ * julgamento humano antes de produção). Por isso `environment:approve_deployment`
+ * fica restrita só a `admin` — um papel estritamente mais restrito do que
+ * quem solicita, não o mesmo conjunto.
+ *
  * Fundação intencionalmente simples: o motor de políticas configurável por
  * organização (`roles.permissions` jsonb) é elaboração de fase futura
  * (Fase 14) — aqui o enum de sistema (`MemberRole`) basta.

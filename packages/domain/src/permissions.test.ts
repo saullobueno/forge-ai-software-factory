@@ -66,6 +66,14 @@ describe('hasPermission', () => {
     }
   });
 
+  it('environment:approve_deployment é exclusivo de admin — nem quem solicita deploy (platform_engineer) aprova o próprio pedido', () => {
+    for (const role of memberRoleSchema.options) {
+      expect(hasPermission(role, 'environment:approve_deployment')).toBe(role === 'admin');
+    }
+    expect(hasPermission('platform_engineer', 'environment:deploy')).toBe(true);
+    expect(hasPermission('platform_engineer', 'environment:approve_deployment')).toBe(false);
+  });
+
   it('ai_playground:use fica restrito a papéis que governam modelos e arquitetura', () => {
     for (const role of memberRoleSchema.options) {
       expect(hasPermission(role, 'ai_playground:use')).toBe(

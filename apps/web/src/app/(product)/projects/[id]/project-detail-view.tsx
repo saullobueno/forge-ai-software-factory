@@ -6,7 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, ApiError } from '@/lib/api-client';
+import { canApproveDeployments } from '@/lib/deployment-approval-permission';
 import {
   DEPLOYMENT_STATUS_LABELS,
   ENVIRONMENT_KIND_LABELS,
@@ -60,6 +61,28 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
     },
   });
 
+  /**
+   * Decisão humana sobre o gate de deploy protegido (spec §13). Sem canal de
+   * tempo real dedicado (ao contrário de `AgentRunDetailView`/SSE): esta
+   * tela não tem um "detalhe ao vivo" de deployment, só um badge numa lista
+   * — refetch via invalidação de query (mesmo padrão já usado por
+   * `requestDeployment` acima) já resolve o requisito de "refletir o
+   * resultado sem reload manual da página inteira" sem a complexidade
+   * adicional de outro canal SSE para um resultado que decide em uma única
+   * chamada HTTP síncrona.
+   */
+  const decideDeployment = useMutation({
+    mutationFn: ({ environmentId, deploymentId, decision }: { environmentId: string; deploymentId: string; decision: 'approve' | 'reject' }) =>
+      apiFetch<ApiDeploymentSummary>(
+        `/projects/${projectId}/environments/${environmentId}/deployments/${deploymentId}/${decision}`,
+        { method: 'POST', body: JSON.stringify({}) },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'environments'] });
+      void queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+    },
+  });
+
   if (projectQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Carregando projeto…</p>;
   }
@@ -72,7 +95,9 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   const techParts = [...project.techProfile.languages, ...project.techProfile.frameworks];
   const canRequestDeployment =
     currentUserQuery.data?.role === 'admin' || currentUserQuery.data?.role === 'platform_engineer';
+  const canDecideDeployment = currentUserQuery.data !== undefined && canApproveDeployments(currentUserQuery.data.role);
   const pendingDeploymentEnvironmentId = requestDeployment.isPending ? requestDeployment.variables : null;
+  const pendingDecisionDeploymentId = decideDeployment.isPending ? decideDeployment.variables.deploymentId : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -171,6 +196,13 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
         {requestDeployment.isError && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">Não foi possível solicitar o deployment.</p>
         )}
+        {decideDeployment.isError && (
+          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {decideDeployment.error instanceof ApiError
+              ? decideDeployment.error.message
+              : 'Não foi possível registrar a decisão do deployment.'}
+          </p>
+        )}
         {environmentsQuery.data && environmentsQuery.data.length === 0 && (
           <p className="mt-2 text-sm text-muted-foreground">Nenhum ambiente configurado para este projeto.</p>
         )}
@@ -236,6 +268,42 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
                             ? `Por ${latestDeployment.deployedByUser.name}`
                             : 'Autor não registrado'}
                         </p>
+                        {hasPendingApproval && canDecideDeployment && (
+                          <div className="mt-1 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                decideDeployment.mutate({
+                                  environmentId: environment.id,
+                                  deploymentId: latestDeployment.id,
+                                  decision: 'approve',
+                                })
+                              }
+                              disabled={decideDeployment.isPending}
+                              className="rounded-md border border-emerald-600/40 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-opacity hover:opacity-80 disabled:opacity-60 dark:border-emerald-400/40 dark:text-emerald-400"
+                            >
+                              {pendingDecisionDeploymentId === latestDeployment.id && decideDeployment.variables?.decision === 'approve'
+                                ? 'Aprovando…'
+                                : 'Aprovar deploy'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                decideDeployment.mutate({
+                                  environmentId: environment.id,
+                                  deploymentId: latestDeployment.id,
+                                  decision: 'reject',
+                                })
+                              }
+                              disabled={decideDeployment.isPending}
+                              className="rounded-md border border-red-600/40 px-3 py-1.5 text-xs font-medium text-red-700 transition-opacity hover:opacity-80 disabled:opacity-60 dark:border-red-400/40 dark:text-red-400"
+                            >
+                              {pendingDecisionDeploymentId === latestDeployment.id && decideDeployment.variables?.decision === 'reject'
+                                ? 'Rejeitando…'
+                                : 'Rejeitar deploy'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">Nenhum deployment registrado.</p>

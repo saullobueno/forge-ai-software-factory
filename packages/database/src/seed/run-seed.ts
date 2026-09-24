@@ -309,6 +309,35 @@ async function ensureDemoPlatformEngineer(
   return created;
 }
 
+/**
+ * `admin` demo — necessário desde que `environment:approve_deployment`
+ * (decisão sobre o gate de deploy protegido, spec §13) passou a ser
+ * restrita a `admin`, deliberadamente separada de `environment:deploy`
+ * (concedida a `platform_engineer`, que já era o único papel não-admin a
+ * solicitar deploys demo) — ver `packages/domain/src/permissions.ts`. Sem
+ * este usuário não haveria como demonstrar o fluxo de aprovação de
+ * deployment de ponta a ponta com dois papéis distintos.
+ */
+async function ensureDemoAdmin(db: Database, organizationId: string, passwordHash: string): Promise<{ id: string }> {
+  const existing = await db.query.users.findFirst({
+    where: and(eq(users.organizationId, organizationId), eq(users.email, 'admin@acme-platform.example')),
+  });
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(users)
+    .values({
+      organizationId,
+      email: 'admin@acme-platform.example',
+      name: 'Diego Admin',
+      role: 'admin',
+      passwordHash,
+    })
+    .returning();
+  if (!created) throw new Error('Falha ao inserir o admin de seed');
+  return created;
+}
+
 interface DemoKnowledgeDocument {
   kind: KnowledgeSourceKind;
   title: string;
@@ -344,7 +373,7 @@ const DEMO_KNOWLEDGE_DOCUMENTS: readonly DemoKnowledgeDocument[] = [
     uri: 'demo://forge-web-app/readme',
     version: '2026-09-24',
     content:
-      'Contas demo: tech-lead@acme-platform.example, dev@acme-platform.example e platform@acme-platform.example, todas com senha demo1234.\n\n' +
+      'Contas demo: tech-lead@acme-platform.example, dev@acme-platform.example, platform@acme-platform.example e admin@acme-platform.example, todas com senha demo1234.\n\n' +
       'Fluxos já demonstráveis: login, listagem de projetos/tarefas, execução de agente seedada, exploração de código, playground de IA mock, auditoria, ambientes e solicitação de deployment com aprovação em produção.\n\n' +
       'Sem Docker local por preferência do projeto. Validação de produção será feita no final com serviços gerenciados como Neon, Vercel, Render e Upstash.',
   },
@@ -429,6 +458,7 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
   if (existing) {
     const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
     await ensureDemoPlatformEngineer(db, existing.id, demoPasswordHash);
+    await ensureDemoAdmin(db, existing.id, demoPasswordHash);
     await ensureDemoEnvironments(db, existing.id);
     await ensureDemoKnowledge(db, existing.id);
     return { alreadySeeded: true, organizationId: existing.id };
@@ -467,6 +497,7 @@ export async function runSeed(db: Database): Promise<SeedSummary> {
   if (!developer) throw new Error('Falha ao inserir o developer de seed');
 
   const platformEngineer = await ensureDemoPlatformEngineer(db, organization.id, demoPasswordHash);
+  await ensureDemoAdmin(db, organization.id, demoPasswordHash);
 
   const [project] = await db
     .insert(projects)

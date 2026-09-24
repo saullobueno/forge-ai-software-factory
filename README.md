@@ -74,6 +74,7 @@ Credenciais de demo:
 - `tech-lead@acme-platform.example` / `demo1234` — vê Projetos, Playground IA, Auditoria e aprova execuções.
 - `platform@acme-platform.example` / `demo1234` — gerencia ambientes e solicita deployments.
 - `dev@acme-platform.example` / `demo1234` — perfil de desenvolvedor com permissões mais restritas.
+- `admin@acme-platform.example` / `demo1234` — superusuário; único papel que decide o gate de aprovação de deployments protegidos.
 
 Rotas úteis para navegar após login:
 
@@ -90,6 +91,7 @@ Rotas úteis para navegar após login:
   - `tech-lead@acme-platform.example` / `demo1234` (role `tech_lead`)
   - `platform@acme-platform.example` / `demo1234` (role `platform_engineer`)
   - `dev@acme-platform.example` / `demo1234` (role `developer`)
+  - `admin@acme-platform.example` / `demo1234` (role `admin`)
 - `JWT_SECRET` (ver `.env.example`) tem um default óbvio e inseguro (`dev-insecure-secret-change-me`) só para não bloquear `pnpm dev` local — **defina um valor real antes de qualquer deploy**.
 - RBAC: `packages/domain` define uma matriz `MemberRole -> Permission[]` fechada (`hasPermission`) e `authorizeToolCall`, que compõe isolamento de tenant + RBAC + a política de ferramentas da Fase 1 (`decideToolPolicy`) numa única decisão. Em `apps/api`, `JwtAuthGuard` + `PermissionsGuard` (decorator `@RequirePermission(...)`) aplicam isso a nível de rota — ver `GET /projects/:id` como referência mínima de isolamento de tenant de ponta a ponta.
 
@@ -126,7 +128,7 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 - Ambientes não protegidos criam um deployment `succeeded` imediatamente no modo demo; ambientes protegidos criam um deployment `queued` e uma linha `approvals.pending` (`subjectType: "deployment"`), além de audit logs `deployment.requested`/`deployment.approval_required`.
 - O seed demo é aditivo: se a organização "Acme Platform" já existir, `db:seed` garante os ambientes sem duplicar dados.
 - A UI mostra o botão "Solicitar deploy" para `platform_engineer`/`admin` e exibe o gate "Aguardando aprovação" quando o último deployment protegido está pendente.
-- Ainda não há execução real em Render/Vercel nem decisão de approve/reject para deployments; a etapa atual cobre solicitação, gate e auditoria.
+- `POST .../deployments/:deploymentId/approve`/`reject` decide o gate — restrito a `environment:approve_deployment`, uma permissão nova e deliberadamente **diferente** de `environment:deploy`: hoje só `platform_engineer`/`admin` solicitam deploy, e se a aprovação reaproveitasse a mesma permissão, `platform_engineer` poderia aprovar o próprio pedido. `environment:approve_deployment` fica restrita só a `admin` (ver `packages/domain/src/permissions.ts`). Aprovação conclui o deployment como `succeeded` (mesma simulação demo já usada por ambientes não-protegidos); rejeição conclui como `failed`. Audit logs `deployment.approved`/`deployment.rejected`. Ainda não há execução real em Render/Vercel — a etapa atual cobre solicitação, gate, decisão e auditoria.
 
 ## Conhecimento (Fase 12)
 

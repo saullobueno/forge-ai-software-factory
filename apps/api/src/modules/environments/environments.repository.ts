@@ -213,4 +213,93 @@ export class EnvironmentsRepository {
     if (!created) throw new Error('Falha ao criar approval de deployment.');
     return created;
   }
+
+  /**
+   * Deployment de um projeto/ambiente específicos, escopado por
+   * `organizationId` (mesmo padrão de 404 genérico cross-tenant de
+   * `findEnvironmentById`). `environmentId` também entra no filtro: a rota
+   * é aninhada (`/projects/:projectId/environments/:environmentId/deployments/:deploymentId`),
+   * então um `deploymentId` válido mas de OUTRO ambiente do mesmo projeto
+   * não deveria "vazar" como encontrado.
+   */
+  async findDeploymentById(
+    projectId: string,
+    environmentId: string,
+    deploymentId: string,
+    organizationId: string,
+  ): Promise<DeploymentRow | undefined> {
+    return this.database.db.query.deployments.findFirst({
+      where: and(
+        eq(schema.deployments.id, deploymentId),
+        eq(schema.deployments.projectId, projectId),
+        eq(schema.deployments.environmentId, environmentId),
+        eq(schema.deployments.organizationId, organizationId),
+      ),
+    });
+  }
+
+  /**
+   * A `approval` `pending` mais recente para este deployment (spec §13 —
+   * decisão sobre o gate). Normalmente há no máximo uma (criada uma vez por
+   * `createPendingDeploymentApproval` no momento do pedido), mas
+   * `findFirst`/`orderBy desc` garante que uma decisão sempre resolve a mais
+   * recente caso o dado histórico tenha mais de uma por algum motivo.
+   */
+  async findPendingApprovalForDeployment(deploymentId: string, organizationId: string): Promise<ApprovalRow | undefined> {
+    return this.database.db.query.approvals.findFirst({
+      where: and(
+        eq(schema.approvals.organizationId, organizationId),
+        eq(schema.approvals.subjectType, 'deployment'),
+        eq(schema.approvals.subjectId, deploymentId),
+        eq(schema.approvals.status, 'pending'),
+      ),
+      orderBy: [desc(schema.approvals.createdAt), desc(schema.approvals.id)],
+    });
+  }
+
+  async updateDeploymentStatus(
+    deploymentId: string,
+    organizationId: string,
+    input: { status: 'succeeded' | 'failed'; startedAt: Date; completedAt: Date },
+  ): Promise<DeploymentRow> {
+    const [updated] = await this.database.db
+      .update(schema.deployments)
+      .set({ status: input.status, startedAt: input.startedAt, completedAt: input.completedAt, updatedAt: new Date() })
+      .where(and(eq(schema.deployments.id, deploymentId), eq(schema.deployments.organizationId, organizationId)))
+      .returning();
+    if (!updated) throw new Error('Falha ao atualizar status do deployment.');
+    return updated;
+  }
+
+  /**
+   * Decide a `approval` pendente já existente (UPDATE na mesma linha, não
+   * INSERT de uma nova) — diferente do padrão de `agent_run`
+   * (`AgentRunApprovalsRepository.create`), que insere uma linha já decidida
+   * porque não existe hoje um registro `pending` prévio naquele fluxo. Aqui
+   * existe: `createPendingDeploymentApproval` já grava a linha `pending` no
+   * momento do pedido, então decidir é literalmente resolver essa mesma
+   * linha. `reason`: se quem decide informar um motivo, ele substitui o
+   * motivo original (a justificativa do pedido); se não informar, o motivo
+   * original é preservado — o campo é único na tabela, não há coluna
+   * separada para "motivo do pedido" vs. "motivo da decisão".
+   */
+  async decideDeploymentApproval(
+    approvalId: string,
+    organizationId: string,
+    input: { status: 'approved' | 'rejected'; approvedByUserId: string; reason: string | null },
+  ): Promise<ApprovalRow> {
+    const [updated] = await this.database.db
+      .update(schema.approvals)
+      .set({
+        status: input.status,
+        approvedByUserId: input.approvedByUserId,
+        reason: input.reason,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(schema.approvals.id, approvalId), eq(schema.approvals.organizationId, organizationId)))
+      .returning();
+    if (!updated) throw new Error('Falha ao decidir approval de deployment.');
+    return updated;
+  }
 }
