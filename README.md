@@ -16,9 +16,13 @@ packages/
   types/      Schemas Zod e tipos compartilhados (inclui Permission, MemberRole)
   domain/     Lógica de domínio pura (RBAC, política de ferramentas, hash de senha)
   database/   Schema Drizzle + client (Postgres real ou PGlite local)
+  sandbox/    Runner isolado (Docker quando disponível, fallback local controlado)
+  testing/    Núcleo de execução/análise de suites usando SandboxRunner
+  git/        Contratos Git, provider mock determinístico e fronteira GitHub injetável
+  knowledge/  Chunking, recuperação lexical e defesa contra prompt injection em contexto RAG
 ```
 
-Novos pacotes (`ai`, `agents`, `code-intelligence`, `sandbox`, `git`, `testing`, `policies`, `ui`) e apps (`runner`, `docs`) serão adicionados conforme as fases do roadmap avançam — ver `FORGE-CLAUDE-CODE-PROMPT.md`.
+Novos pacotes (`code-intelligence`, `policies`, `ui`) e apps (`runner`, `docs`) serão adicionados conforme as fases do roadmap avançam — ver `FORGE-CLAUDE-CODE-PROMPT.md`.
 
 ## Decisões de infraestrutura local (sem Docker)
 
@@ -27,6 +31,7 @@ Nesta máquina o Docker não está instalado. Para não bloquear o desenvolvimen
 1. **Banco de dados**: sem `DATABASE_URL` definido, o `@forge/database` usa [PGlite](https://pglite.dev) — um Postgres real compilado para WASM, embarcado no processo, sem instalação nenhuma. O mesmo schema Drizzle roda sem alterações contra um Postgres real (`pg`) assim que `DATABASE_URL` for definido — por exemplo, subindo `docker compose up -d postgres` depois que o Docker estiver instalado.
 2. **Fila/Redis**: sem `REDIS_URL` definido, a API usa uma fila em memória (`InMemoryQueueAdapter`, mesma interface do BullMQ). Com `REDIS_URL` definido, passa a usar `BullMqQueueAdapter` (BullMQ + ioredis) automaticamente.
 3. **IA**: nenhuma chave de provedor foi configurada. Até que `ANTHROPIC_API_KEY` (ou similar) seja definida, os agentes de IA (Fase 7) usam um adaptador mock determinístico, alinhado ao modo demo descrito na spec (§21).
+4. **Runner/Sandbox**: `@forge/sandbox` fornece `DockerSandboxRunner` e `LocalProcessSandboxRunner`. O fallback local é útil para desenvolvimento sem Docker, mas não é isolamento de kernel; por isso segue desacoplado do orquestrador até existir fluxo de aprovação humana para ações reais.
 
 Nada disso exige mudança de código quando a infraestrutura real estiver disponível — apenas variáveis de ambiente. Ver `.env.example`.
 
@@ -73,3 +78,58 @@ pnpm --filter @forge/database db:seed        # popula "Acme Platform" com 2 usu�
 ## Regras de engenharia
 
 Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas, ferramentas de agente tipadas com autorização server-side, comandos de IA nunca executados diretamente no host, e tema claro/escuro obrigatório na interface.
+
+## Runner e Testes (Fases 8/9)
+
+- `@forge/sandbox` expõe uma interface `SandboxRunner`, `DockerSandboxRunner` com limites de CPU/memória/rede/timeout e `LocalProcessSandboxRunner` com confinamento por workspace, timeout com kill de árvore de processos, env allowlist e política de comandos destrutivos compartilhada com `@forge/domain`.
+- `@forge/testing` executa suites via `SandboxRunner`, deriva status apenas do resultado real do processo (`exitCode`, timeout ou bloqueio de política), gera resumo de falha e detecta histórico flaky simples.
+- Estes pacotes ainda **não estão conectados** ao orquestrador da Fase 7. Essa conexão deve esperar uma decisão explícita de produto/segurança sobre aprovação humana e isolamento real para código não confiável.
+
+## Git (Fase 10)
+
+- `@forge/git` define a interface `GitProvider` para branches, commits, diffs, pull requests e checks.
+- `MockGitProvider` mantém estado em memória para modo demo e testes.
+- `GitHubGitProvider` é só uma fronteira injetável por enquanto; nenhuma credencial externa ou chamada real ao GitHub é usada.
+
+## Ambientes (Fase 11)
+
+- `GET /projects/:id/environments` lista ambientes e deployments recentes do projeto com o mesmo isolamento de tenant dos módulos anteriores.
+- A página de detalhe de projeto mostra Development/Preview/Staging/Production, URL, proteção e último deployment.
+- O seed demo é aditivo: se a organização "Acme Platform" já existir, `db:seed` garante os ambientes sem duplicar dados.
+- Ainda não há deploy real nem aprovação de deploy protegida conectada à UI; essa parte depende do fluxo de approvals/políticas.
+
+## Conhecimento (Fase 12)
+
+- `@forge/knowledge` implementa a base isolada para ingestão/recuperação de conhecimento: chunking determinístico com overlap, estimativa simples de tokens, detecção heurística de prompt injection e wrapper explícito de conteúdo não confiável.
+- `retrieveKnowledge()` faz recuperação lexical escopada por organização/projeto/workspace e nunca retorna conteúdo fora do escopo solicitado.
+- Ainda não há indexador de repositório/docs, persistência em `knowledge_sources`/`knowledge_chunks`, embeddings/vector store, endpoints, UI ou conexão com os agentes.
+
+## Playground de IA (Fase 13)
+
+- `GET /ai-playground/config` retorna catálogo de modelos mock e dataset padrão; `POST /ai-playground/evaluations` compara modelos com latência, tokens, custo estimado, validade de output estruturado e score.
+- A permissão `ai_playground:use` fica restrita a `admin`, `platform_engineer` e `tech_lead`.
+- A UI `/ai-playground` permite editar prompt/dataset, selecionar modelos e visualizar scorecard sem chamadas externas ou custo real.
+- Ainda não há provedores reais, histórico persistido, datasets versionados, embeddings/evals avançadas ou comparação com saídas reais de agentes.
+
+## Segurança e Observabilidade (Fase 14)
+
+- [docs/threat-model.md](docs/threat-model.md) registra o threat model inicial para runner, tools, secrets, Git, contexto de IA, exports e canais realtime.
+- `@forge/agents` agora emite traces estruturados para início/fim de agent steps e tool calls por meio de uma porta `AgentRunTraceSink`.
+- `apps/api` injeta um sink local (`AgentRunTraceLoggerService`) que escreve eventos de trace como logs estruturados quando `FORGE_TRACE_LOGS=1`, aplicando redaction inicial de chaves sensíveis antes do log.
+- `GET /audit-logs` e `/audit-logs` expõem leitura tenant-scoped dos eventos de auditoria para papéis com `audit_log:read`, sem vazar `passwordHash` do ator.
+- `POST /auth/login`, `POST /tasks/:id/agent-runs`, `POST /agent-runs/:id/cancel` e `POST /ai-playground/evaluations` gravam audit logs com ator, alvo e metadados seguros (`auth.login_succeeded`, `auth.login_failed`, `agent_run.triggered`, `agent_run.cancelled`, `ai_playground.evaluated`).
+- Decisões de política de tool calls que exigem aprovação ou são negadas também geram auditoria (`agent_run.policy_approval_required`/`agent_run.policy_denied`) sem registrar argumentos, patches ou conteúdo de arquivos.
+- Ainda falta exporter OpenTelemetry real, redaction completa em todos os logs/exporters, cobertura de audit log para os demais endpoints mutáveis e dashboards/alertas.
+
+## Performance e Acessibilidade (Fase 15)
+
+- O layout autenticado tem skip link para o conteúdo principal, `main` identificável e foco visível consistente para links, botões e campos.
+- Playwright cobre login -> layout autenticado -> navegação por teclado até o conteúdo.
+- `@axe-core/playwright` roda uma auditoria automatizada nas rotas autenticadas principais; a tela de auditoria também garante metadata scrollável focável por teclado.
+- O lint do web ignora `test-results/**` e `playwright-report/**`, evitando corrida contra artefatos efêmeros do Playwright.
+- Ainda falta Lighthouse, budgets de bundle e refinamentos responsivos por viewport.
+
+## QA e Handoff (Fase 16)
+
+- [PROGRESS.md](PROGRESS.md) é o mapa principal de retomada.
+- [docs/final-qa-handoff.md](docs/final-qa-handoff.md) consolida validações, limites conhecidos e ordem sugerida de commits.
