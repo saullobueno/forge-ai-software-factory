@@ -4,4 +4,10 @@ packages:
 allowBuilds:
   esbuild: true
   msgpackr-extract: true
+  # postinstall só lê package.json e emite um WARN em stderr sobre
+  # versionamento incompatível entre pacotes — sem rede, sem escrita em
+  # disco (node_modules/.pnpm/protobufjs@*/node_modules/protobufjs/scripts/postinstall.js).
+  # Dependência transitiva legítima de @opentelemetry/exporter-trace-otlp-http
+  # (serialização OTLP/protobuf).
+  protobufjs: true
   unrs-resolver: true

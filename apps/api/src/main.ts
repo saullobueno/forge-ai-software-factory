@@ -1,3 +1,8 @@
+// PRECISA ser o primeiro import deste arquivo — auto-instrumentação OTel
+// (`./tracing.ts`) só funciona se corrigir (patch) `http`/`express` antes
+// de o NestJS criar o servidor real. Ver o comentário completo em
+// `tracing.ts`.
+import './tracing.js';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';

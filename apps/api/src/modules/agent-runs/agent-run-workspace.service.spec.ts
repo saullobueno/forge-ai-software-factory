@@ -9,6 +9,24 @@ const REPOSITORY_NAME = 'acme-platform-web';
 const TARGET_RELATIVE_PATH = 'src/lib/format-currency.ts';
 const FIXTURE_TARGET_ABSOLUTE_PATH = join(FIXTURES_ROOT, REPOSITORY_NAME, TARGET_RELATIVE_PATH);
 
+/**
+ * Este arquivo era `agent-run-workspace.service.test.ts` (Fase 18) — nome
+ * que o `vitest.config.ts` deste app nunca coletou (`include:
+ * ['**\/*.spec.ts']`, convenção do NestJS que todo o resto de `apps/api`
+ * segue), então nunca rodou em `pnpm --filter @forge/api test` desde que
+ * foi escrito. Renomeado para `.spec.ts` nesta sessão (achado incidental
+ * ao investigar convenção de nome de teste para a suíte de OpenTelemetry).
+ * Ao rodar pela primeira vez dentro do pipeline agregado
+ * (`pnpm turbo run build lint typecheck test`), o timeout padrão do
+ * Vitest (5000ms) estourou sob a contenção de CPU/disco de um `nest
+ * build`/`next build`/múltiplos workers de Vitest/oxlint rodando em
+ * paralelo — o fixture copiado tem só 24KB/9 arquivos (não é volume de
+ * I/O real), então a folga generosa abaixo cobre a variância de
+ * agendamento do SO sob carga sem mascarar uma trava de verdade (mesmo
+ * raciocínio já aplicado a `runtime-smoke.e2e-spec.ts`).
+ */
+const WORKSPACE_TEST_TIMEOUT_MS = 30_000;
+
 async function fileHash(path: string): Promise<string> {
   const content = await readFile(path, 'utf8');
   return createHash('sha256').update(content, 'utf8').digest('hex');
@@ -79,7 +97,7 @@ describe('AgentRunWorkspaceService', () => {
     expect(originalHashAfter).toBe(originalHashBefore);
     const originalContentAfter = await readFile(FIXTURE_TARGET_ABSOLUTE_PATH, 'utf8');
     expect(originalContentAfter).toBe(originalContent);
-  });
+  }, WORKSPACE_TEST_TIMEOUT_MS);
 
   it('reaproveita a cópia já existente em escritas seguintes (não recopia, preserva o que já foi escrito)', async () => {
     const service = new AgentRunWorkspaceService();
@@ -97,7 +115,7 @@ describe('AgentRunWorkspaceService', () => {
       .then(() => true)
       .catch(() => false);
     expect(markerStillThere).toBe(true);
-  });
+  }, WORKSPACE_TEST_TIMEOUT_MS);
 
   it('retorna erro real (não aplica nada) quando o patch não bate com o conteúdo atual do arquivo', async () => {
     const service = new AgentRunWorkspaceService();
@@ -127,7 +145,7 @@ describe('AgentRunWorkspaceService', () => {
     const copiedContent = await readFile(join(WORKSPACES_ROOT, repositoryId, TARGET_RELATIVE_PATH), 'utf8');
     const originalContent = await readFile(FIXTURE_TARGET_ABSOLUTE_PATH, 'utf8');
     expect(copiedContent).toBe(originalContent);
-  });
+  }, WORKSPACE_TEST_TIMEOUT_MS);
 
   it('rejeita um caminho proposto que tenta escapar do workspace isolado (path traversal) sem criar nada fora dele', async () => {
     const service = new AgentRunWorkspaceService();
@@ -152,7 +170,7 @@ describe('AgentRunWorkspaceService', () => {
       .then(() => true)
       .catch(() => false);
     expect(maliciousFileInsideCopy).toBe(false);
-  });
+  }, WORKSPACE_TEST_TIMEOUT_MS);
 
   it('trata patch simulado ausente/inválido como erro real, sem lançar exceção', async () => {
     const service = new AgentRunWorkspaceService();
@@ -168,5 +186,5 @@ describe('AgentRunWorkspaceService', () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error('esperado erro');
     expect(outcome.result.error).toMatch(/ausente ou em formato inválido/);
-  });
+  }, WORKSPACE_TEST_TIMEOUT_MS);
 });
