@@ -1,6 +1,6 @@
 # Forge Production Deployment Checklist
 
-Última atualização: 2026-09-24.
+Última atualização: 2026-09-25.
 
 Este checklist prepara deploy sem Docker local. Ele documenta o que já pode ser configurado agora e o que ainda precisa de implementação antes de ativar tráfego real.
 
@@ -81,7 +81,9 @@ As chamadas de agente já persistem uso básico em `ai_messages`/`ai_usages` (pr
 
 ## Runner Real
 
-`write_file` e `apply_patch` já aplicam mudanças reais depois de aprovação humana, mas somente em cópia isolada do repositório. `run_command` e `run_tests` continuam simulados.
+`write_file` e `apply_patch` já aplicam mudanças reais depois de aprovação humana, mas somente em cópia isolada do repositório. O step `test_engineer` já executa `run_tests` de verdade contra o repositório demo quando há fixture/repositório disponível, persistindo `test_runs`, `test_suites` e artefato de log.
+
+`run_command` arbitrário e execuções de comandos/testes pós-aprovação ainda devem esperar um runner isolado fora do host principal.
 
 Para executar comandos reais em produção, implemente um runner isolado fora do host principal:
 
@@ -101,4 +103,4 @@ Para executar comandos reais em produção, implemente um runner isolado fora do
 | 3 | Deploy API Render e health check | pendente |
 | 4 | Deploy Web Vercel com `API_INTERNAL_URL` correto | pendente |
 | 5 | Configurar `AI_PROVIDER=gemini` ou `groq` e validar uma execução de staging | pronto para configuração |
-| 6 | Implementar runner real seguro para comandos/testes | pendente |
+| 6 | Implementar runner real seguro para `run_command` e execuções arbitrárias | pendente |

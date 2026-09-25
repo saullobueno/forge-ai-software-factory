@@ -112,13 +112,15 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 
 - `@forge/sandbox` expõe uma interface `SandboxRunner`, `DockerSandboxRunner` com limites de CPU/memória/rede/timeout e `LocalProcessSandboxRunner` com confinamento por workspace, timeout com kill de árvore de processos, env allowlist e política de comandos destrutivos compartilhada com `@forge/domain`.
 - `@forge/testing` executa suites via `SandboxRunner`, deriva status apenas do resultado real do processo (`exitCode`, timeout ou bloqueio de política), gera resumo de falha e detecta histórico flaky simples.
-- Estes pacotes ainda **não estão conectados** ao orquestrador da Fase 7. Essa conexão deve esperar uma decisão explícita de produto/segurança sobre aprovação humana e isolamento real para código não confiável.
+- O step `test_engineer` já executa `run_tests` de verdade contra o repositório demo quando há fixture/repositório disponível, e o resultado é persistido em `test_runs`, `test_suites` e artefato de log visível no detalhe da execução.
+- `@forge/testing` ainda não substitui essa execução do orquestrador como engine genérico de suites; conectar comandos/testes arbitrários a um runner real deve esperar isolamento seguro em staging/produção.
 
 ## Git (Fase 10)
 
 - `@forge/git` define a interface `GitProvider` para branches, commits, diffs, pull requests e checks.
 - `MockGitProvider` mantém estado em memória para modo demo e testes.
-- `GitHubGitProvider` é só uma fronteira injetável por enquanto; nenhuma credencial externa ou chamada real ao GitHub é usada.
+- Quando uma aprovação humana aplica `write_file`/`apply_patch` com sucesso em repositório `provider: "mock"`, o Forge cria branch/commit/PR via `MockGitProvider` e persiste `workspaces`, `file_snapshots`, `code_changes`, `diffs` e `pull_requests`.
+- `GitHubGitProvider` continua como fronteira injetável; nenhuma credencial externa ou chamada real ao GitHub é usada.
 
 ## Ambientes (Fase 11)
 
@@ -145,17 +147,19 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 - `GET /ai-playground/config` retorna catálogo de modelos mock e dataset padrão; `POST /ai-playground/evaluations` compara modelos com latência, tokens, custo estimado, validade de output estruturado e score.
 - A permissão `ai_playground:use` fica restrita a `admin`, `platform_engineer` e `tech_lead`.
 - A UI `/ai-playground` permite editar prompt/dataset, selecionar modelos e visualizar scorecard sem chamadas externas ou custo real.
-- Ainda não há provedores reais, histórico persistido, datasets versionados, embeddings/evals avançadas ou comparação com saídas reais de agentes.
+- O orquestrador de agentes suporta providers reais por env: `AI_PROVIDER=gemini` ou `AI_PROVIDER=groq`, mantendo `mock` como default local/teste. Cada step gerado persiste `ai_messages`/`ai_usages` com provider, modelo, tokens e custo estimado, e o detalhe do run exibe esse uso.
+- Ainda faltam limites por organização/usuário, dashboards agregados de custo/latência, datasets versionados, embeddings/evals avançadas e adapter Anthropic se necessário.
 
 ## Segurança e Observabilidade (Fase 14)
 
 - [docs/threat-model.md](docs/threat-model.md) registra o threat model inicial para runner, tools, secrets, Git, contexto de IA, exports e canais realtime.
 - `@forge/agents` agora emite traces estruturados para início/fim de agent steps e tool calls por meio de uma porta `AgentRunTraceSink`.
 - `apps/api` injeta um sink local (`AgentRunTraceLoggerService`) que escreve eventos de trace como logs estruturados quando `FORGE_TRACE_LOGS=1`, aplicando redaction inicial de chaves sensíveis antes do log.
+- A API também inicializa OpenTelemetry real em `apps/api/src/tracing.ts`: auto-instrumentação HTTP, spans manuais de `agent.step`/`tool.call`, `ConsoleSpanExporter` por padrão e OTLP opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - `GET /audit-logs` e `/audit-logs` expõem leitura tenant-scoped dos eventos de auditoria para papéis com `audit_log:read`, sem vazar `passwordHash` do ator.
 - `POST /auth/login`, `POST /tasks/:id/agent-runs`, `POST /agent-runs/:id/cancel` e `POST /ai-playground/evaluations` gravam audit logs com ator, alvo e metadados seguros (`auth.login_succeeded`, `auth.login_failed`, `agent_run.triggered`, `agent_run.cancelled`, `ai_playground.evaluated`).
 - Decisões de política de tool calls que exigem aprovação ou são negadas também geram auditoria (`agent_run.policy_approval_required`/`agent_run.policy_denied`) sem registrar argumentos, patches ou conteúdo de arquivos.
-- Ainda falta exporter OpenTelemetry real, redaction completa em todos os logs/exporters, cobertura de audit log para os demais endpoints mutáveis e dashboards/alertas.
+- Ainda faltam métricas OTel, propagação de trace context web->api, cobertura de audit log para mais endpoints mutáveis e dashboards/alertas.
 
 ## Performance e Acessibilidade (Fase 15)
 

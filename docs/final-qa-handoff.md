@@ -1,23 +1,32 @@
 # Forge Final QA Handoff
 
-Última atualização: 2026-09-24.
+Última atualização: 2026-09-25.
 
-Este documento é um resumo operacional para retomada. O mapa completo e mais detalhado continua em [`PROGRESS.md`](../PROGRESS.md); em caso de divergência, confirme pelo `git log`, `git status --short` e pela suíte.
+Este é o resumo curto de retomada. O mapa completo continua em [`PROGRESS.md`](../PROGRESS.md); se houver divergência, confie no `PROGRESS.md`, no `git log`, no `git status --short` e na suíte.
 
 ## Estado Atual
 
 | Bloco | Status | Observação |
 |---|---|---|
-| Fases 0-16 | Concluídas e commitadas | Fundação, auth/RBAC, projetos/tarefas, code explorer, execuções IA, orquestração, sandbox/testing/git base, ambientes, knowledge, Playground IA, auditoria, acessibilidade e QA inicial. |
-| Fase 17 | Concluída e commitada | Aprovação/rejeição humana para execuções em `approval_required`, com UI, SSE, RBAC e audit log. |
-| Fase 18 | Concluída e commitada | Escritas aprovadas (`write_file`/`apply_patch`) aplicam de verdade numa cópia isolada em `.data/workspaces/<repositoryId>`. |
-| Correção atual da UI | Implementada nesta sessão, ainda não commitada | `/` agora redireciona para `/projects`; sem sessão, o proxy leva para `/login`. O README explica como abrir a UI demo. |
-| Preparação de produção | Implementada nesta sessão, ainda não commitada | `.env.production.example`, checklist de deploy e validação fail-fast da API para produção. |
-| Correção do login local | Implementada nesta sessão, ainda não commitada | Default do PGlite agora é `<repo>/.data/forge-dev.pglite`, evitando migrate/seed em arquivo diferente do usado pela API dev. |
-| Fase 11: deployments demo | Implementada nesta sessão, ainda não commitada | Platform/admin solicitam deployments; ambientes protegidos criam approval pendente e audit log. |
-| Fase 12: conhecimento integrado | Implementada e continuada nesta sessão | Seed persiste fontes/chunks; API lista/busca conhecimento; UI no detalhe do projeto; orquestrador injeta conhecimento recuperado nos agentes. |
-| Fase 13: providers reais de IA | Implementada e continuada nesta sessão | `@forge/ai` suporta `AI_PROVIDER=gemini`/`groq` por HTTP, com `mock` como default; chamadas de agente persistem e aparecem no detalhe do run. |
-| Fase 15: responsividade e Lighthouse | Implementada e commitada | Drawer mobile acessível, testes responsivos, axe ampliado e Lighthouse com budgets reais. |
+| Fases 0-8 | Concluídas e commitadas | Fundação, domínio/banco, auth/RBAC, repositório demo, projetos/tarefas, code explorer, execuções IA, orquestração e runner/sandbox base. |
+| Fase 9 | Continuada e verificada | `run_tests` real agora persiste `test_runs`, `test_suites` e artefato de log quando há repositório/fixture disponível. |
+| Fase 10 | Continuada e verificada | Escritas aprovadas geram branch/commit/PR via `MockGitProvider` e persistem snapshots, diffs, code changes e pull request. GitHub real segue fora de escopo. |
+| Fase 11 | Continuada e verificada | Deployments demo podem ser solicitados; ambientes protegidos têm gate approve/reject por `admin`. Deploy real externo ainda pendente. |
+| Fase 12 | Continuada e verificada | Conhecimento persistido/buscável e conectado ao orquestrador como `knowledgeContext`; falta indexador automático/embeddings. |
+| Fase 13 | Continuada e verificada | Providers `gemini`/`groq`, uso/custo por step em `ai_usages` e visível no detalhe do run; faltam limites e dashboards agregados. |
+| Fase 14 | Continuada e verificada | OpenTelemetry real conectado para HTTP + spans de agent steps/tool calls; faltam métricas, trace propagation web->api e mais audit logs. |
+| Fase 15 | Continuada e verificada | Drawer mobile, axe ampliado, responsividade e Lighthouse com budgets locais; falta budget de bundle/chunk em CI. |
+| Fases 16-18 | Concluídas e commitadas | QA/handoff, aprovação humana de agent runs e escrita real isolada pós-aprovação. |
+
+Últimos commits relevantes:
+
+| Commit | Resumo |
+|---|---|
+| `904dbc1` | Atualiza `PROGRESS.md` após Fases 9/10/14 verificadas |
+| `b7d23aa` | Conecta `MockGitProvider` à persistência real de PR |
+| `36846e8` | Persiste resultados reais de `run_tests` |
+| `41546db` | Liga tracing OpenTelemetry real na API |
+| `7dae611` | Expõe usage IA no detalhe do agent run |
 
 ## Como Ver A Demo Local
 
@@ -29,15 +38,16 @@ pnpm --filter @forge/database db:seed
 pnpm dev
 ```
 
-Abra `http://localhost:3000`. A rota raiz redireciona para `/projects` e, sem sessão, para `/login`.
+Abra `http://localhost:3000`. A raiz redireciona para `/projects`; sem sessão, o proxy leva para `/login`.
 
 Credenciais:
 
 - `tech-lead@acme-platform.example` / `demo1234`
 - `platform@acme-platform.example` / `demo1234`
 - `dev@acme-platform.example` / `demo1234`
+- `admin@acme-platform.example` / `demo1234`
 
-Telas úteis depois do login:
+Telas úteis:
 
 - `/projects`
 - `/projects/[id]`
@@ -49,7 +59,7 @@ Telas úteis depois do login:
 
 ## Validação Recomendada
 
-Rode em sequência, especialmente API e Playwright, para evitar contenção PGlite/Next/Nest no Windows:
+Rode em sequência para evitar contenção PGlite/Next/Nest no Windows:
 
 ```bash
 pnpm install
@@ -58,79 +68,37 @@ pnpm --filter @forge/api test:e2e
 pnpm --filter @forge/web test:e2e
 ```
 
-Resultados confirmados antes desta sessão, segundo `PROGRESS.md`:
+Validação final registrada no `PROGRESS.md` para o HEAD atual:
 
 | Comando | Resultado |
 |---|---|
-| `pnpm turbo run build lint typecheck test` | 34/34 tasks passaram |
-| `pnpm --filter @forge/api test:e2e` | 89/89 testes passaram |
-| `pnpm --filter @forge/web test:e2e` | 12/12 testes Playwright passaram |
+| `pnpm turbo run build lint typecheck test --force` | 34/34 tasks passaram |
+| `pnpm --filter @forge/api test:e2e` | 114/114 testes passaram |
+| `pnpm --filter @forge/web test:e2e` | 21/21 passaram após reruns isolados de flakes por contenção |
 
-Resultados confirmados nesta sessão:
+Notas de ambiente:
 
-| Comando | Resultado |
-|---|---|
-| `pnpm --filter @forge/web typecheck` | passou |
-| `pnpm --filter @forge/web lint` | passou |
-| `pnpm --filter @forge/web test:e2e` | 12/12 testes passaram |
-| `pnpm --filter @forge/api test` | 4 arquivos / 8 testes passaram |
-| `pnpm --filter @forge/api lint` | passou |
-| `pnpm --filter @forge/api typecheck` | passou |
-| `pnpm turbo run build lint typecheck test` | 34/34 tasks passaram |
-| `pnpm --filter @forge/api test:e2e -- runtime-smoke.e2e-spec.ts` | 1 arquivo / 2 testes passaram |
-| Login via `:3001/auth/login` e `:3000/api/auth/login` | passou com contas demo |
-| `pnpm --filter @forge/database typecheck` | passou |
-| `pnpm --filter @forge/database lint` | passou |
-| `pnpm --filter @forge/database test` com PGlite temporário | 6 arquivos / 18 testes passaram |
-| `pnpm --filter @forge/api test:e2e -- environments.e2e-spec.ts` | 1 arquivo / 9 testes passaram |
-| `pnpm --filter @forge/web test:e2e -- environment-deployments.spec.ts` | 1 teste passou |
-| `pnpm --filter @forge/knowledge typecheck` | passou |
-| `pnpm --filter @forge/knowledge test` | 1 arquivo / 6 testes passaram |
-| `pnpm --filter @forge/api test:e2e -- knowledge.e2e-spec.ts` | 1 arquivo / 7 testes passaram |
-| `pnpm --filter @forge/web test:e2e -- project-knowledge.spec.ts` | 1 teste passou |
-| `pnpm --filter @forge/web test:e2e -- responsive.spec.ts` | 2 testes passaram |
-| `pnpm --filter @forge/web test:e2e -- axe-accessibility.spec.ts` | 3 testes passaram |
-| `pnpm --filter @forge/web test:e2e -- lighthouse-budgets.spec.ts` | 1 teste passou; scores: 99/100/100, 91/100/100, 100/100/100 |
-| `pnpm --filter @forge/web test:e2e` | 21/21 passaram; Lighthouse na suíte completa: 100/100/100, 96/100/100, 100/100/100 |
-| `pnpm --filter @forge/ai typecheck` | passou |
-| `pnpm --filter @forge/ai test` | 14/14 testes passaram |
-| `pnpm --filter @forge/agents typecheck` | passou |
-| `pnpm --filter @forge/agents test` | 9/9 testes passaram |
-| `pnpm --filter @forge/api test:e2e -- tasks.e2e-spec.ts` | 10/10 testes passaram, incluindo conhecimento injetado no run real |
-| `pnpm --filter @forge/ai test` | 22/22 testes passaram após providers Gemini/Groq |
-| `pnpm --filter @forge/ai lint` | passou |
-| `pnpm --filter @forge/api build` | passou |
-| `pnpm --filter @forge/api test:e2e -- runtime-smoke.e2e-spec.ts` | rerun passou: 2/2 testes |
-| `pnpm --filter @forge/agents lint` | passou |
-| `pnpm --filter @forge/api test:e2e -- tasks.e2e-spec.ts` | 10/10 passaram após persistência de `ai_usages` |
-| `pnpm --filter @forge/web typecheck` | passou |
-| `pnpm --filter @forge/web lint` | passou |
-| `pnpm --filter @forge/api test:e2e -- agent-runs.e2e-spec.ts` | rerun isolado passou: 27/27 testes |
-| `pnpm turbo run build lint typecheck test` | 31/34 passaram; `@forge/database#test` estourou hook PGlite sob carga |
-| `pnpm --filter @forge/database test` | rerun isolado passou: 6 arquivos / 18 testes |
-
-Observação: o Playwright pode imprimir `[ELIFECYCLE] Command failed with exit code 1` no teardown do web server mesmo quando a suíte termina com `12 passed` e o comando retorna código 0.
-
-Observação desta sessão: `pnpm --filter @forge/api test:e2e` completo foi tentado após a mudança de env, mas ficou preso no encerramento sem reportar resultado; o processo foi interrompido e limpo. O `runtime-smoke.e2e-spec.ts` direcionado passou em seguida, cobrindo a inicialização real do Nest como `node dist/main.js` e `nest start`.
+- Não rode suítes e2e PGlite pesadas em paralelo; isso já causou timeouts de `beforeAll` sob carga.
+- Playwright pode imprimir ruído de teardown mesmo quando a suíte passa e o processo retorna código 0.
+- Se mexer em pacotes consumidos pela API em runtime (`types`, `domain`, `database`, `ai`, `agents`), valide também `apps/api/test/runtime-smoke.e2e-spec.ts`.
 
 ## Limites Deliberados
 
-- Docker local não é requisito para continuar agora. O modo dev usa PGlite, fila em memória e IA mock determinística.
-- `run_command`/`run_tests` continuam simulados depois da aprovação. Para execução real com segurança, precisa de runner isolado com rede bloqueada, idealmente no ambiente de produção/staging, não no host local.
-- `@forge/testing` e `@forge/git` existem como base, mas ainda não estão conectados ao orquestrador principal nem persistindo resultados reais do pipeline.
-- Deploy real, GitHub real, OpenTelemetry/exporters e dashboards continuam pendentes.
-- Providers reais Gemini/Groq já existem e registram histórico básico em `ai_messages`/`ai_usages`, mas ainda faltam limites por organização/usuário e telas/dashboards de custo/latência antes de liberar tráfego real amplo.
-- Conhecimento já está persistido, buscável na demo e conectado ao orquestrador de agentes; ainda faltam indexador automático, embeddings/vector store e ranking semântico.
-- A tabela `approvals` registra a decisão já tomada; ainda não existe uma fila/painel cross-execução de aprovações pendentes baseada em linhas `pending`.
+- Docker local não é requisito para continuar agora. Dev usa PGlite, fila em memória, provider IA mock por padrão e `MockGitProvider`.
+- `write_file`/`apply_patch` aprovados escrevem de verdade apenas em cópia isolada de `.data/workspaces/<repositoryId>`, nunca em `fixtures/`.
+- `run_tests` já executa de verdade no pipeline inicial quando há repositório e persiste o resultado, mas `run_tests` depois de aprovação e `run_command` real ainda dependem de runner isolado seguro.
+- Git mock está conectado; GitHub real requer credenciais/decisão de permissões.
+- Deploy demo e gates existem; deploy real em Render/Vercel/afins ainda precisa configuração/implementação.
+- Gemini/Groq estão disponíveis por env, mas tráfego real amplo ainda pede limites por organização/usuário e dashboards de custo/latência.
+- OpenTelemetry exporta traces; métricas, dashboards e propagação de trace web->api continuam pendentes.
 
 ## Próximas Frentes Seguras
 
 | Prioridade | Frente | Próximo passo recomendado |
 |---|---|---|
-| Alta | UI de entrada/demo | Commitar a correção de `/` -> `/projects` e documentação do README. |
-| Alta | Produção sem Docker local | `.env.production.example` e `docs/production-deployment.md` preparados; ainda falta configurar serviços reais e validar deploy. |
-| Média | Fase 11 | Implementar approve/reject para approvals de deployment e plugar execução real em provedor externo. |
-| Média | Fase 12 | Criar indexador automático de docs/repositório, adicionar embeddings/vector store e evoluir o ranking além da recuperação lexical. |
-| Média | Fase 13 | Adicionar limites por organização/usuário e UI/dashboards de custo/latência para chamadas reais. |
-| Média | Fases 9/10/18 | Conectar testes/Git/comandos reais apenas quando houver runner isolado adequado. |
-| Baixa | Fase 15 | Levar budgets de bundle/chunk para CI e repetir refinamentos responsivos nas telas futuras. |
+| Alta | Produção sem Docker local | Configurar Neon/Upstash/Render/Vercel em staging e validar migrations/seed/deploy. |
+| Alta | Fase 13 operacional | Criar endpoint/UI agregada para custos, tokens, provider/modelo e limites simples por env/tenant. |
+| Média | Fase 12 | Indexador lexical automático para docs/repositório; depois embeddings/vector store. |
+| Média | Fase 14 | Métricas OTel, trace propagation web->api e audit logs nos endpoints mutáveis restantes. |
+| Média | Fase 11 | Deploy real externo com logs/saúde por ambiente. |
+| Baixa | Fase 15 | Budgets de bundle/chunk no CI. |
