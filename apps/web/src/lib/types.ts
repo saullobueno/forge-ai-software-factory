@@ -384,6 +384,40 @@ export interface ApiAIPlaygroundConfig {
 
 export type ApiAIPlaygroundEvaluation = AIPlaygroundEvaluationResponse;
 
+export interface ApiAiUsageTotals {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  callCount: number;
+}
+
+export interface ApiAiUsageProviderSummary extends ApiAiUsageTotals {
+  provider: string;
+  model: string;
+}
+
+export interface ApiAiUsageRecentItem {
+  id: string;
+  agentRunId: string | null;
+  agentStepId: string | null;
+  aiMessageId: string | null;
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  createdAt: string;
+}
+
+export interface ApiAiUsageSummary {
+  totals: ApiAiUsageTotals;
+  byProvider: ApiAiUsageProviderSummary[];
+  recent: ApiAiUsageRecentItem[];
+  sampleSize: number;
+}
+
 export interface ApiAuditLog {
   id: string;
   organizationId: string;

@@ -4,6 +4,7 @@ import { AppService } from './app.service.js';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
 import { QueueModule } from './infrastructure/queue/queue.module.js';
 import { AIPlaygroundModule } from './modules/ai-playground/ai-playground.module.js';
+import { AiUsageModule } from './modules/ai-usage/ai-usage.module.js';
 import { AgentRunsModule } from './modules/agent-runs/agent-runs.module.js';
 import { ArtifactsModule } from './modules/artifacts/artifacts.module.js';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module.js';
@@ -23,6 +24,7 @@ import { TasksModule } from './modules/tasks/tasks.module.js';
     TasksModule,
     CodeModule,
     AIPlaygroundModule,
+    AiUsageModule,
     AgentRunsModule,
     ArtifactsModule,
     AuditLogsModule,

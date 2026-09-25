@@ -15,6 +15,7 @@ const NAV_ITEMS: { label: string; href: string | null }[] = [
   { label: 'Tarefas', href: null },
   { label: 'Execuções de IA', href: null },
   { label: 'Playground IA', href: '/ai-playground' },
+  { label: 'Uso IA', href: '/ai-usage' },
   { label: 'Auditoria', href: '/audit-logs' },
   { label: 'Configurações', href: null },
 ];
