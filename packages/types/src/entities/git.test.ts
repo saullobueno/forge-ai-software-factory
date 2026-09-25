@@ -9,6 +9,7 @@ const base = {
   repositoryId: id,
   workspaceId: null,
   taskId: null,
+  agentRunId: null,
   provider: 'mock' as const,
   externalNumber: null,
   externalUrl: null,

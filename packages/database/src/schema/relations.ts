@@ -134,6 +134,7 @@ export const agentRunsRelations = relations(agentRuns, ({ one, many }) => ({
   codeChanges: many(codeChanges),
   testRuns: many(testRuns),
   usages: many(aiUsages),
+  pullRequests: many(pullRequests),
 }));
 
 export const agentStepsRelations = relations(agentSteps, ({ one, many }) => ({
@@ -229,6 +230,7 @@ export const pullRequestsRelations = relations(pullRequests, ({ one, many }) => 
   }),
   workspace: one(workspaces, { fields: [pullRequests.workspaceId], references: [workspaces.id] }),
   task: one(tasks, { fields: [pullRequests.taskId], references: [tasks.id] }),
+  agentRun: one(agentRuns, { fields: [pullRequests.agentRunId], references: [agentRuns.id] }),
   deployments: many(deployments),
 }));
 

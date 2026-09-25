@@ -9,6 +9,8 @@ import type {
   EnvironmentKind,
   KnowledgeSourceKind,
   MemberRole,
+  PullRequestStatus,
+  RepositoryProvider,
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
@@ -288,6 +290,34 @@ export interface ApiAgentStep {
 export interface ApiAgentRunDetail extends ApiAgentRun {
   steps: ApiAgentStep[];
   testRuns: ApiTestRun[];
+  pullRequests: ApiPullRequest[];
+}
+
+/**
+ * PR real aberto via `MockGitProvider` (Fase 10 continuação) quando uma
+ * execução aprovada aplica pelo menos uma escrita real (Fase 18) contra um
+ * repositório configurado. Incluído no mesmo `GET /agent-runs/:id` já
+ * existente — pode não existir (`pullRequests: []`), ex.: nenhuma escrita
+ * aplicou de verdade, ou o projeto não tem repositório configurado.
+ */
+export interface ApiPullRequest {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  repositoryId: string;
+  workspaceId: string | null;
+  taskId: string | null;
+  agentRunId: string | null;
+  provider: RepositoryProvider;
+  externalNumber: number | null;
+  externalUrl: string | null;
+  title: string;
+  description: string | null;
+  sourceBranch: string;
+  targetBranch: string;
+  status: PullRequestStatus;
+  mergedAt: string | null;
+  createdAt: string;
 }
 
 /**

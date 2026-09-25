@@ -31,7 +31,7 @@ export interface RealToolExecution {
   result: Record<string, unknown>;
 }
 
-function slugify(text: string): string {
+export function slugify(text: string): string {
   const slug = text
     .toLowerCase()
     .normalize('NFD')
@@ -39,6 +39,18 @@ function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-+|-+$)/g, '');
   return slug.length > 0 ? slug.slice(0, 60) : 'tarefa';
+}
+
+/**
+ * Nome de branch determinístico a partir do título da tarefa — a MESMA
+ * fórmula que o `case 'create_branch'` abaixo já usa. Exportado (Fase 10
+ * continuação — conectar `@forge/git` para PRs reais) para que
+ * `apps/api` reaproveite exatamente este cálculo ao decidir em qual branch
+ * abrir um PR de verdade via `MockGitProvider`, em vez de duplicar a lógica
+ * de slug num segundo lugar.
+ */
+export function buildFeatureBranchName(taskTitle: string): string {
+  return `feat/${slugify(taskTitle)}`;
 }
 
 function countTestCases(content: string): number {
@@ -171,7 +183,7 @@ export async function executeRealTool(
     }
 
     case 'create_branch': {
-      const branchName = `feat/${slugify(ctx.task.title)}`;
+      const branchName = buildFeatureBranchName(ctx.task.title);
       return { ok: true, result: { branchName, baseBranch: ctx.repository?.defaultBranch ?? 'main' } };
     }
 

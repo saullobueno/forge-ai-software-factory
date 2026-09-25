@@ -3,6 +3,7 @@ import type {
   AgentRunStatus,
   AgentStepStatus,
   AgentToolName,
+  FileChangeType,
   KnowledgeSourceKind,
   MemberRole,
   TestRunStatus,
@@ -164,6 +165,70 @@ export interface RecordTestRunInput {
  */
 export interface AgentRunTestResultSink {
   recordTestRun(input: RecordTestRunInput): Promise<void>;
+}
+
+/**
+ * Uma escrita real já aplicada (`AgentRunWorkspaceService.applyApprovedWrite`,
+ * Fase 18) que vai virar `file_snapshots`/`code_changes`/`diffs` reais (Fase
+ * 10 continuação). `beforeContentHash`/`beforeSizeBytes` são `null` quando o
+ * arquivo não existia antes (`changeType: 'created'`) — a cópia isolada do
+ * workspace não tinha nada para capturar como "antes".
+ */
+export interface AgentRunFileChangeOutcome {
+  path: string;
+  changeType: Extract<FileChangeType, 'created' | 'modified'>;
+  beforeContentHash: string | null;
+  beforeSizeBytes: number | null;
+  afterContentHash: string;
+  afterSizeBytes: number;
+  /** Unified diff real aplicado — o mesmo texto que `applyPatch` (jsdiff) usou, não reinventado aqui. */
+  patch: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface RecordPullRequestInput {
+  organizationId: string;
+  projectId: string;
+  repositoryId: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  repositoryDefaultBranch: string;
+  taskId: string;
+  agentRunId: string;
+  triggeredByUserId: string | null;
+  /** Nome de branch determinístico — normalmente `buildFeatureBranchName(task.title)`, calculado por quem chama. */
+  sourceBranch: string;
+  title: string;
+  description: string;
+  files: readonly AgentRunFileChangeOutcome[];
+}
+
+/**
+ * Porta mínima para persistir a abertura de um PR real via `MockGitProvider`
+ * (Fase 10 continuação, spec §10/§19: "operações Git reais... `pull_requests`/
+ * `code_changes`/`diffs`/`file_snapshots`"), mesmo padrão de
+ * `AgentRunTestResultSink`: `@forge/agents` só conhece o contrato mínimo,
+ * nunca Drizzle/`@forge/git` diretamente.
+ *
+ * **Diferença deliberada de `AgentRunTestResultSink`/`AgentRunOrchestratorDeps`**:
+ * esta porta NÃO é injetada em `AgentRunOrchestratorDeps` nem chamada de
+ * dentro de `AgentRunOrchestrator.run()`. `run_tests` executa de verdade
+ * durante o pipeline inicial (ferramenta `allow`, nunca exige aprovação) —
+ * por isso `recordTestRun` é chamado de dentro do orquestrador, no mesmo
+ * fluxo. Já `write_file`/`apply_patch`/`create_commit`/`create_pull_request`
+ * são SEMPRE `require_approval` (`packages/domain/src/tool-policy.ts`):
+ * nenhuma delas executa de verdade durante `run()` — a execução real só
+ * acontece depois, em `AgentRunsService.decide()` (`apps/api`), exatamente
+ * como a escrita real de arquivo já funciona desde a Fase 18
+ * (`AgentRunWorkspaceService`). Consequentemente, abrir um PR real também só
+ * pode acontecer ali, nunca no orquestrador — o tipo desta porta vive em
+ * `packages/agents` só para reuso/consistência de contrato (mesmo raciocínio
+ * de `RepositoryReader`/`AgentRunEventPublisher`: tipagem estrutural
+ * compartilhada, implementação 100% em `apps/api`).
+ */
+export interface AgentRunGitSink {
+  recordPullRequest(input: RecordPullRequestInput): Promise<{ id: string } | null>;
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   AGENT_STEP_STATUS_LABELS,
   FINDING_SEVERITY_LABELS,
   FINDING_STATUS_LABELS,
+  PULL_REQUEST_STATUS_LABELS,
   TEST_ARTIFACT_KIND_LABELS,
   TEST_RUN_STATUS_LABELS,
   TOOL_CALL_STATUS_LABELS,
@@ -24,6 +25,7 @@ import {
   agentRunStatusTone,
   agentStepStatusTone,
   findingSeverityTone,
+  pullRequestStatusTone,
   testRunStatusTone,
   toolCallStatusTone,
 } from '@/lib/status-tone';
@@ -33,6 +35,7 @@ import type {
   ApiArtifactContent,
   ApiCurrentUser,
   ApiProject,
+  ApiPullRequest,
   ApiTask,
   ApiTestArtifact,
   ApiTestRun,
@@ -253,6 +256,40 @@ function TestRunCard({ testRun }: { testRun: ApiTestRun }) {
             </li>
           ))}
         </ul>
+      )}
+    </li>
+  );
+}
+
+/**
+ * PR real aberto via `MockGitProvider` (Fase 10 continuação): mostrado
+ * quando a execução tem pelo menos um `pullRequest` persistido
+ * (`run.pullRequests`, incluído no mesmo `GET /agent-runs/:id`). Não existe
+ * uma tela de PR dedicada ainda (fora de escopo aqui) — o link externo
+ * (`mock://...`) é o mínimo razoável para conferir o resultado sem abrir o
+ * banco na mão; não é clicável no navegador (é um provider mock, sem
+ * servidor real por trás), então é exibido como texto, não como `<a href>`.
+ */
+function PullRequestCard({ pullRequest }: { pullRequest: ApiPullRequest }) {
+  return (
+    <li className="rounded-lg border border-border p-3" data-testid="pull-request-summary">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={pullRequestStatusTone(pullRequest.status)}>
+          <span data-testid="pull-request-status">{PULL_REQUEST_STATUS_LABELS[pullRequest.status]}</span>
+        </Badge>
+        <span className="text-sm font-medium text-foreground">{pullRequest.title}</span>
+        {pullRequest.externalNumber !== null && (
+          <span className="text-xs text-muted-foreground">#{pullRequest.externalNumber}</span>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        <span className="font-mono">{pullRequest.sourceBranch}</span> → <span className="font-mono">{pullRequest.targetBranch}</span>
+      </p>
+      {pullRequest.description && <p className="mt-2 text-sm text-muted-foreground">{pullRequest.description}</p>}
+      {pullRequest.externalUrl && (
+        <p className="mt-2 break-all font-mono text-xs text-muted-foreground" data-testid="pull-request-url">
+          {pullRequest.externalUrl}
+        </p>
       )}
     </li>
   );
@@ -544,6 +581,17 @@ export function AgentRunDetailView({
           <ul className="mt-2 flex flex-col gap-2">
             {run.testRuns.map((testRun) => (
               <TestRunCard key={testRun.id} testRun={testRun} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {run.pullRequests.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium">Pull request</h2>
+          <ul className="mt-2 flex flex-col gap-2">
+            {run.pullRequests.map((pullRequest) => (
+              <PullRequestCard key={pullRequest.id} pullRequest={pullRequest} />
             ))}
           </ul>
         </section>

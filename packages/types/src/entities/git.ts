@@ -50,6 +50,7 @@ export const pullRequestSchema = z
     repositoryId: idSchema,
     workspaceId: idSchema.nullable(),
     taskId: idSchema.nullable(),
+    agentRunId: idSchema.nullable(),
     provider: repositoryProviderSchema,
     externalNumber: z.number().int().positive().nullable(),
     externalUrl: z.string().url().nullable(),

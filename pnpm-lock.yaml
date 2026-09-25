@@ -148,6 +148,9 @@ importers:
       '@forge/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@forge/git':
+        specifier: workspace:*
+        version: link:../../packages/git
       '@forge/knowledge':
         specifier: workspace:*
         version: link:../../packages/knowledge

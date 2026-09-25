@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import type { OrchestratorActor } from '@forge/agents';
+import type { AgentRunFileChangeOutcome, OrchestratorActor } from '@forge/agents';
+import { buildFeatureBranchName } from '@forge/agents';
 import { transitionAgentRunStatus } from '@forge/domain';
 import type { MessageEvent } from '@nestjs/common';
 import type { AgentRunStatus } from '@forge/types';
@@ -8,9 +9,11 @@ import { AgentsRepository } from '../agents/agents.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
+import { AgentRunGitService } from './agent-run-git.service.js';
 import { AgentRunWorkerService } from './agent-run-worker.service.js';
 import { AgentRunWorkspaceService } from './agent-run-workspace.service.js';
 import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps, type ToolCallRow } from './agent-runs.repository.js';
+import { countPatchStats } from './patch-stats.js';
 import type { TaskRow } from '../tasks/tasks.repository.js';
 
 @Injectable()
@@ -23,6 +26,7 @@ export class AgentRunsService {
     private readonly auditLogsService: AuditLogsService,
     private readonly agentRunApprovalsRepository: AgentRunApprovalsRepository,
     private readonly agentRunWorkspace: AgentRunWorkspaceService,
+    private readonly agentRunGit: AgentRunGitService,
   ) {}
 
   /**
@@ -193,7 +197,7 @@ export class AgentRunsService {
     // aprovação, e ANTES de qualquer transição de status ser persistida —
     // se algo falhar de verdade, o status final precisa refletir isso, não
     // um "completed" otimista escrito antes de saber o resultado real.
-    const applied = decision === 'approved' ? await this.applyApprovedWrites(run, organizationId) : null;
+    const applied = decision === 'approved' ? await this.applyApprovedWrites(run, organizationId, actorUserId) : null;
 
     const targetStatus: AgentRunStatus = decision === 'rejected' || applied?.anyFailed ? 'failed' : 'completed';
     const transition = transitionAgentRunStatus(run.status, targetStatus);
@@ -285,10 +289,25 @@ export class AgentRunsService {
    * resultado real da escrita (`AgentRunWorkspaceService.applyApprovedWrite`),
    * substituindo o resultado simulado `{ proposed, policyDecision }` — o
    * resultado final nunca finge ter aplicado algo que não aplicou.
+   *
+   * **Fase 10 continuação**: quando pelo menos uma escrita desta execução
+   * aplicou de verdade, este mesmo método também abre um PR real via
+   * `AgentRunGitService` (`MockGitProvider`) — o gatilho é "um conjunto de
+   * escritas aprovadas desta execução implica abrir um PR", não uma tool
+   * call `create_pull_request` específica (o `MockAiProvider` nunca propõe
+   * `create_branch`/`create_commit`/`create_pull_request` hoje — só
+   * `write_file`/`apply_patch` — então esperar por essa tool call literal
+   * deixaria este recurso inatingível em qualquer execução real da
+   * aplicação). A criação do PR é AUXILIAR ao resultado desta função (nunca
+   * lançada para quem chama, nunca influencia `anyFailed`/o status final da
+   * execução) — mesmo idioma de `recordTrace`/`recordPolicyDecision` no
+   * orquestrador: o resultado real da aprovação já existe (as escritas já
+   * aplicaram) antes de tentar abrir o PR.
    */
   private async applyApprovedWrites(
     run: AgentRunRow,
     organizationId: string,
+    actorUserId: string,
   ): Promise<{ processed: Array<{ toolCallId: string; path: string; ok: boolean; error?: string }>; anyFailed: boolean; repositoryId: string | null }> {
     const pendingWrites = await this.agentRunsRepository.findPendingWriteToolCalls(run.id);
     if (pendingWrites.length === 0) {
@@ -306,6 +325,7 @@ export class AgentRunsService {
     }
 
     const processed: Array<{ toolCallId: string; path: string; ok: boolean; error?: string }> = [];
+    const successfulWrites: AgentRunFileChangeOutcome[] = [];
     let anyFailed = false;
 
     for (const toolCall of pendingWrites) {
@@ -325,13 +345,59 @@ export class AgentRunsService {
         policyDecision: (toolCall.result as { policyDecision?: unknown } | null)?.policyDecision ?? null,
       });
 
-      if (!outcome.ok) anyFailed = true;
+      if (outcome.ok) {
+        if (typeof proposed?.patch === 'string') {
+          const stats = countPatchStats(proposed.patch);
+          successfulWrites.push({
+            path: outcome.result.path,
+            changeType: outcome.result.fileExistedBefore ? 'modified' : 'created',
+            beforeContentHash: outcome.result.beforeSha256,
+            beforeSizeBytes: outcome.result.beforeSizeBytes,
+            afterContentHash: outcome.result.sha256,
+            afterSizeBytes: outcome.result.sizeBytes,
+            patch: proposed.patch,
+            additions: stats.additions,
+            deletions: stats.deletions,
+          });
+        }
+      } else {
+        anyFailed = true;
+      }
       processed.push({
         toolCallId: toolCall.id,
         path,
         ok: outcome.ok,
         ...(outcome.ok ? {} : { error: outcome.result.error }),
       });
+    }
+
+    if (successfulWrites.length > 0 && repository.provider === 'mock') {
+      // Auxiliar: nunca influencia `anyFailed`/o resultado já computado
+      // acima — as escritas reais já aconteceram, o PR é um efeito
+      // downstream best-effort, mesmo idioma de `recordTrace`/
+      // `recordPolicyDecision` no orquestrador (Fase 7/9).
+      try {
+        await this.agentRunGit.recordPullRequest({
+          organizationId,
+          projectId: repository.projectId,
+          repositoryId: repository.id,
+          repositoryOwner: repository.owner,
+          repositoryName: repository.name,
+          repositoryDefaultBranch: repository.defaultBranch,
+          taskId: run.taskId,
+          agentRunId: run.id,
+          triggeredByUserId: actorUserId,
+          sourceBranch: buildFeatureBranchName(repository.taskTitle),
+          title: run.objective,
+          description:
+            `PR aberto automaticamente pelo Forge após aprovação humana da execução ${run.id}. ` +
+            `Arquivos alterados: ${successfulWrites.map((file) => file.path).join(', ')}.`,
+          files: successfulWrites,
+        });
+      } catch {
+        // Ver comentário do método: abrir o PR real é auxiliar ao
+        // resultado desta aprovação, nunca deve derrubá-la.
+      }
     }
 
     return { processed, anyFailed, repositoryId: repository.id };

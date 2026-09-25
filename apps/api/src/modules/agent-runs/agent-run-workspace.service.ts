@@ -40,7 +40,27 @@ export interface ApplyApprovedWriteInput {
 }
 
 export type ApplyApprovedWriteResult =
-  | { ok: true; result: { path: string; sizeBytes: number; sha256: string; appliedAt: string; note: string } }
+  | {
+      ok: true;
+      result: {
+        path: string;
+        sizeBytes: number;
+        sha256: string;
+        appliedAt: string;
+        note: string;
+        /**
+         * Estado do arquivo ANTES desta escrita, na mesma cópia isolada do
+         * workspace (Fase 10 continuação — precisa disso para gravar
+         * `file_snapshots`/`code_changes` reais de "antes"/"depois", não só
+         * o resultado final). `null` quando o arquivo ainda não existia
+         * (`fileExistedBefore: false`, ex.: `apply_patch` criando um arquivo
+         * novo) — não há "antes" real para capturar.
+         */
+        beforeSha256: string | null;
+        beforeSizeBytes: number | null;
+        fileExistedBefore: boolean;
+      };
+    }
   | { ok: false; result: { error: string; path?: string } };
 
 /**
@@ -127,12 +147,15 @@ export class AgentRunWorkspaceService {
     }
 
     let currentContent: string;
+    let fileExistedBefore: boolean;
     try {
       currentContent = await readFile(absoluteTarget, 'utf8');
+      fileExistedBefore = true;
     } catch {
       // Arquivo ainda não existe na cópia (ex.: `apply_patch` para um
       // arquivo novo) — o patch precisa criar o conteúdo do zero.
       currentContent = '';
+      fileExistedBefore = false;
     }
 
     const patched = applyPatch(currentContent, proposedPatch);
@@ -159,6 +182,9 @@ export class AgentRunWorkspaceService {
         sha256: createHash('sha256').update(patched, 'utf8').digest('hex'),
         appliedAt: new Date().toISOString(),
         note: 'Escrita real aplicada na cópia isolada do workspace — o fixture original nunca foi tocado.',
+        beforeSha256: fileExistedBefore ? createHash('sha256').update(currentContent, 'utf8').digest('hex') : null,
+        beforeSizeBytes: fileExistedBefore ? Buffer.byteLength(currentContent, 'utf8') : null,
+        fileExistedBefore,
       },
     };
   }

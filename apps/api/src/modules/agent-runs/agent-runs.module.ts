@@ -8,6 +8,8 @@ import { AuditLogWriterModule } from '../audit-logs/audit-log-writer.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
+import { AgentRunGitRepository } from './agent-run-git.repository.js';
+import { AgentRunGitService } from './agent-run-git.service.js';
 import { AgentRunGovernanceAuditService } from './agent-run-governance-audit.service.js';
 import { AgentRunOrchestrationStore } from './agent-run-orchestration.store.js';
 import { AgentRunOtelSpanRecorder } from './agent-run-otel-span-recorder.js';
@@ -42,6 +44,8 @@ import { AI_PROVIDER } from './ai-provider.token.js';
     AgentRunApprovalsRepository,
     AgentRunsService,
     AgentRunEventsService,
+    AgentRunGitRepository,
+    AgentRunGitService,
     AgentRunGovernanceAuditService,
     AgentRunOrchestrationStore,
     AgentRunOtelSpanRecorder,

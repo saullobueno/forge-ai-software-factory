@@ -81,6 +81,14 @@ export const pullRequests = pgTable('pull_requests', {
     .references(() => repositories.id, { onDelete: 'cascade' }),
   workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'set null' }),
   taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /**
+   * Vínculo direto com a execução de agente que abriu este PR (Fase 10
+   * continuação — conectar `@forge/git` a persistência real). `nullable`
+   * porque nem todo PR nasce de uma execução de agente (ex.: o PR de
+   * demonstração da Fase 3 é seed estático, sem `agentRunId`) — mesma
+   * decisão de `code_changes.agent_run_id`, já `set null` on delete.
+   */
+  agentRunId: uuid('agent_run_id').references(() => agentRuns.id, { onDelete: 'set null' }),
   provider: repositoryProviderEnum('provider').notNull(),
   externalNumber: integer('external_number'),
   externalUrl: text('external_url'),
@@ -97,4 +105,5 @@ export const pullRequests = pgTable('pull_requests', {
   index('pull_requests_project_id_idx').on(table.projectId),
   index('pull_requests_repository_id_idx').on(table.repositoryId),
   index('pull_requests_status_idx').on(table.status),
+  index('pull_requests_agent_run_id_idx').on(table.agentRunId),
 ]);

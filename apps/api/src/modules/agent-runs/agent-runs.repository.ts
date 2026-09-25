@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, schema } from '@forge/database';
-import type { AgentRunStatus, AgentToolName, ToolCallStatus } from '@forge/types';
+import type { AgentRunStatus, AgentToolName, RepositoryProvider, ToolCallStatus } from '@forge/types';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type AgentRunRow = typeof schema.agentRuns.$inferSelect;
@@ -20,7 +20,19 @@ export type AgentStepWithToolCalls = AgentStepRow & { toolCalls: ToolCallRow[]; 
  * como "o(s) testRun(s) desta execução", sem assumir exatamente um.
  */
 export type TestRunWithDetails = TestRunRow & { suites: TestSuiteRow[]; artifacts: TestArtifactRow[] };
-export type AgentRunWithSteps = AgentRunRow & { steps: AgentStepWithToolCalls[]; testRuns: TestRunWithDetails[] };
+export type PullRequestRow = typeof schema.pullRequests.$inferSelect;
+/**
+ * `pullRequests` (Fase 10 continuação, mesma decisão de `testRuns`): uma
+ * execução pode, em teoria, abrir mais de um PR — a UI/API tratam como
+ * "o(s) PR(s) desta execução", sem assumir exatamente um, mesmo que o
+ * gatilho atual (`AgentRunsService.applyApprovedWrites`) só produza no
+ * máximo um por decisão de aprovação.
+ */
+export type AgentRunWithSteps = AgentRunRow & {
+  steps: AgentStepWithToolCalls[];
+  testRuns: TestRunWithDetails[];
+  pullRequests: PullRequestRow[];
+};
 
 export interface CreateAgentRunInput {
   organizationId: string;
@@ -87,6 +99,9 @@ export class AgentRunsRepository {
             suites: { orderBy: [asc(schema.testSuites.createdAt)] },
             artifacts: { orderBy: [asc(schema.testArtifacts.createdAt)] },
           },
+        },
+        pullRequests: {
+          orderBy: [asc(schema.pullRequests.createdAt)],
         },
       },
     });
@@ -191,19 +206,40 @@ export class AgentRunsRepository {
    * `AgentRunsService.decide` degrada graciosamente nesse caso (mesmo
    * padrão de `root: string | null` em `AgentRunOrchestrator`): nada real
    * para escrever, então a tool call cai no caminho simulado genérico.
+   *
+   * Inclui `owner`/`defaultBranch`/`provider`/`projectId` (não só
+   * `id`/`name`, suficiente até a Fase 18): `AgentRunGitService` (Fase 10
+   * continuação) precisa desses campos para instanciar `MockGitProvider`
+   * com a referência real do repositório e gravar `pull_requests.provider`
+   * — reaproveita esta mesma consulta em vez de duplicar o `WHERE`.
    */
-  async findRepositoryForTask(taskId: string, organizationId: string): Promise<{ id: string; name: string } | undefined> {
+  async findRepositoryForTask(
+    taskId: string,
+    organizationId: string,
+  ): Promise<
+    | {
+        id: string;
+        name: string;
+        owner: string;
+        defaultBranch: string;
+        provider: RepositoryProvider;
+        projectId: string;
+        taskTitle: string;
+      }
+    | undefined
+  > {
     const task = await this.database.db.query.tasks.findFirst({
       where: and(eq(schema.tasks.id, taskId), eq(schema.tasks.organizationId, organizationId)),
-      columns: { projectId: true },
+      columns: { projectId: true, title: true },
     });
     if (!task) return undefined;
 
     const repository = await this.database.db.query.repositories.findFirst({
       where: and(eq(schema.repositories.projectId, task.projectId), eq(schema.repositories.organizationId, organizationId)),
-      columns: { id: true, name: true },
+      columns: { id: true, name: true, owner: true, defaultBranch: true, provider: true, projectId: true },
     });
-    return repository;
+    if (!repository) return undefined;
+    return { ...repository, taskTitle: task.title };
   }
 
   private async stepIdsForRun(agentRunId: string): Promise<string[]> {

@@ -6,6 +6,7 @@ import type {
   EnvironmentKind,
   FindingSeverity,
   KnowledgeSourceKind,
+  PullRequestStatus,
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
@@ -101,6 +102,14 @@ export const TEST_RUN_STATUS_LABELS: Record<TestRunStatus, string> = {
   passed: 'Passou',
   failed: 'Falhou',
   flaky: 'Instável',
+};
+
+/** Rótulos em pt-BR (spec §10) — status de um PR real (`pull_requests`, Fase 10 continuação). */
+export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
+  draft: 'Rascunho',
+  open: 'Aberto',
+  merged: 'Mesclado',
+  closed: 'Fechado',
 };
 
 export const ENVIRONMENT_KIND_LABELS: Record<EnvironmentKind, string> = {

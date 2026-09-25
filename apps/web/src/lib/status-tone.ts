@@ -3,6 +3,7 @@ import type {
   AgentStepStatus,
   DeploymentStatus,
   FindingSeverity,
+  PullRequestStatus,
   TaskPriority,
   TaskStatus,
   TestRunStatus,
@@ -96,6 +97,19 @@ export function testRunStatusTone(status: TestRunStatus): Tone {
       return 'critical';
     case 'flaky':
     case 'running':
+      return 'attention';
+    default:
+      return 'neutral';
+  }
+}
+
+export function pullRequestStatusTone(status: PullRequestStatus): Tone {
+  switch (status) {
+    case 'merged':
+      return 'positive';
+    case 'closed':
+      return 'critical';
+    case 'open':
       return 'attention';
     default:
       return 'neutral';
