@@ -22,11 +22,12 @@ Este é o resumo curto de retomada. O mapa completo continua em [`PROGRESS.md`](
 
 | Commit | Resumo |
 |---|---|
+| `c023a0c` | Cobre `/ai-usage` com Playwright autenticado |
+| `d950167` | Adiciona latência média ao dashboard de uso IA |
+| `0501d57` | Adiciona limites diários por organização via env |
+| `f0c14c8` | Cria endpoint/UI agregada de uso e custo de IA |
 | `904dbc1` | Atualiza `PROGRESS.md` após Fases 9/10/14 verificadas |
 | `b7d23aa` | Conecta `MockGitProvider` à persistência real de PR |
-| `36846e8` | Persiste resultados reais de `run_tests` |
-| `41546db` | Liga tracing OpenTelemetry real na API |
-| `7dae611` | Expõe usage IA no detalhe do agent run |
 
 ## Como Ver A Demo Local
 
