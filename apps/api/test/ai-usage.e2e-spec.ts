@@ -65,9 +65,48 @@ beforeAll(async () => {
     .returning();
   if (!agentA) throw new Error('agent não inserido');
 
+  const [agentRunA] = await testApp.db
+    .insert(testApp.schema.agentRuns)
+    .values({
+      organizationId: organizationA.id,
+      taskId: taskA.id,
+      agentId: agentA.id,
+      status: 'completed',
+      objective: 'Execução com usage e latência',
+    })
+    .returning();
+  if (!agentRunA) throw new Error('agentRun não inserido');
+
+  const [geminiStep, groqStep] = await testApp.db
+    .insert(testApp.schema.agentSteps)
+    .values([
+      {
+        agentRunId: agentRunA.id,
+        name: 'Planejar com Gemini',
+        role: 'planner',
+        status: 'succeeded',
+        input: {},
+        output: {},
+        durationMs: 1_200,
+      },
+      {
+        agentRunId: agentRunA.id,
+        name: 'Revisar com Groq',
+        role: 'reviewer',
+        status: 'succeeded',
+        input: {},
+        output: {},
+        durationMs: 800,
+      },
+    ])
+    .returning();
+  if (!geminiStep || !groqStep) throw new Error('agentSteps não inseridos');
+
   await testApp.db.insert(testApp.schema.aiUsages).values([
     {
       organizationId: organizationA.id,
+      agentRunId: agentRunA.id,
+      agentStepId: geminiStep.id,
       provider: 'gemini',
       model: 'gemini-2.5-flash',
       promptTokens: 100,
@@ -77,6 +116,8 @@ beforeAll(async () => {
     },
     {
       organizationId: organizationA.id,
+      agentRunId: agentRunA.id,
+      agentStepId: groqStep.id,
       provider: 'groq',
       model: 'llama-3.1-70b-versatile',
       promptTokens: 200,
@@ -132,6 +173,8 @@ describe('GET /ai-usage/summary', () => {
       completionTokens: 150,
       totalTokens: 475,
       callCount: 3,
+      averageDurationMs: 1000,
+      durationSampleCount: 2,
     });
     expect(response.body.totals.costUsd).toBeCloseTo(0.00475);
     expect(response.body.byProvider).toEqual(
@@ -143,6 +186,8 @@ describe('GET /ai-usage/summary', () => {
           completionTokens: 75,
           totalTokens: 200,
           callCount: 2,
+          averageDurationMs: 1200,
+          durationSampleCount: 1,
         }),
         expect.objectContaining({
           provider: 'groq',
@@ -151,11 +196,19 @@ describe('GET /ai-usage/summary', () => {
           completionTokens: 75,
           totalTokens: 275,
           callCount: 1,
+          averageDurationMs: 800,
+          durationSampleCount: 1,
         }),
       ]),
     );
     expect(response.body.sampleSize).toBe(3);
     expect(response.body.recent).toHaveLength(3);
+    expect(response.body.recent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: 'gemini', durationMs: 1200 }),
+        expect.objectContaining({ provider: 'groq', durationMs: 800 }),
+      ]),
+    );
     expect(JSON.stringify(response.body)).not.toContain('gemini-2.5-pro');
     expect(JSON.stringify(response.body)).not.toContain('9.99');
   });

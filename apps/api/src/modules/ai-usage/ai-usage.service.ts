@@ -8,6 +8,8 @@ export interface AiUsageTotals {
   totalTokens: number;
   costUsd: number;
   callCount: number;
+  averageDurationMs: number | null;
+  durationSampleCount: number;
 }
 
 export interface AiUsageProviderSummary extends AiUsageTotals {
@@ -26,6 +28,7 @@ export interface AiUsageRecentItem {
   completionTokens: number;
   totalTokens: number;
   costUsd: number;
+  durationMs: number | null;
   createdAt: Date;
 }
 
@@ -42,16 +45,36 @@ const EMPTY_TOTALS: AiUsageTotals = {
   totalTokens: 0,
   costUsd: 0,
   callCount: 0,
+  averageDurationMs: null,
+  durationSampleCount: 0,
 };
 
 const DAILY_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-function addUsage(target: AiUsageTotals, usage: AiUsageRow): void {
+type AiUsageAccumulator = AiUsageTotals & { durationTotalMs: number };
+
+function createAccumulator(): AiUsageAccumulator {
+  return { ...EMPTY_TOTALS, durationTotalMs: 0 };
+}
+
+function addUsage(target: AiUsageAccumulator, usage: AiUsageRow & { agentStep?: { durationMs: number | null } | null }): void {
   target.promptTokens += usage.promptTokens;
   target.completionTokens += usage.completionTokens;
   target.totalTokens += usage.totalTokens;
   target.costUsd += Number(usage.costUsd);
   target.callCount += 1;
+
+  const durationMs = usage.agentStep?.durationMs ?? null;
+  if (typeof durationMs === 'number') {
+    target.durationTotalMs += durationMs;
+    target.durationSampleCount += 1;
+    target.averageDurationMs = Math.round(target.durationTotalMs / target.durationSampleCount);
+  }
+}
+
+function finalizeTotals(total: AiUsageAccumulator): AiUsageTotals {
+  const { durationTotalMs: _durationTotalMs, ...result } = total;
+  return result;
 }
 
 @Injectable()
@@ -60,8 +83,8 @@ export class AiUsageService {
 
   async summarizeByOrganization(organizationId: string): Promise<AiUsageSummary> {
     const usages = await this.aiUsageRepository.listRecentByOrganization(organizationId);
-    const totals = { ...EMPTY_TOTALS };
-    const byProvider = new Map<string, AiUsageProviderSummary>();
+    const totals = createAccumulator();
+    const byProvider = new Map<string, AiUsageProviderSummary & { durationTotalMs: number }>();
 
     for (const usage of usages) {
       addUsage(totals, usage);
@@ -70,15 +93,17 @@ export class AiUsageService {
       const group = byProvider.get(groupKey) ?? {
         provider: usage.provider,
         model: usage.model,
-        ...EMPTY_TOTALS,
+        ...createAccumulator(),
       };
       addUsage(group, usage);
       byProvider.set(groupKey, group);
     }
 
     return {
-      totals,
-      byProvider: [...byProvider.values()].sort((left, right) => right.costUsd - left.costUsd),
+      totals: finalizeTotals(totals),
+      byProvider: [...byProvider.values()]
+        .map(finalizeProviderSummary)
+        .sort((left, right) => right.costUsd - left.costUsd),
       recent: usages.slice(0, 50).map((usage) => ({
         id: usage.id,
         agentRunId: usage.agentRunId,
@@ -90,6 +115,7 @@ export class AiUsageService {
         completionTokens: usage.completionTokens,
         totalTokens: usage.totalTokens,
         costUsd: Number(usage.costUsd),
+        durationMs: usage.agentStep?.durationMs ?? null,
         createdAt: usage.createdAt,
       })),
       sampleSize: usages.length,
@@ -102,7 +128,7 @@ export class AiUsageService {
 
     const windowStartedAt = new Date(Date.now() - DAILY_LIMIT_WINDOW_MS);
     const usages = await this.aiUsageRepository.listByOrganizationSince(organizationId, windowStartedAt);
-    const totals = { ...EMPTY_TOTALS };
+    const totals = createAccumulator();
     for (const usage of usages) {
       addUsage(totals, usage);
     }
@@ -113,7 +139,7 @@ export class AiUsageService {
     throw new HttpException({
       message: 'Limite diário de uso de IA atingido para esta organização.',
       limits,
-      totals,
+      totals: finalizeTotals(totals),
       exceeded,
       windowStartedAt,
     }, HttpStatus.TOO_MANY_REQUESTS);
@@ -129,4 +155,9 @@ export class AiUsageService {
     }
     return exceeded;
   }
+}
+
+function finalizeProviderSummary(summary: AiUsageProviderSummary & { durationTotalMs: number }): AiUsageProviderSummary {
+  const { durationTotalMs: _durationTotalMs, ...result } = summary;
+  return result;
 }

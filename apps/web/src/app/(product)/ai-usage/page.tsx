@@ -20,6 +20,12 @@ function formatUsd(value: number): string {
   }).format(value);
 }
 
+function formatDuration(value: number | null): string {
+  if (value === null) return '-';
+  if (value < 1_000) return `${value} ms`;
+  return `${(value / 1_000).toFixed(1)} s`;
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -39,7 +45,7 @@ export default function AiUsagePage() {
       { label: 'Custo estimado', value: formatUsd(data.totals.costUsd) },
       { label: 'Tokens totais', value: formatInteger(data.totals.totalTokens) },
       { label: 'Chamadas', value: formatInteger(data.totals.callCount) },
-      { label: 'Amostra', value: formatInteger(data.sampleSize) },
+      { label: 'Latência média', value: formatDuration(data.totals.averageDurationMs) },
     ];
   }, [data]);
 
@@ -84,6 +90,7 @@ export default function AiUsagePage() {
                         <th className="px-3 py-2 font-medium">Provider</th>
                         <th className="px-3 py-2 font-medium">Modelo</th>
                         <th className="px-3 py-2 text-right font-medium">Tokens</th>
+                        <th className="px-3 py-2 text-right font-medium">Latência</th>
                         <th className="px-3 py-2 text-right font-medium">Custo</th>
                       </tr>
                     </thead>
@@ -96,6 +103,9 @@ export default function AiUsagePage() {
                           <td className="px-3 py-3 font-mono text-xs">{item.model}</td>
                           <td className="px-3 py-3 text-right font-mono text-xs">
                             {formatInteger(item.totalTokens)}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono text-xs">
+                            {formatDuration(item.averageDurationMs)}
                           </td>
                           <td className="px-3 py-3 text-right font-mono text-xs">{formatUsd(item.costUsd)}</td>
                         </tr>
@@ -121,6 +131,7 @@ export default function AiUsagePage() {
                         <th className="px-3 py-2 font-medium">Quando</th>
                         <th className="px-3 py-2 font-medium">Modelo</th>
                         <th className="px-3 py-2 text-right font-medium">Tokens</th>
+                        <th className="px-3 py-2 text-right font-medium">Latência</th>
                         <th className="px-3 py-2 text-right font-medium">Custo</th>
                       </tr>
                     </thead>
@@ -136,6 +147,9 @@ export default function AiUsagePage() {
                           </td>
                           <td className="px-3 py-3 text-right font-mono text-xs">
                             {formatInteger(item.totalTokens)}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono text-xs">
+                            {formatDuration(item.durationMs)}
                           </td>
                           <td className="px-3 py-3 text-right font-mono text-xs">{formatUsd(item.costUsd)}</td>
                         </tr>

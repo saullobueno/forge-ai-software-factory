@@ -390,6 +390,8 @@ export interface ApiAiUsageTotals {
   totalTokens: number;
   costUsd: number;
   callCount: number;
+  averageDurationMs: number | null;
+  durationSampleCount: number;
 }
 
 export interface ApiAiUsageProviderSummary extends ApiAiUsageTotals {
@@ -408,6 +410,7 @@ export interface ApiAiUsageRecentItem {
   completionTokens: number;
   totalTokens: number;
   costUsd: number;
+  durationMs: number | null;
   createdAt: string;
 }
 
