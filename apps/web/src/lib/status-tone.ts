@@ -5,6 +5,7 @@ import type {
   FindingSeverity,
   TaskPriority,
   TaskStatus,
+  TestRunStatus,
   ToolCallStatus,
 } from '@forge/types';
 
@@ -81,6 +82,20 @@ export function findingSeverityTone(severity: FindingSeverity): Tone {
     case 'high':
       return 'critical';
     case 'medium':
+      return 'attention';
+    default:
+      return 'neutral';
+  }
+}
+
+export function testRunStatusTone(status: TestRunStatus): Tone {
+  switch (status) {
+    case 'passed':
+      return 'positive';
+    case 'failed':
+      return 'critical';
+    case 'flaky':
+    case 'running':
       return 'attention';
     default:
       return 'neutral';

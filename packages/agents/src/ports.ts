@@ -5,6 +5,7 @@ import type {
   AgentToolName,
   KnowledgeSourceKind,
   MemberRole,
+  TestRunStatus,
   ToolCallStatus,
 } from '@forge/types';
 
@@ -129,6 +130,40 @@ export interface AgentRunPolicyDecisionEvent {
 
 export interface AgentRunGovernanceSink {
   recordPolicyDecision(event: AgentRunPolicyDecisionEvent): void | Promise<void>;
+}
+
+export interface AgentTestSuiteOutcome {
+  name: string;
+  passedCount: number;
+  failedCount: number;
+  skippedCount: number;
+}
+
+export interface RecordTestRunInput {
+  organizationId: string;
+  projectId: string;
+  agentRunId: string;
+  triggeredByUserId: string | null;
+  /** Derivado do resultado real já computado por `executeRealTool` (ver `real-tool-runner.ts`) — nunca decidido arbitrariamente aqui. */
+  status: Extract<TestRunStatus, 'passed' | 'failed'>;
+  durationMs: number;
+  suites: AgentTestSuiteOutcome[];
+}
+
+/**
+ * Porta mínima para persistir o resultado de `run_tests` (Fase 9
+ * continuação, spec §12: "execuções de testes... `test_runs`/`test_suites`").
+ * `run_tests` já executa de verdade contra o fixture em disco desde a Fase 7
+ * (`executeRealTool`, leitura real dos arquivos de teste — nenhum processo
+ * de teste roda, ver o comentário daquele arquivo) mas até aqui o resultado
+ * só existia dentro de `toolCall.result` (jsonb), nunca virava uma linha nas
+ * tabelas dedicadas do schema (`packages/database/src/schema/testing.ts`,
+ * já existentes desde a Fase 1). Implementada em `apps/api` por cima de
+ * Drizzle — mesmo padrão de `AgentRunStore`/`AgentRunTraceSink`: `@forge/agents`
+ * nunca depende de Drizzle/NestJS diretamente.
+ */
+export interface AgentRunTestResultSink {
+  recordTestRun(input: RecordTestRunInput): Promise<void>;
 }
 
 /**

@@ -7,9 +7,20 @@ export type AgentRunRow = typeof schema.agentRuns.$inferSelect;
 export type AgentStepRow = typeof schema.agentSteps.$inferSelect;
 export type ToolCallRow = typeof schema.toolCalls.$inferSelect;
 export type AiUsageRow = typeof schema.aiUsages.$inferSelect;
+export type TestRunRow = typeof schema.testRuns.$inferSelect;
+export type TestSuiteRow = typeof schema.testSuites.$inferSelect;
+export type TestArtifactRow = typeof schema.testArtifacts.$inferSelect;
 
 export type AgentStepWithToolCalls = AgentStepRow & { toolCalls: ToolCallRow[]; usages: AiUsageRow[] };
-export type AgentRunWithSteps = AgentRunRow & { steps: AgentStepWithToolCalls[] };
+/**
+ * `testRuns` (Fase 9 continuação): uma execução pode, em teoria, ter mais de
+ * um `testRun` (a relação em `packages/database/src/schema/relations.ts` é
+ * `many`), mas o orquestrador hoje só chama `run_tests` uma vez por
+ * execução (um único step `test_engineer` no pipeline) — a UI trata a lista
+ * como "o(s) testRun(s) desta execução", sem assumir exatamente um.
+ */
+export type TestRunWithDetails = TestRunRow & { suites: TestSuiteRow[]; artifacts: TestArtifactRow[] };
+export type AgentRunWithSteps = AgentRunRow & { steps: AgentStepWithToolCalls[]; testRuns: TestRunWithDetails[] };
 
 export interface CreateAgentRunInput {
   organizationId: string;
@@ -68,6 +79,13 @@ export class AgentRunsRepository {
           with: {
             toolCalls: { orderBy: [asc(schema.toolCalls.createdAt)] },
             usages: { orderBy: [asc(schema.aiUsages.createdAt)] },
+          },
+        },
+        testRuns: {
+          orderBy: [asc(schema.testRuns.createdAt)],
+          with: {
+            suites: { orderBy: [asc(schema.testSuites.createdAt)] },
+            artifacts: { orderBy: [asc(schema.testArtifacts.createdAt)] },
           },
         },
       },

@@ -6,6 +6,7 @@ import type {
   AgentRunEventPublisher,
   AgentRunGovernanceSink,
   AgentRunPolicyDecisionEvent,
+  AgentRunTestResultSink,
   AgentRunTraceEvent,
   AgentRunTraceSink,
   CompleteStepInput,
@@ -14,6 +15,7 @@ import type {
   CreateToolCallInput,
   ProjectRulesContext,
   RecordAiUsageInput,
+  RecordTestRunInput,
   RepositoryContext,
   RepositoryFileContent,
   RepositoryReader,
@@ -202,6 +204,14 @@ export class RecordingGovernanceSink implements AgentRunGovernanceSink {
 
   recordPolicyDecision(event: AgentRunPolicyDecisionEvent): void {
     this.policyDecisions.push(event);
+  }
+}
+
+export class RecordingTestResultSink implements AgentRunTestResultSink {
+  readonly testRuns: RecordTestRunInput[] = [];
+
+  async recordTestRun(input: RecordTestRunInput): Promise<void> {
+    this.testRuns.push(input);
   }
 }
 

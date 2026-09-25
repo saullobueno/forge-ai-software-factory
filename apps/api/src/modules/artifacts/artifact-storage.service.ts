@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { readFile as readFileAsync, stat } from 'node:fs/promises';
+import { mkdir, readFile as readFileAsync, stat, writeFile as writeFileAsync } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,5 +68,19 @@ export class ArtifactStorageService {
 
     const content = await readFileAsync(absolutePath, 'utf8');
     return { content, sizeBytes: info.size };
+  }
+
+  /**
+   * Grava um artefato de verdade em disco, dentro de `ARTIFACTS_ROOT` (Fase
+   * 9 continuação — persistência do resultado real de `run_tests`). Mesma
+   * disciplina de path safety de `resolveWithinRoot`: um `storageKey`
+   * gerado por esta própria app (nunca vindo de input de IA/usuário) ainda
+   * assim passa pela mesma checagem contra path traversal que `readContent`
+   * já usava, sem reimplementar a lógica de containment.
+   */
+  async writeContent(storageKey: string, content: string): Promise<void> {
+    const absolutePath = this.resolveWithinRoot(storageKey);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFileAsync(absolutePath, content, 'utf8');
   }
 }

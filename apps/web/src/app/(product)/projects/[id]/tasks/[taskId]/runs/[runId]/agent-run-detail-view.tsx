@@ -16,6 +16,7 @@ import {
   FINDING_SEVERITY_LABELS,
   FINDING_STATUS_LABELS,
   TEST_ARTIFACT_KIND_LABELS,
+  TEST_RUN_STATUS_LABELS,
   TOOL_CALL_STATUS_LABELS,
 } from '@/lib/labels';
 import { parseReviewerFindings } from '@/lib/reviewer-findings';
@@ -23,6 +24,7 @@ import {
   agentRunStatusTone,
   agentStepStatusTone,
   findingSeverityTone,
+  testRunStatusTone,
   toolCallStatusTone,
 } from '@/lib/status-tone';
 import type {
@@ -33,6 +35,7 @@ import type {
   ApiProject,
   ApiTask,
   ApiTestArtifact,
+  ApiTestRun,
   ApiToolCall,
 } from '@/lib/types';
 
@@ -201,6 +204,55 @@ function ArtifactRow({ artifact }: { artifact: ApiTestArtifact }) {
             </pre>
           )}
         </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * Resultado real de `run_tests` (Fase 9 continuação): mostrado quando a
+ * execução tem pelo menos um `testRun` persistido (`run.testRuns`, incluído
+ * no mesmo `GET /agent-runs/:id`). Status/contagens vêm direto do que
+ * `AgentRunTestResultsService` gravou a partir do resultado real computado
+ * por `executeRealTool` — nada é recalculado no cliente.
+ */
+function TestRunCard({ testRun }: { testRun: ApiTestRun }) {
+  const passingSuites = testRun.suites.filter((suite) => suite.status === 'passed').length;
+  const failingSuites = testRun.suites.length - passingSuites;
+
+  return (
+    <li className="rounded-lg border border-border p-3" data-testid="test-run-summary">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={testRunStatusTone(testRun.status)}>
+          <span data-testid="test-run-status">{TEST_RUN_STATUS_LABELS[testRun.status]}</span>
+        </Badge>
+        <span className="text-xs text-muted-foreground">
+          {passingSuites} de {testRun.suites.length} suíte(s) passando
+        </span>
+        {failingSuites > 0 && (
+          <span className="text-xs text-red-600 dark:text-red-400">{failingSuites} falhando</span>
+        )}
+        {testRun.durationMs !== null && (
+          <span className="text-xs text-muted-foreground">{formatDuration(testRun.durationMs)}</span>
+        )}
+      </div>
+
+      {testRun.suites.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-1">
+          {testRun.suites.map((suite) => (
+            <li
+              key={suite.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-2 py-1 text-xs"
+              data-testid="test-suite-row"
+            >
+              <span className="font-mono text-foreground">{suite.name}</span>
+              <span className="text-muted-foreground">
+                {suite.passedCount} passou · {suite.failedCount} falhou
+                {suite.skippedCount > 0 ? ` · ${suite.skippedCount} pulado` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </li>
   );
@@ -485,6 +537,17 @@ export function AgentRunDetailView({
           </ul>
         )}
       </section>
+
+      {run.testRuns.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium">Resultado dos testes</h2>
+          <ul className="mt-2 flex flex-col gap-2">
+            {run.testRuns.map((testRun) => (
+              <TestRunCard key={testRun.id} testRun={testRun} />
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-medium">Artefatos</h2>

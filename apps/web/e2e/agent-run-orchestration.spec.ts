@@ -89,6 +89,16 @@ test.describe('orquestração de execução de IA: fila -> orquestrador -> SSE -
     await reviewerStep.click();
     await expect(reviewerStep.getByText('Alteração proposta revisada')).toBeVisible();
 
+    // Fase 9 continuação — `run_tests` real (test_engineer, spec §12) agora
+    // persiste em `test_runs`/`test_suites`, exibido na seção "Resultado
+    // dos testes": o pipeline já passou pelo `test_engineer` neste ponto
+    // (ele roda ANTES do reviewer, ver `AGENT_PIPELINE`), então o teste real
+    // sobre o fixture `acme-platform-web` (2 arquivos `.test.ts` reais) já
+    // foi computado e persistido.
+    await expect(page.getByTestId('test-run-summary')).toBeVisible();
+    await expect(page.getByTestId('test-run-status')).toHaveText('Passou');
+    await expect(page.getByTestId('test-suite-row')).toHaveCount(2);
+
     await page.getByRole('link', { name: 'Auditoria' }).click();
     await expect(page).toHaveURL('/audit-logs');
     await expect(page.getByText('agent_run.policy_approval_required').first()).toBeVisible();

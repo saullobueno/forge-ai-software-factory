@@ -17,6 +17,7 @@ import {
   FakeRepositoryReader,
   RecordingEventPublisher,
   RecordingGovernanceSink,
+  RecordingTestResultSink,
   RecordingTraceSink,
 } from './test-support/fake-store.ts';
 
@@ -268,6 +269,54 @@ describe('AgentRunOrchestrator', () => {
       ),
     ).toBe(true);
     expect(store.statusHistory.at(-1)).toBe('approval_required');
+  });
+
+  it('persiste o resultado real de run_tests via deps.testResults, derivado do que executeRealTool computou (não hardcoded)', async () => {
+    const { store, repositoryReader } = buildStore();
+    const events = new RecordingEventPublisher();
+    const testResults = new RecordingTestResultSink();
+    const orchestrator = new AgentRunOrchestrator({
+      store,
+      ai: new MockAiProvider(),
+      repositoryReader,
+      events,
+      testResults,
+    });
+
+    await orchestrator.run(RUN_ID, ACTOR);
+
+    // `REPO_FILES` tem um único arquivo de teste (`format-currency.test.ts`)
+    // com 2 chamadas `it(...)` — o mesmo arquivo que `executeRealTool` conta
+    // via regex (ver `real-tool-runner.ts`). Comparado aqui contra o
+    // `toolCall.result` real (não um número fixado à parte), para provar
+    // que o que foi persistido é consistente com o que a ferramenta de
+    // verdade computou.
+    const runTestsCall = store.toolCalls.find((call) => call.toolName === 'run_tests');
+    expect(runTestsCall?.status).toBe('succeeded');
+    const realSuites = (runTestsCall?.result as { suites: Array<{ name: string; passed: number; failed: number }> })
+      .suites;
+
+    expect(testResults.testRuns).toHaveLength(1);
+    const [recorded] = testResults.testRuns;
+    expect(recorded).toEqual(
+      expect.objectContaining({
+        agentRunId: RUN_ID,
+        organizationId: ORG_ID,
+        projectId: PROJECT_ID,
+        triggeredByUserId: null,
+        status: 'passed',
+        durationMs: expect.any(Number),
+      }),
+    );
+    expect(recorded?.suites).toEqual(
+      realSuites.map((suite) => ({
+        name: suite.name,
+        passedCount: suite.passed,
+        failedCount: suite.failed,
+        skippedCount: 0,
+      })),
+    );
+    expect(recorded?.suites).toEqual([{ name: 'src/lib/format-currency.test.ts', passedCount: 2, failedCount: 0, skippedCount: 0 }]);
   });
 
   it('injeta conhecimento recuperado no input dos steps e na requisição enviada ao provedor de IA', async () => {

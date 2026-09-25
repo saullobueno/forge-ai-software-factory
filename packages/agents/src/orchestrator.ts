@@ -7,8 +7,10 @@ import type {
   AgentRunEventPublisher,
   AgentRunGovernanceSink,
   AgentRunStore,
+  AgentRunTestResultSink,
   AgentRunTraceEvent,
   AgentRunTraceSink,
+  AgentTestSuiteOutcome,
   OrchestratorActor,
   RepositoryFileContent,
   RepositoryReader,
@@ -22,6 +24,7 @@ export interface AgentRunOrchestratorDeps {
   events: AgentRunEventPublisher;
   traces?: AgentRunTraceSink;
   governance?: AgentRunGovernanceSink;
+  testResults?: AgentRunTestResultSink;
   /** Injetável para testes; por padrão o relógio real. Só afeta `durationMs` (observabilidade), nunca decisões. */
   clock?: () => Date;
 }
@@ -313,6 +316,17 @@ export class AgentRunOrchestrator {
               durationMs: Math.max(0, clock().getTime() - toolCallStartedAt),
               attributes: { policyDecision: authorization.decision },
             });
+
+            if (proposal.toolName === 'run_tests' && execution.ok) {
+              await this.recordTestRun({
+                agentRunId,
+                organizationId: run.organizationId,
+                projectId: task.projectId,
+                triggeredByUserId: actor.userId ?? null,
+                durationMs: Math.max(0, clock().getTime() - toolCallStartedAt),
+                result: execution.result,
+              });
+            }
           }
 
           const durationMs = Math.max(0, clock().getTime() - startedAt);
@@ -469,5 +483,72 @@ export class AgentRunOrchestrator {
     } catch {
       // Auditoria auxiliar não deve alterar o resultado da execução.
     }
+  }
+
+  /**
+   * Persiste o resultado real de `run_tests` (Fase 9 continuação) em
+   * `test_runs`/`test_suites` via `deps.testResults` — auxiliar ao pipeline
+   * no mesmo sentido de `recordTrace`/`recordPolicyDecision`: o resultado
+   * real de `run_tests` já foi computado e gravado em `toolCall.result`
+   * antes desta chamada (ver o `switch` acima), então uma falha aqui nunca
+   * deve derrubar uma execução que, no fundo, já obteve seu resultado real.
+   * `parseRunTestsResult` degrada graciosamente (não persiste nada) quando
+   * `execution.result` não tem o formato esperado (`{ suites: [...] }`) ou
+   * quando `run_tests` não teve nenhum arquivo de teste para considerar
+   * (ex.: projeto sem repositório configurado) — nada real para registrar.
+   */
+  private async recordTestRun(input: {
+    agentRunId: string;
+    organizationId: string;
+    projectId: string;
+    triggeredByUserId: string | null;
+    durationMs: number;
+    result: Record<string, unknown>;
+  }): Promise<void> {
+    const parsed = this.parseRunTestsResult(input.result);
+    if (!parsed) return;
+
+    try {
+      await this.deps.testResults?.recordTestRun({
+        agentRunId: input.agentRunId,
+        organizationId: input.organizationId,
+        projectId: input.projectId,
+        triggeredByUserId: input.triggeredByUserId,
+        status: parsed.status,
+        durationMs: input.durationMs,
+        suites: parsed.suites,
+      });
+    } catch {
+      // Ver comentário acima: persistência de `test_runs` é auxiliar, nunca
+      // deve alterar o resultado da execução.
+    }
+  }
+
+  /**
+   * Leitura defensiva de `execution.result` (formato produzido por
+   * `executeRealTool` para `run_tests`, ver `real-tool-runner.ts`) — nunca
+   * confia estruturalmente em `Record<string, unknown>` sem checar cada
+   * campo, mesmo sabendo que os dois lados vivem neste mesmo pacote hoje.
+   */
+  private parseRunTestsResult(
+    result: Record<string, unknown>,
+  ): { status: 'passed' | 'failed'; suites: AgentTestSuiteOutcome[] } | null {
+    const rawSuites = result['suites'];
+    if (!Array.isArray(rawSuites)) return null;
+
+    const suites: AgentTestSuiteOutcome[] = [];
+    for (const entry of rawSuites) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const record = entry as Record<string, unknown>;
+      const name = record['name'];
+      const passed = record['passed'];
+      const failed = record['failed'];
+      if (typeof name !== 'string' || typeof passed !== 'number' || typeof failed !== 'number') continue;
+      suites.push({ name, passedCount: passed, failedCount: failed, skippedCount: 0 });
+    }
+    if (suites.length === 0) return null;
+
+    const status: 'passed' | 'failed' = suites.some((suite) => suite.failedCount > 0) ? 'failed' : 'passed';
+    return { status, suites };
   }
 }

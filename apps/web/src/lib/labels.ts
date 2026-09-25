@@ -9,6 +9,7 @@ import type {
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
+  TestRunStatus,
   ToolCallStatus,
 } from '@forge/types';
 
@@ -91,6 +92,15 @@ export const TEST_ARTIFACT_KIND_LABELS: Record<TestArtifactKind, string> = {
   coverage: 'Cobertura',
   screenshot: 'Captura de tela',
   report: 'Relatório',
+};
+
+/** Rótulos em pt-BR (spec §12) — status de uma execução de testes (`test_runs`). */
+export const TEST_RUN_STATUS_LABELS: Record<TestRunStatus, string> = {
+  queued: 'Na fila',
+  running: 'Em execução',
+  passed: 'Passou',
+  failed: 'Falhou',
+  flaky: 'Instável',
 };
 
 export const ENVIRONMENT_KIND_LABELS: Record<EnvironmentKind, string> = {

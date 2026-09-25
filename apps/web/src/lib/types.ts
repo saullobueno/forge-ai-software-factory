@@ -12,6 +12,7 @@ import type {
   TaskPriority,
   TaskStatus,
   TestArtifactKind,
+  TestRunStatus,
   ToolCallStatus,
 } from '@forge/types';
 
@@ -286,6 +287,45 @@ export interface ApiAgentStep {
 
 export interface ApiAgentRunDetail extends ApiAgentRun {
   steps: ApiAgentStep[];
+  testRuns: ApiTestRun[];
+}
+
+/**
+ * Resultado real de `run_tests` persistido (Fase 9 continuação): quando o
+ * step `test_engineer` chama `run_tests` de verdade contra o fixture (ver
+ * `packages/agents/src/real-tool-runner.ts`), o resultado agora também vira
+ * uma linha em `test_runs`/`test_suites`, incluída aqui no mesmo `GET
+ * /agent-runs/:id` já existente. Pode não existir (`testRuns: []`) — ex.:
+ * projeto sem repositório configurado, ou nenhum arquivo `.test.ts`
+ * encontrado.
+ */
+export interface ApiTestSuite {
+  id: string;
+  testRunId: string;
+  name: string;
+  status: TestRunStatus;
+  passedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  durationMs: number | null;
+  isFlaky: boolean;
+  createdAt: string;
+}
+
+export interface ApiTestRun {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  workspaceId: string | null;
+  agentRunId: string | null;
+  triggeredByUserId: string | null;
+  status: TestRunStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  suites: ApiTestSuite[];
+  artifacts: ApiTestArtifact[];
 }
 
 export interface ApiTestArtifact {
