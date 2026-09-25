@@ -6,6 +6,7 @@ import type { MessageEvent } from '@nestjs/common';
 import type { AgentRunStatus } from '@forge/types';
 import { concat, map, type Observable, of } from 'rxjs';
 import { AgentsRepository } from '../agents/agents.repository.js';
+import { AiUsageService } from '../ai-usage/ai-usage.service.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
@@ -27,6 +28,7 @@ export class AgentRunsService {
     private readonly agentRunApprovalsRepository: AgentRunApprovalsRepository,
     private readonly agentRunWorkspace: AgentRunWorkspaceService,
     private readonly agentRunGit: AgentRunGitService,
+    private readonly aiUsageService: AiUsageService,
   ) {}
 
   /**
@@ -53,6 +55,7 @@ export class AgentRunsService {
         'Nenhum agente de IA está configurado para esta organização.',
       );
     }
+    await this.aiUsageService.assertWithinOrganizationLimits(task.organizationId);
 
     const created = await this.agentRunsRepository.create({
       organizationId: task.organizationId,

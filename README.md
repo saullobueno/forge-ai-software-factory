@@ -149,7 +149,8 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 - A UI `/ai-playground` permite editar prompt/dataset, selecionar modelos e visualizar scorecard sem chamadas externas ou custo real.
 - O orquestrador de agentes suporta providers reais por env: `AI_PROVIDER=gemini` ou `AI_PROVIDER=groq`, mantendo `mock` como default local/teste. Cada step gerado persiste `ai_messages`/`ai_usages` com provider, modelo, tokens e custo estimado, e o detalhe do run exibe esse uso.
 - `GET /ai-usage/summary` e a UI `/ai-usage` agregam tokens, chamadas, custo estimado, provider/modelo e eventos recentes por organização, com permissão `audit_log:read`.
-- Ainda faltam limites por organização/usuário, métricas agregadas de latência, datasets versionados, embeddings/evals avançadas e adapter Anthropic se necessário.
+- `AI_ORG_DAILY_TOKEN_LIMIT` e `AI_ORG_DAILY_COST_LIMIT_USD` bloqueiam novas execuções quando a organização já atingiu o teto das últimas 24h.
+- Ainda faltam limites por usuário, métricas agregadas de latência, datasets versionados, embeddings/evals avançadas e adapter Anthropic se necessário.
 
 ## Segurança e Observabilidade (Fase 14)
 

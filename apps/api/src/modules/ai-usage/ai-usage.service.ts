@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { readAiUsageLimits, type AiUsageLimits } from '../../infrastructure/config/env.js';
 import { AiUsageRepository, type AiUsageRow } from './ai-usage.repository.js';
 
 export interface AiUsageTotals {
@@ -42,6 +43,8 @@ const EMPTY_TOTALS: AiUsageTotals = {
   costUsd: 0,
   callCount: 0,
 };
+
+const DAILY_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function addUsage(target: AiUsageTotals, usage: AiUsageRow): void {
   target.promptTokens += usage.promptTokens;
@@ -91,5 +94,39 @@ export class AiUsageService {
       })),
       sampleSize: usages.length,
     };
+  }
+
+  async assertWithinOrganizationLimits(organizationId: string): Promise<void> {
+    const limits = readAiUsageLimits();
+    if (!limits.dailyTokenLimit && !limits.dailyCostLimitUsd) return;
+
+    const windowStartedAt = new Date(Date.now() - DAILY_LIMIT_WINDOW_MS);
+    const usages = await this.aiUsageRepository.listByOrganizationSince(organizationId, windowStartedAt);
+    const totals = { ...EMPTY_TOTALS };
+    for (const usage of usages) {
+      addUsage(totals, usage);
+    }
+
+    const exceeded = this.getExceededLimits(totals, limits);
+    if (exceeded.length === 0) return;
+
+    throw new HttpException({
+      message: 'Limite diário de uso de IA atingido para esta organização.',
+      limits,
+      totals,
+      exceeded,
+      windowStartedAt,
+    }, HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  private getExceededLimits(totals: AiUsageTotals, limits: AiUsageLimits): string[] {
+    const exceeded: string[] = [];
+    if (limits.dailyTokenLimit !== null && totals.totalTokens >= limits.dailyTokenLimit) {
+      exceeded.push('tokens');
+    }
+    if (limits.dailyCostLimitUsd !== null && totals.costUsd >= limits.dailyCostLimitUsd) {
+      exceeded.push('costUsd');
+    }
+    return exceeded;
   }
 }

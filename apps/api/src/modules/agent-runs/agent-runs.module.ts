@@ -6,6 +6,7 @@ import { ArtifactStorageService } from '../artifacts/artifact-storage.service.js
 import { ArtifactsModule } from '../artifacts/artifacts.module.js';
 import { AuditLogWriterModule } from '../audit-logs/audit-log-writer.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { AiUsageModule } from '../ai-usage/ai-usage.module.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunGitRepository } from './agent-run-git.repository.js';
@@ -37,7 +38,7 @@ import { AI_PROVIDER } from './ai-provider.token.js';
  * usa — registrá-lo direto aqui é mais simples e igualmente seguro.
  */
 @Module({
-  imports: [AgentsModule, AuthModule, ArtifactsModule, AuditLogWriterModule],
+  imports: [AgentsModule, AuthModule, ArtifactsModule, AuditLogWriterModule, AiUsageModule],
   controllers: [AgentRunsController],
   providers: [
     AgentRunsRepository,

@@ -6,6 +6,7 @@ import type { TestApp } from './support/bootstrap-app.js';
 let testApp: TestApp;
 let techLeadToken: string;
 let developerToken: string;
+let taskAId: string;
 
 const password = 'demo1234';
 
@@ -44,6 +45,25 @@ beforeAll(async () => {
     ])
     .returning();
   if (!techLead || !developer) throw new Error('users não inseridos');
+
+  const [projectA] = await testApp.db
+    .insert(testApp.schema.projects)
+    .values({ organizationId: organizationA.id, name: 'AI Usage Project A', slug: 'ai-usage-project-a' })
+    .returning();
+  if (!projectA) throw new Error('project não inserido');
+
+  const [taskA] = await testApp.db
+    .insert(testApp.schema.tasks)
+    .values({ organizationId: organizationA.id, projectId: projectA.id, title: 'Testar limite de uso IA' })
+    .returning();
+  if (!taskA) throw new Error('task não inserida');
+  taskAId = taskA.id;
+
+  const [agentA] = await testApp.db
+    .insert(testApp.schema.agents)
+    .values({ organizationId: organizationA.id, role: 'planner', name: 'Planner Usage Limits' })
+    .returning();
+  if (!agentA) throw new Error('agent não inserido');
 
   await testApp.db.insert(testApp.schema.aiUsages).values([
     {
@@ -149,5 +169,23 @@ describe('GET /ai-usage/summary', () => {
 
   it('retorna 401 sem token', async () => {
     await request(testApp.app.getHttpServer()).get('/ai-usage/summary').expect(401);
+  });
+});
+
+describe('limites de uso de IA', () => {
+  it('bloqueia nova execução quando o limite diário de tokens da organização já foi atingido', async () => {
+    process.env['AI_ORG_DAILY_TOKEN_LIMIT'] = '400';
+    try {
+      const response = await request(testApp.app.getHttpServer())
+        .post(`/tasks/${taskAId}/agent-runs`)
+        .set('Authorization', `Bearer ${techLeadToken}`)
+        .expect(429);
+
+      expect(response.body.message).toBe('Limite diário de uso de IA atingido para esta organização.');
+      expect(response.body.exceeded).toContain('tokens');
+      expect(response.body.totals.totalTokens).toBe(475);
+    } finally {
+      delete process.env['AI_ORG_DAILY_TOKEN_LIMIT'];
+    }
   });
 });

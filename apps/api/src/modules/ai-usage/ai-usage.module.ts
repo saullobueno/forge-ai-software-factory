@@ -8,5 +8,6 @@ import { AiUsageService } from './ai-usage.service.js';
   imports: [AuthModule],
   controllers: [AiUsageController],
   providers: [AiUsageRepository, AiUsageService],
+  exports: [AiUsageService],
 })
 export class AiUsageModule {}

@@ -13,7 +13,7 @@ Este é o resumo curto de retomada. O mapa completo continua em [`PROGRESS.md`](
 | Fase 10 | Continuada e verificada | Escritas aprovadas geram branch/commit/PR via `MockGitProvider` e persistem snapshots, diffs, code changes e pull request. GitHub real segue fora de escopo. |
 | Fase 11 | Continuada e verificada | Deployments demo podem ser solicitados; ambientes protegidos têm gate approve/reject por `admin`. Deploy real externo ainda pendente. |
 | Fase 12 | Continuada e verificada | Conhecimento persistido/buscável e conectado ao orquestrador como `knowledgeContext`; falta indexador automático/embeddings. |
-| Fase 13 | Continuada e verificada | Providers `gemini`/`groq`, uso/custo por step em `ai_usages`, detalhe do run e dashboard `/ai-usage`; faltam limites e métricas agregadas de latência. |
+| Fase 13 | Continuada e verificada | Providers `gemini`/`groq`, uso/custo por step em `ai_usages`, dashboard `/ai-usage` e limites diários por organização via env; faltam limites por usuário e métricas agregadas de latência. |
 | Fase 14 | Continuada e verificada | OpenTelemetry real conectado para HTTP + spans de agent steps/tool calls; faltam métricas, trace propagation web->api e mais audit logs. |
 | Fase 15 | Continuada e verificada | Drawer mobile, axe ampliado, responsividade e Lighthouse com budgets locais; falta budget de bundle/chunk em CI. |
 | Fases 16-18 | Concluídas e commitadas | QA/handoff, aprovação humana de agent runs e escrita real isolada pós-aprovação. |
@@ -90,7 +90,7 @@ Notas de ambiente:
 - `run_tests` já executa de verdade no pipeline inicial quando há repositório e persiste o resultado, mas `run_tests` depois de aprovação e `run_command` real ainda dependem de runner isolado seguro.
 - Git mock está conectado; GitHub real requer credenciais/decisão de permissões.
 - Deploy demo e gates existem; deploy real em Render/Vercel/afins ainda precisa configuração/implementação.
-- Gemini/Groq estão disponíveis por env e há dashboard inicial de custo/token; tráfego real amplo ainda pede limites por organização/usuário e métricas de latência.
+- Gemini/Groq estão disponíveis por env, há dashboard inicial de custo/token e limites diários por organização; tráfego real amplo ainda pede limites por usuário e métricas de latência.
 - OpenTelemetry exporta traces; métricas, dashboards e propagação de trace web->api continuam pendentes.
 
 ## Próximas Frentes Seguras
@@ -98,7 +98,7 @@ Notas de ambiente:
 | Prioridade | Frente | Próximo passo recomendado |
 |---|---|---|
 | Alta | Produção sem Docker local | Configurar Neon/Upstash/Render/Vercel em staging e validar migrations/seed/deploy. |
-| Alta | Fase 13 operacional | Adicionar limites simples por env/tenant e métricas agregadas de latência. |
+| Alta | Fase 13 operacional | Adicionar limites por usuário e métricas agregadas de latência. |
 | Média | Fase 12 | Indexador lexical automático para docs/repositório; depois embeddings/vector store. |
 | Média | Fase 14 | Métricas OTel, trace propagation web->api e audit logs nos endpoints mutáveis restantes. |
 | Média | Fase 11 | Deploy real externo com logs/saúde por ambiente. |

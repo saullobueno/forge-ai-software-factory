@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { desc, eq, schema } from '@forge/database';
+import { and, desc, eq, gt, schema } from '@forge/database';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type AiUsageRow = typeof schema.aiUsages.$inferSelect;
@@ -11,6 +11,14 @@ export class AiUsageRepository {
   async listRecentByOrganization(organizationId: string, limit = 500): Promise<AiUsageRow[]> {
     return this.database.db.query.aiUsages.findMany({
       where: eq(schema.aiUsages.organizationId, organizationId),
+      orderBy: [desc(schema.aiUsages.createdAt), desc(schema.aiUsages.id)],
+      limit,
+    });
+  }
+
+  async listByOrganizationSince(organizationId: string, since: Date, limit = 5_000): Promise<AiUsageRow[]> {
+    return this.database.db.query.aiUsages.findMany({
+      where: and(eq(schema.aiUsages.organizationId, organizationId), gt(schema.aiUsages.createdAt, since)),
       orderBy: [desc(schema.aiUsages.createdAt), desc(schema.aiUsages.id)],
       limit,
     });
