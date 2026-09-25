@@ -55,6 +55,8 @@ Continuação da Fase 13 #6 nesta sessão: `/ai-usage` passou a correlacionar `a
 
 Validações direcionadas da continuação da Fase 13 #6: `pnpm --filter @forge/api typecheck` → passou; `pnpm --filter @forge/web typecheck` → passou; `pnpm --filter @forge/api test:e2e -- ai-usage.e2e-spec.ts` → **4/4** passou; `pnpm --filter @forge/api lint` → passou; `pnpm --filter @forge/web lint` → passou; `git diff --check` → passou com avisos normais de CRLF.
 
+Validação adicional da tela `/ai-usage`: `pnpm --filter @forge/web test:e2e -- ai-usage.spec.ts` → **1/1** passou, cobrindo login real, navegação pelo menu "Uso IA" e renderização dos cards/tabelas principais. O comando imprimiu o ruído conhecido de teardown `[ELIFECYCLE]` do webServer, mas retornou código 0.
+
 ## Episódio: sessão paralela retomou o trabalho a partir deste arquivo (2026-09-24)
 
 Depois da Fase 18, o usuário pediu explicitamente para outra sessão (fora desta conversa) se atualizar a partir deste `PROGRESS.md` e continuar. Essa sessão testou o app manualmente no navegador (não só automatizado) e achou + corrigiu bugs reais de uso — ver seção abaixo. Ao retomar esta sessão (Claude), o mesmo protocolo de sempre: `git status --short` primeiro (achou ~20 arquivos não commitados), verificação independente completa (build/lint/typecheck/test + e2e + Playwright, todos verdes, incluindo confirmar que uma falha isolada em `knowledge.e2e-spec.ts` era o mesmo flake de contenção de PGlite já documentado, não uma regressão), leitura do código dos pontos sensíveis (fluxo de deployment, módulo de conhecimento), e separação em commits temáticos antes de dar o retrato ao usuário.
