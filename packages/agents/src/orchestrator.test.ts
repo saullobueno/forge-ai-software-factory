@@ -131,6 +131,10 @@ describe('AgentRunOrchestrator', () => {
     );
     expect(store.toolCalls.some((call) => call.status === 'pending')).toBe(false);
     expect(events.events.at(-1)).toEqual({ agentRunId: RUN_ID, status: 'completed' });
+    // Pass-through por "approval_required" sem nada pendente: nunca deveria
+    // gerar uma linha `pending` em `approvals` (Fase 17 continuação #2) —
+    // a execução nunca ficou de verdade "aguardando decisão humana".
+    expect(store.pendingApprovals).toEqual([]);
   });
 
   it('para em "approval_required" quando o implementer propõe uma alteração de escrita', async () => {
@@ -167,6 +171,23 @@ describe('AgentRunOrchestrator', () => {
         toolName: 'apply_patch',
       }),
     ]);
+    // A execução ficou de verdade parada em "approval_required" — deve ter
+    // gravado a linha `pending` correspondente (Fase 17 continuação #2),
+    // com o mesmo `requestedByUserId` do `actor` que disparou `run()`
+    // (`ACTOR` neste teste não tem `userId`, então `null` é o valor
+    // correto, não um bug).
+    expect(store.pendingApprovals).toEqual([{ agentRunId: RUN_ID, requestedByUserId: null }]);
+  });
+
+  it('propaga o userId real do actor que disparou a execução para a approval pendente', async () => {
+    const { store, repositoryReader } = buildStore();
+    const events = new RecordingEventPublisher();
+    const orchestrator = new AgentRunOrchestrator({ store, ai: new MockAiProvider(), repositoryReader, events });
+    const actorWithUser: OrchestratorActor = { ...ACTOR, userId: 'user-42' };
+
+    await orchestrator.run(RUN_ID, actorWithUser);
+
+    expect(store.pendingApprovals).toEqual([{ agentRunId: RUN_ID, requestedByUserId: 'user-42' }]);
   });
 
   it('para de avançar quando a execução é cancelada por fora, sem sobrescrever o cancelamento', async () => {

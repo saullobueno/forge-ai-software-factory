@@ -30,13 +30,4 @@ export class AuditLogsService {
       metadata: input.metadata ?? {},
     });
   }
-
-  async findLatestActorForTarget(
-    organizationId: string,
-    targetType: string,
-    targetId: string,
-    action: string,
-  ): Promise<string | null> {
-    return this.auditLogsRepository.findLatestActorForTarget(organizationId, targetType, targetId, action);
-  }
 }

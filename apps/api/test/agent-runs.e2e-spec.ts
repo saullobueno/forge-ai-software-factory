@@ -47,6 +47,8 @@ let runApprovalForRejectId: string;
 let runApprovalForConflictId: string;
 let toolCallForApproveId: string;
 let toolCallForRejectId: string;
+let pendingApprovalForApproveId: string;
+let pendingApprovalForRejectId: string;
 
 let artifactContentId: string;
 let artifactTraversalId: string;
@@ -344,20 +346,48 @@ beforeAll(async () => {
   toolCallForApproveId = toolCallForApprove.id;
   toolCallForRejectId = toolCallForReject.id;
 
-  // Audit log de disparo (`agent_run.triggered`) só para a execução do
-  // caminho de aprovação — prova que `AgentRunsService.approve` consegue
-  // recuperar `requestedByUserId` a partir dele. A execução do caminho de
-  // rejeição NÃO tem esse audit log, de propósito: prova o fallback para
-  // `null` quando a informação não existe.
-  await testApp.db.insert(testApp.schema.auditLogs).values({
-    organizationId: organizationA.id,
-    actorType: 'user',
-    actorUserId: developerA.id,
-    action: 'agent_run.triggered',
-    targetType: 'agent_run',
-    targetId: runApprovalForApprove.id,
-    metadata: { taskId: taskA.id, agentId: agentA.id, status: 'queued' },
-  });
+  // `approvals` `pending` para as três execuções acima — Fase 17
+  // continuação #2: em produção esta linha é gravada por
+  // `AgentRunOrchestrator.finishPipeline` (via
+  // `AgentRunOrchestrationStore.createPendingApproval`) no exato momento em
+  // que a execução ENTRA em `approval_required`, com `requestedByUserId`
+  // vindo do `actor.userId` que disparou `run()`. Como estas três execuções
+  // são inseridas diretamente no banco (nunca passaram pelo orquestrador de
+  // verdade), a linha `pending` precisa ser semeada manualmente para
+  // refletir o mesmo invariante que uma execução real teria. A execução do
+  // caminho de aprovação tem `requestedByUserId` real (`developerA.id`,
+  // simulando o usuário que disparou); a do caminho de rejeição tem
+  // `requestedByUserId: null` de propósito — prova o fallback já testado
+  // para quando essa informação não está disponível.
+  const [pendingApprovalForApprove, pendingApprovalForReject] = await testApp.db
+    .insert(testApp.schema.approvals)
+    .values([
+      {
+        organizationId: organizationA.id,
+        subjectType: 'agent_run',
+        subjectId: runApprovalForApprove.id,
+        status: 'pending',
+        requestedByUserId: developerA.id,
+      },
+      {
+        organizationId: organizationA.id,
+        subjectType: 'agent_run',
+        subjectId: runApprovalForReject.id,
+        status: 'pending',
+        requestedByUserId: null,
+      },
+      {
+        organizationId: organizationA.id,
+        subjectType: 'agent_run',
+        subjectId: runApprovalForConflict.id,
+        status: 'pending',
+        requestedByUserId: null,
+      },
+    ])
+    .returning();
+  if (!pendingApprovalForApprove || !pendingApprovalForReject) throw new Error('approvals pendentes não inseridas');
+  pendingApprovalForApproveId = pendingApprovalForApprove.id;
+  pendingApprovalForRejectId = pendingApprovalForReject.id;
 
   const [reviewerStep] = await testApp.db
     .insert(testApp.schema.agentSteps)
@@ -674,20 +704,26 @@ describe('POST /agent-runs/:id/approve', () => {
     expect(toolCall?.status).toBe('succeeded');
 
     const { and, eq } = await import('@forge/database');
-    const [approval] = await testApp.db.query.approvals.findMany({
+    const approvalsForRun = await testApp.db.query.approvals.findMany({
       where: and(
         eq(testApp.schema.approvals.subjectType, 'agent_run'),
         eq(testApp.schema.approvals.subjectId, runApprovalForApproveId),
       ),
-      limit: 1,
     });
+    // UPDATE na MESMA linha pendente (Fase 17 continuação #2), não INSERT de
+    // uma linha nova já decidida — exatamente uma linha existe para este
+    // agentRun, e é a mesma que o `beforeAll` inseriu como `pending`.
+    expect(approvalsForRun).toHaveLength(1);
+    const [approval] = approvalsForRun;
+    expect(approval?.id).toBe(pendingApprovalForApproveId);
     expect(approval).toMatchObject({
       organizationId: organizationAId,
       subjectType: 'agent_run',
       subjectId: runApprovalForApproveId,
       status: 'approved',
-      // `requestedByUserId` recuperado do audit log `agent_run.triggered`
-      // inserido no `beforeAll` para esta execução especificamente.
+      // `requestedByUserId` preservado da linha `pending` original (capturado
+      // no momento em que a execução entrou em `approval_required`, não
+      // recuperado depois via audit log).
       requestedByUserId: developerAId,
       approvedByUserId: techLeadAId,
       reason: 'Diff revisado, seguro para aplicar.',
@@ -764,19 +800,23 @@ describe('POST /agent-runs/:id/reject', () => {
     expect(toolCall?.status).toBe('rejected');
 
     const { and, eq } = await import('@forge/database');
-    const [approval] = await testApp.db.query.approvals.findMany({
+    const approvalsForRun = await testApp.db.query.approvals.findMany({
       where: and(
         eq(testApp.schema.approvals.subjectType, 'agent_run'),
         eq(testApp.schema.approvals.subjectId, runApprovalForRejectId),
       ),
-      limit: 1,
     });
+    // Mesma prova de UPDATE-não-INSERT do teste de aprovação acima.
+    expect(approvalsForRun).toHaveLength(1);
+    const [approval] = approvalsForRun;
+    expect(approval?.id).toBe(pendingApprovalForRejectId);
     expect(approval).toMatchObject({
       organizationId: organizationAId,
       status: 'rejected',
-      // Nenhum audit log `agent_run.triggered` foi inserido para esta
-      // execução no `beforeAll` — prova o fallback para `null` quando a
-      // origem do disparo não pode ser recuperada.
+      // A linha `pending` original (`beforeAll`) já nasceu com
+      // `requestedByUserId: null` de propósito — prova que o valor
+      // capturado na criação da approval pendente é preservado até a
+      // decisão, sem tentar redescobri-lo via audit log.
       requestedByUserId: null,
       approvedByUserId: techLeadAId,
     });

@@ -387,7 +387,7 @@ export class AgentRunOrchestrator {
         }
       }
 
-      await this.finishPipeline(agentRunId, hasPendingApproval);
+      await this.finishPipeline(agentRunId, hasPendingApproval, actor.userId ?? null);
     } catch {
       await this.transitionToFailed(agentRunId);
     }
@@ -399,8 +399,23 @@ export class AgentRunOrchestrator {
    * nada nesta execução ficou pendente de aprovação humana, avança sozinho
    * para `completed`; quando algo ficou, para ali de propósito (Fase 11
    * cuida do fluxo de aprovação em si).
+   *
+   * **Fase 17 continuação #2**: só quando a execução REALMENTE fica parada
+   * (`hasPendingApproval === true`) uma linha `pending` é gravada em
+   * `approvals` (`store.createPendingApproval`) — o pass-through abaixo
+   * (`review -> approval_required -> completed` sem nada pendente) nunca
+   * cria essa linha, porque nunca existiu de verdade um estado "aguardando
+   * decisão humana" ali. `requestedByUserId` é o mesmo `actor.userId` que
+   * disparou `run()` (propagado desde `POST /tasks/:id/agent-runs`) — a
+   * mesma identidade que o audit log `agent_run.triggered` já registra,
+   * capturada aqui de forma direta em vez de recuperada depois por consulta
+   * reativa ao audit log.
    */
-  private async finishPipeline(agentRunId: string, hasPendingApproval: boolean): Promise<void> {
+  private async finishPipeline(
+    agentRunId: string,
+    hasPendingApproval: boolean,
+    requestedByUserId: string | null,
+  ): Promise<void> {
     const { store, events } = this.deps;
 
     const status = await store.getStatus(agentRunId);
@@ -414,7 +429,10 @@ export class AgentRunOrchestrator {
     await store.setStatus(agentRunId, 'approval_required');
     events.publish({ agentRunId, status: 'approval_required' });
 
-    if (hasPendingApproval) return;
+    if (hasPendingApproval) {
+      await store.createPendingApproval({ agentRunId, requestedByUserId });
+      return;
+    }
 
     const afterApproval = await store.getStatus(agentRunId);
     if (afterApproval !== 'approval_required') return; // cancelado entre as duas escritas

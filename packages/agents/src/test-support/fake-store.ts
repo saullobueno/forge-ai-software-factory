@@ -54,6 +54,7 @@ export class FakeAgentRunStore {
   readonly steps: RecordedStep[] = [];
   readonly toolCalls: RecordedToolCall[] = [];
   readonly aiUsages: RecordAiUsageInput[] = [];
+  readonly pendingApprovals: { agentRunId: string; requestedByUserId: string | null }[] = [];
   totalTokens = 0;
   totalCostUsd = 0;
 
@@ -151,6 +152,10 @@ export class FakeAgentRunStore {
   async accumulateUsage(_agentRunId: string, tokens: number, costUsd: number): Promise<void> {
     this.totalTokens += tokens;
     this.totalCostUsd += costUsd;
+  }
+
+  async createPendingApproval(input: { agentRunId: string; requestedByUserId: string | null }): Promise<void> {
+    this.pendingApprovals.push(input);
   }
 }
 

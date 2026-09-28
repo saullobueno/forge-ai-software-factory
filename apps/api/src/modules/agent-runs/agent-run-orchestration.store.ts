@@ -17,6 +17,7 @@ import type {
 } from '@forge/agents';
 import type { AgentRole, AgentRunStatus, AgentToolName } from '@forge/types';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
+import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 
 const TERMINAL_STATUSES: readonly AgentRunStatus[] = ['completed', 'failed', 'cancelled'];
 
@@ -29,7 +30,10 @@ const TERMINAL_STATUSES: readonly AgentRunStatus[] = ['completed', 'failed', 'ca
  */
 @Injectable()
 export class AgentRunOrchestrationStore implements AgentRunStore {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly agentRunApprovals: AgentRunApprovalsRepository,
+  ) {}
 
   async getAgentRun(agentRunId: string): Promise<AgentRunContext | undefined> {
     const row = await this.database.db.query.agentRuns.findFirst({
@@ -271,5 +275,29 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
         updatedAt: new Date(),
       })
       .where(eq(schema.agentRuns.id, agentRunId));
+  }
+
+  /**
+   * Implementa a porta `AgentRunStore.createPendingApproval` (Fase 17
+   * continuação #2) delegando para `AgentRunApprovalsRepository.createPending`
+   * — esta classe não reimplementa a escrita em `approvals`, só resolve
+   * `organizationId` (a porta recebe só `agentRunId`, sem tenant, mesmo
+   * contrato mínimo de `getStatus`) a partir da própria linha de
+   * `agentRuns` antes de delegar. `undefined` (run já removido/nunca
+   * existiu) degrada graciosamente sem lançar — mesmo idioma já usado por
+   * outros pontos auxiliares do orquestrador.
+   */
+  async createPendingApproval(input: { agentRunId: string; requestedByUserId: string | null }): Promise<void> {
+    const run = await this.database.db.query.agentRuns.findFirst({
+      where: eq(schema.agentRuns.id, input.agentRunId),
+      columns: { organizationId: true },
+    });
+    if (!run) return;
+
+    await this.agentRunApprovals.createPending({
+      organizationId: run.organizationId,
+      agentRunId: input.agentRunId,
+      requestedByUserId: input.requestedByUserId,
+    });
   }
 }

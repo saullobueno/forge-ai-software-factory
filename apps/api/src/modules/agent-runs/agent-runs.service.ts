@@ -217,17 +217,24 @@ export class AgentRunsService {
     const updated = await this.agentRunsRepository.updateStatus(id, targetStatus);
     this.agentRunEvents.publish({ agentRunId: id, status: updated.status });
 
-    const requestedByUserId = await this.auditLogsService.findLatestActorForTarget(
-      organizationId,
-      'agent_run',
-      id,
-      'agent_run.triggered',
-    );
-    await this.agentRunApprovalsRepository.create({
-      organizationId,
-      agentRunId: id,
+    // A `approval` já nasceu `pending` quando esta execução ENTROU em
+    // `approval_required` (`AgentRunOrchestrator.finishPipeline` ->
+    // `AgentRunOrchestrationStore.createPendingApproval`, Fase 17
+    // continuação #2) — decidir é um UPDATE nessa MESMA linha, mesmo
+    // padrão de `EnvironmentsService`/`decideDeploymentApproval`. O
+    // fallback de criar uma linha pendente aqui (`requestedByUserId: null`)
+    // só existe para dados legados/seedados manualmente que alcançaram
+    // `approval_required` sem passar pelo orquestrador real (ex.: alguns
+    // fixtures de teste) — nunca deveria acontecer em uma execução real.
+    const pendingApproval =
+      (await this.agentRunApprovalsRepository.findPendingByAgentRunId(id, organizationId)) ??
+      (await this.agentRunApprovalsRepository.createPending({
+        organizationId,
+        agentRunId: id,
+        requestedByUserId: null,
+      }));
+    await this.agentRunApprovalsRepository.decide(pendingApproval.id, organizationId, {
       status: decision,
-      requestedByUserId,
       approvedByUserId: actorUserId,
       reason,
     });

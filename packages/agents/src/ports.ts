@@ -255,6 +255,20 @@ export interface AgentRunStore {
   completeToolCall(toolCallId: string, update: CompleteToolCallInput): Promise<void>;
   recordAiUsage(input: RecordAiUsageInput): Promise<void>;
   accumulateUsage(agentRunId: string, tokens: number, costUsd: number): Promise<void>;
+  /**
+   * Grava um registro `pending` em `approvals` no exato momento em que a
+   * execução PARA de verdade em `approval_required` (Fase 17 continuação
+   * #2 — painel de aprovações pendentes cross-execução). Chamado só pelo
+   * caminho de `AgentRunOrchestrator.finishPipeline` que efetivamente fica
+   * parado ali (`hasPendingApproval === true`), nunca pelo pass-through
+   * momentâneo por onde toda execução passa antes de `completed` — esse
+   * segundo caso nunca fica "aguardando decisão humana" de verdade, então
+   * não deveria gerar uma linha pendente. Mesmo padrão já usado por
+   * `EnvironmentsRepository.createPendingDeploymentApproval`: a `approval`
+   * nasce pendente no momento em que o estado realmente entra em espera,
+   * não só no momento da decisão.
+   */
+  createPendingApproval(input: { agentRunId: string; requestedByUserId: string | null }): Promise<void>;
 }
 
 export interface RepositoryFileContent {
