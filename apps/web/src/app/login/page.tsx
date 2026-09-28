@@ -8,6 +8,17 @@ import { useForm } from 'react-hook-form';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { ApiError } from '@/lib/api-client';
 
+// Credenciais do seed demo (packages/database/src/seed/run-seed.ts) —
+// organização fictícia "Acme Platform", nunca dados reais. Exibidas e
+// pré-preenchidas de propósito: este é um portfólio público, o objetivo é
+// deixar qualquer visitante testar o produto sem precisar criar conta.
+const DEMO_ACCOUNTS = [
+  { email: 'tech-lead@acme-platform.example', password: 'demo1234', role: 'Tech Lead' },
+  { email: 'platform@acme-platform.example', password: 'demo1234', role: 'Platform Engineer' },
+  { email: 'dev@acme-platform.example', password: 'demo1234', role: 'Developer' },
+  { email: 'admin@acme-platform.example', password: 'demo1234', role: 'Admin' },
+] as const;
+
 export default function LoginPage() {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
@@ -15,7 +26,10 @@ export default function LoginPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginRequest>({ resolver: zodResolver(loginRequestSchema) });
+  } = useForm<LoginRequest>({
+    resolver: zodResolver(loginRequestSchema),
+    defaultValues: { email: DEMO_ACCOUNTS[0].email, password: DEMO_ACCOUNTS[0].password },
+  });
 
   const onSubmit = async (data: LoginRequest) => {
     setFormError(null);
@@ -55,60 +69,72 @@ export default function LoginPage() {
       </header>
 
       <main className="flex flex-1 items-center justify-center px-6">
-        <form
-          onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-          noValidate
-          className="w-full max-w-sm space-y-5"
-        >
-          <div className="space-y-1.5 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">Entrar no Forge</h1>
-            <p className="text-sm text-muted-foreground">Use as credenciais da sua organização.</p>
-          </div>
+        <div className="w-full max-w-sm space-y-5 rounded-lg border border-border p-6">
+          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate className="space-y-5">
+            <div className="space-y-1.5 text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">Entrar no Forge</h1>
+              <p className="text-sm text-muted-foreground">Use as credenciais da sua organização.</p>
+            </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              {...register('email')}
-            />
-            {errors.email && <p className="text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>}
-          </div>
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                {...register('email')}
+              />
+              {errors.email && <p className="text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>}
+            </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="password" className="text-sm font-medium">
-              Senha
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              {...register('password')}
-            />
-            {errors.password && (
-              <p className="text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-sm font-medium">
+                Senha
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                {...register('password')}
+              />
+              {errors.password && (
+                <p className="text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
+              )}
+            </div>
+
+            {formError && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {formError}
+              </p>
             )}
-          </div>
 
-          {formError && (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-              {formError}
-            </p>
-          )}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {isSubmitting ? 'Entrando…' : 'Entrar'}
+            </button>
+          </form>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
-            {isSubmitting ? 'Entrando…' : 'Entrar'}
-          </button>
-        </form>
+          <footer className="space-y-2 border-t border-border pt-4 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Credenciais de demonstração</p>
+            <ul className="space-y-1">
+              {DEMO_ACCOUNTS.map((account) => (
+                <li key={account.email} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <span className="font-mono">{account.email}</span>
+                  <span className="font-mono whitespace-nowrap">
+                    {account.password} · {account.role}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </footer>
+        </div>
       </main>
     </div>
   );
