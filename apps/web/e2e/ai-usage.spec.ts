@@ -16,15 +16,24 @@ test.describe('uso de IA', () => {
 
     await expect(page).toHaveURL(/\/ai-usage$/);
     await expect(page.getByRole('heading', { name: 'Uso IA' })).toBeVisible();
-    // `exact: true` (mesmo idioma já usado em outras specs, ex.
-    // `agent-run-orchestration.spec.ts`): sem isso, o locator também casa a
-    // frase descritiva "Tokens, custo estimado e provedores usados..." logo
-    // acima do card — bug pré-existente na própria spec, não relacionado a
-    // conhecimento/indexação, encontrado ao rodar a suíte completa.
-    await expect(page.getByText('Custo estimado', { exact: true })).toBeVisible();
-    await expect(page.getByText('Tokens totais')).toBeVisible();
-    await expect(page.getByText('Latência média')).toBeVisible();
+    // Escopado ao card de totais da ORGANIZAÇÃO (`data-testid`, Fase 13
+    // continuação #7): desde que a seção "Meu uso" (abaixo) foi adicionada,
+    // a página tem DUAS ocorrências de "Custo estimado"/"Tokens totais" —
+    // um `getByText` sem escopo colidiria em modo estrito. Mesmo raciocínio
+    // já documentado nesta spec antes da Fase 13 continuação #7 (a frase
+    // descritiva "Tokens, custo estimado e provedores usados..." também já
+    // colidia com o texto solto do card).
+    const orgTotals = page.getByTestId('org-ai-usage-totals');
+    await expect(orgTotals.getByText('Custo estimado', { exact: true })).toBeVisible();
+    await expect(orgTotals.getByText('Tokens totais')).toBeVisible();
+    await expect(orgTotals.getByText('Latência média')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Por provedor e modelo' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Eventos recentes' })).toBeVisible();
+
+    // "Meu uso" (Fase 13 continuação #7, `GET /ai-usage/me`): visível para
+    // qualquer usuário autenticado, independente de `audit_log:read`.
+    const myUsage = page.getByTestId('my-ai-usage');
+    await expect(myUsage.getByRole('heading', { name: 'Meu uso (últimas 24h)' })).toBeVisible();
+    await expect(myUsage.getByText('Custo estimado', { exact: true })).toBeVisible();
   });
 });

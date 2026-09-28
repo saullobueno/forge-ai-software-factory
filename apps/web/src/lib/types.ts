@@ -421,6 +421,22 @@ export interface ApiAiUsageSummary {
   sampleSize: number;
 }
 
+/**
+ * `GET /ai-usage/me` (Fase 13 continuação #7) — uso do PRÓPRIO usuário
+ * autenticado nas últimas 24h, para ele ver o quão perto está do próprio
+ * limite (`AI_USER_DAILY_*`) antes de bater nele. `limits` vem `null`
+ * quando a env var correspondente não está configurada (mesmo formato de
+ * `AiUsageLimits` no backend).
+ */
+export interface ApiAiUserUsageSummary {
+  totals: ApiAiUsageTotals;
+  limits: {
+    dailyTokenLimit: number | null;
+    dailyCostLimitUsd: number | null;
+  };
+  windowStartedAt: string;
+}
+
 export interface ApiAuditLog {
   id: string;
   organizationId: string;

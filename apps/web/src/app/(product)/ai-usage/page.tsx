@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { apiFetch } from '@/lib/api-client';
-import type { ApiAiUsageSummary } from '@/lib/types';
+import type { ApiAiUsageSummary, ApiAiUserUsageSummary } from '@/lib/types';
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value);
@@ -33,11 +33,48 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+function formatPercent(usage: number, limit: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 0 }).format(
+    Math.min(usage / limit, 1),
+  );
+}
+
 export default function AiUsagePage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['ai-usage-summary'],
     queryFn: () => apiFetch<ApiAiUsageSummary>('/ai-usage/summary'),
   });
+
+  // Uso do próprio usuário autenticado (Fase 13 continuação #7) — consulta
+  // independente de `/ai-usage/summary`: não exige `audit_log:read`, então
+  // carrega mesmo para papéis (ex. `developer`) que não veem o agregado da
+  // organização acima.
+  const { data: myUsage, isLoading: isMyUsageLoading } = useQuery({
+    queryKey: ['ai-usage-me'],
+    queryFn: () => apiFetch<ApiAiUserUsageSummary>('/ai-usage/me'),
+  });
+
+  const myUsageItems = useMemo(() => {
+    if (!myUsage) return [];
+    const items: { label: string; value: string }[] = [
+      { label: 'Custo estimado', value: formatUsd(myUsage.totals.costUsd) },
+      { label: 'Tokens totais', value: formatInteger(myUsage.totals.totalTokens) },
+      { label: 'Chamadas', value: formatInteger(myUsage.totals.callCount) },
+    ];
+    if (myUsage.limits.dailyTokenLimit !== null) {
+      items.push({
+        label: 'Limite de tokens/dia',
+        value: `${formatInteger(myUsage.totals.totalTokens)} / ${formatInteger(myUsage.limits.dailyTokenLimit)} (${formatPercent(myUsage.totals.totalTokens, myUsage.limits.dailyTokenLimit)})`,
+      });
+    }
+    if (myUsage.limits.dailyCostLimitUsd !== null) {
+      items.push({
+        label: 'Limite de custo/dia',
+        value: `${formatUsd(myUsage.totals.costUsd)} / ${formatUsd(myUsage.limits.dailyCostLimitUsd)} (${formatPercent(myUsage.totals.costUsd, myUsage.limits.dailyCostLimitUsd)})`,
+      });
+    }
+    return items;
+  }, [myUsage]);
 
   const metricItems = useMemo(() => {
     if (!data) return [];
@@ -60,12 +97,30 @@ export default function AiUsagePage() {
         </p>
       </div>
 
+      <section data-testid="my-ai-usage" className="rounded-lg border border-border bg-card p-4">
+        <h2 className="text-base font-semibold">Meu uso (últimas 24h)</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Uso das suas próprias execuções de IA disparadas nas últimas 24h, independente do limite de organização.
+        </p>
+        {isMyUsageLoading && <p className="mt-3 text-sm text-muted-foreground">Carregando...</p>}
+        {myUsage && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {myUsageItems.map((item) => (
+              <div key={item.label} className="rounded-md border border-border p-3">
+                <p className="text-xs font-medium uppercase text-muted-foreground">{item.label}</p>
+                <p className="mt-1 text-sm font-semibold tracking-tight">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {isLoading && <p className="text-sm text-muted-foreground">Carregando uso de IA...</p>}
       {isError && <p className="text-sm text-red-600 dark:text-red-400">Não foi possível carregar o uso de IA.</p>}
 
       {data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div data-testid="org-ai-usage-totals" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {metricItems.map((item) => (
               <div key={item.label} className="rounded-lg border border-border bg-card p-4">
                 <p className="text-xs font-medium uppercase text-muted-foreground">{item.label}</p>
