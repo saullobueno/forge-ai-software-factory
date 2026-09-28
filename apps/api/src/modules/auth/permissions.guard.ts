@@ -17,17 +17,22 @@ import type { AuthenticatedUser } from './types.js';
  * permissão específica além de estar autenticado. Delega a decisão em si
  * para `hasPermission` de `@forge/domain` (matriz role -> Permission),
  * nunca reimplementa a regra aqui.
+ *
+ * `required` é sempre um array (`RequirePermission(...permissions)`) —
+ * passa se a role tiver PELO MENOS UMA das permissões listadas (semântica
+ * OU, ver o comentário de `RequirePermission`). Todo call site com um
+ * único argumento continua se comportando exatamente como antes.
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<Permission | undefined>(REQUIRED_PERMISSION_KEY, [
+    const required = this.reflector.getAllAndOverride<readonly Permission[] | undefined>(REQUIRED_PERMISSION_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!required) return true;
+    if (!required || required.length === 0) return true;
 
     const request = context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>();
     const user = request.user;
@@ -38,7 +43,7 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException('Não autenticado.');
     }
 
-    if (!hasPermission(user.role, required)) {
+    if (!required.some((permission) => hasPermission(user.role, permission))) {
       throw new ForbiddenException('Você não tem permissão para executar esta ação.');
     }
 

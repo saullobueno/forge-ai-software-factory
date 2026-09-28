@@ -6,6 +6,7 @@ import { QueueModule } from './infrastructure/queue/queue.module.js';
 import { AIPlaygroundModule } from './modules/ai-playground/ai-playground.module.js';
 import { AiUsageModule } from './modules/ai-usage/ai-usage.module.js';
 import { AgentRunsModule } from './modules/agent-runs/agent-runs.module.js';
+import { ApprovalsModule } from './modules/approvals/approvals.module.js';
 import { ArtifactsModule } from './modules/artifacts/artifacts.module.js';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
@@ -26,6 +27,7 @@ import { TasksModule } from './modules/tasks/tasks.module.js';
     AIPlaygroundModule,
     AiUsageModule,
     AgentRunsModule,
+    ApprovalsModule,
     ArtifactsModule,
     AuditLogsModule,
     EnvironmentsModule,
