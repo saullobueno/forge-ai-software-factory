@@ -158,10 +158,11 @@ Ver `FORGE-CLAUDE-CODE-PROMPT.md` — TypeScript strict, arquitetura em camadas,
 - `@forge/agents` agora emite traces estruturados para início/fim de agent steps e tool calls por meio de uma porta `AgentRunTraceSink`.
 - `apps/api` injeta um sink local (`AgentRunTraceLoggerService`) que escreve eventos de trace como logs estruturados quando `FORGE_TRACE_LOGS=1`, aplicando redaction inicial de chaves sensíveis antes do log.
 - A API também inicializa OpenTelemetry real em `apps/api/src/tracing.ts`: auto-instrumentação HTTP, spans manuais de `agent.step`/`tool.call`, `ConsoleSpanExporter` por padrão e OTLP opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- `apps/web/src/tracing.ts` + `src/proxy.ts` propagam trace context W3C real (`traceparent`) em toda requisição que atravessa o proxy same-origin (`/api/*`) para `apps/api` — um span CLIENT mínimo (mesmo `ConsoleSpanExporter`/OTLP opt-in de `apps/api`, sem auto-instrumentar todo o Next.js) que a auto-instrumentação HTTP da API já honra como parent, correlacionando o mesmo `traceId` nos dois processos.
 - `GET /audit-logs` e `/audit-logs` expõem leitura tenant-scoped dos eventos de auditoria para papéis com `audit_log:read`, sem vazar `passwordHash` do ator.
 - `POST /auth/login`, `POST /tasks/:id/agent-runs`, `POST /agent-runs/:id/cancel` e `POST /ai-playground/evaluations` gravam audit logs com ator, alvo e metadados seguros (`auth.login_succeeded`, `auth.login_failed`, `agent_run.triggered`, `agent_run.cancelled`, `ai_playground.evaluated`).
 - Decisões de política de tool calls que exigem aprovação ou são negadas também geram auditoria (`agent_run.policy_approval_required`/`agent_run.policy_denied`) sem registrar argumentos, patches ou conteúdo de arquivos.
-- Ainda faltam métricas OTel, propagação de trace context web->api, cobertura de audit log para mais endpoints mutáveis e dashboards/alertas.
+- Ainda faltam métricas OTel, cobertura de audit log para mais endpoints mutáveis e dashboards/alertas.
 
 ## Performance e Acessibilidade (Fase 15)
 
