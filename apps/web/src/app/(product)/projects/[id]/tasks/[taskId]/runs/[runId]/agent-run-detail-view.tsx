@@ -124,7 +124,15 @@ function StepDetails({ step }: { step: ApiAgentStep }) {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="font-mono text-xs font-medium text-foreground">{toolCall.toolName}</span>
                   <Badge tone={toolCallStatusTone(toolCall.status)}>
-                    {TOOL_CALL_STATUS_LABELS[toolCall.status]}
+                    {/* `data-testid` dedicado (mesmo padrão de `test-run-status`/
+                    `pull-request-status`/`run-status` acima): o "Entrada" da
+                    execução (`step.input`, incluindo `knowledgeContext` real —
+                    Fase 12 continuação) é conteúdo de arquivo real, não
+                    controlado por este teste, e pode conter a mesma palavra do
+                    status ("pendente" aparece de verdade em `docs/threat-model.md`/
+                    `README.md`) — um `getByText('Pendente')` sem esse testid
+                    colidiria com esse dump de JSON. */}
+                    <span data-testid="tool-call-status">{TOOL_CALL_STATUS_LABELS[toolCall.status]}</span>
                   </Badge>
                 </div>
                 <pre className="mt-1.5 overflow-auto rounded bg-muted p-1.5 text-xs">

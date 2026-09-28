@@ -76,7 +76,13 @@ test.describe('orquestração de execução de IA: fila -> orquestrador -> SSE -
     // verdade contra o disco (spec §18) — por isso fica "Pendente", não
     // "Concluída".
     await expect(implementerStep.getByText('apply_patch', { exact: true })).toBeVisible();
-    await expect(implementerStep.getByText('Pendente')).toBeVisible();
+    // Locator específico do badge de status da tool call (não um
+    // `getByText('Pendente')` genérico): a seção "Entrada" do mesmo step
+    // mostra `step.input` bruto, incluindo `knowledgeContext` real (Fase 12
+    // continuação) — conteúdo de arquivo real que pode legitimamente conter
+    // a palavra "pendente" (ex.: `docs/threat-model.md`), então um locator
+    // por texto solto colidiria com esse dump de JSON.
+    await expect(implementerStep.getByTestId('tool-call-status')).toHaveText('Pendente');
 
     const explorerStep = steps.filter({ hasText: 'Inspecionar código' });
     await explorerStep.click();

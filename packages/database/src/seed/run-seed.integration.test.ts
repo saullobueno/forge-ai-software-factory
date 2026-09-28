@@ -1,5 +1,5 @@
 import { authorizeToolCall } from '@forge/domain';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -17,6 +17,7 @@ import {
   diffs,
   environments,
   fileSnapshots,
+  knowledgeSources,
   notifications,
   organizations,
   projects,
@@ -224,10 +225,56 @@ describe('runSeed (PGlite + migrações reais)', () => {
     expect(orgAuditLogs.length).toBeGreaterThanOrEqual(3);
   });
 
+  it('indexa conhecimento real a partir de arquivos reais em disco (nunca hardcoded)', async () => {
+    // Fontes escopadas ao projeto "Forge Web App", indexadas a partir de
+    // arquivos reais do fixture (`fixtures/acme-platform-web/`) — nunca de
+    // texto embutido no seed.
+    const projectSources = await db.query.knowledgeSources.findMany({
+      where: and(eq(knowledgeSources.organizationId, firstSummary.organizationId), eq(knowledgeSources.projectId, firstSummary.projectId)),
+      with: { chunks: true },
+    });
+
+    const formatCurrencySource = projectSources.find((source) => source.uri === 'repo://acme-platform-web/src/lib/format-currency.ts');
+    if (!formatCurrencySource) throw new Error('knowledge source de src/lib/format-currency.ts não encontrada');
+    expect(formatCurrencySource.kind).toBe('repository_doc');
+    expect(formatCurrencySource.title).toBe('src/lib/format-currency.ts');
+    expect(formatCurrencySource.chunks.length).toBeGreaterThan(0);
+    // `LOCALE_BY_CURRENCY` só existe no conteúdo real do arquivo em disco —
+    // se este teste passar, o chunk persistido veio de uma leitura real,
+    // não de um texto inventado no seed.
+    expect(formatCurrencySource.chunks.some((chunk) => chunk.content.includes('LOCALE_BY_CURRENCY'))).toBe(true);
+
+    const readmeSource = projectSources.find((source) => source.uri === 'repo://acme-platform-web/README.md');
+    if (!readmeSource) throw new Error('knowledge source de README.md do fixture não encontrada');
+    expect(readmeSource.kind).toBe('readme');
+    expect(readmeSource.chunks.some((chunk) => chunk.content.includes('estornos'))).toBe(true);
+
+    // Documentos reais do próprio Forge (organização/produto, não
+    // específicos de um projeto) — `projectId: null`, visíveis para
+    // qualquer projeto da organização.
+    const orgSources = await db.query.knowledgeSources.findMany({
+      where: and(eq(knowledgeSources.organizationId, firstSummary.organizationId), isNull(knowledgeSources.projectId)),
+      with: { chunks: true },
+    });
+    const threatModelSource = orgSources.find((source) => source.uri === 'forge://forge-ai-software-factory/docs/threat-model.md');
+    if (!threatModelSource) throw new Error('knowledge source de docs/threat-model.md do Forge não encontrada');
+    expect(threatModelSource.kind).toBe('repository_doc');
+    expect(threatModelSource.chunks.length).toBeGreaterThan(0);
+  });
+
   it('é idempotente: rodar de novo não duplica organization/task/agentRun', async () => {
+    const knowledgeSourcesBeforeRerun = await db.query.knowledgeSources.findMany({
+      where: eq(knowledgeSources.organizationId, firstSummary.organizationId),
+    });
+
     const secondSummary = await runSeed(db);
     expect(secondSummary.alreadySeeded).toBe(true);
     expect(secondSummary.organizationId).toBe(firstSummary.organizationId);
+
+    const knowledgeSourcesAfterRerun = await db.query.knowledgeSources.findMany({
+      where: eq(knowledgeSources.organizationId, firstSummary.organizationId),
+    });
+    expect(knowledgeSourcesAfterRerun).toHaveLength(knowledgeSourcesBeforeRerun.length);
 
     const allOrganizations = await db.query.organizations.findMany({
       where: eq(organizations.slug, 'acme-platform'),

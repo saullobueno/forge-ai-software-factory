@@ -1,11 +1,12 @@
 import { authorizeToolCall, hashPassword } from '@forge/domain';
-import { chunkKnowledge } from '@forge/knowledge';
-import type { AgentRole, KnowledgeSourceKind } from '@forge/types';
+import { indexKnowledgeFiles } from '@forge/knowledge';
+import type { AgentRole } from '@forge/types';
 import { and, eq } from 'drizzle-orm';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Database } from '../client.ts';
+import { persistIndexedKnowledgeSources } from '../knowledge-indexing.ts';
 import {
   agentRuns,
   agents,
@@ -17,8 +18,6 @@ import {
   diffs,
   environments,
   fileSnapshots,
-  knowledgeChunks,
-  knowledgeSources,
   notifications,
   organizations,
   projects,
@@ -34,6 +33,7 @@ import {
 } from '../schema/index.ts';
 import { DEMO_AGENT_STEP_ORDER } from './agent-run-timeline.ts';
 import { DEMO_BUGGY_FILE_PATH, loadDemoCurrencyBugDiff } from './fixtures.ts';
+import { loadFixtureKnowledgeFiles, loadForgeProductKnowledgeFiles } from './knowledge-indexer.ts';
 import { DEMO_TASK_STATUS_TIMELINE } from './task-status-timeline.ts';
 import { toolCallStatusForPolicyDecision } from './tool-call-policy.ts';
 
@@ -338,105 +338,56 @@ async function ensureDemoAdmin(db: Database, organizationId: string, passwordHas
   return created;
 }
 
-interface DemoKnowledgeDocument {
-  kind: KnowledgeSourceKind;
-  title: string;
-  uri: string;
-  version: string;
-  content: string;
-}
-
-const DEMO_KNOWLEDGE_DOCUMENTS: readonly DemoKnowledgeDocument[] = [
-  {
-    kind: 'adr',
-    title: 'ADR-001 Arquitetura modular do Forge',
-    uri: 'demo://forge-web-app/adr/001-arquitetura-modular',
-    version: '2026-09-18',
-    content:
-      'O Forge é organizado como monorepo TypeScript com apps Next.js e NestJS, além de pacotes compartilhados para database, domain, ai, agents, sandbox, knowledge e types.\n\n' +
-      'A regra central de arquitetura é manter contratos compartilhados em @forge/types, lógica reutilizável em packages/* e superfícies HTTP nos módulos NestJS. Repositórios sempre filtram por organizationId no WHERE para preservar isolamento multi-tenant.\n\n' +
-      'Em desenvolvimento local, PGlite é usado como banco padrão. Em produção, a decisão prevista é Postgres gerenciado, Redis/Upstash para filas e deploy separado para web/API.',
-  },
-  {
-    kind: 'code_rules',
-    title: 'Regras de código do Forge Web App',
-    uri: 'demo://forge-web-app/rules/code',
-    version: '2026-09-18',
-    content:
-      'Manter mudanças pequenas e testáveis. Preferir APIs tipadas, schemas Zod e validação explícita de entrada.\n\n' +
-      'No frontend, buscar dados com TanStack Query, invalidar caches após mutações e preservar UX de erro/carregamento. Não duplicar lógica de autorização do backend: a UI pode esconder ações por UX, mas a segurança fica nos guards.\n\n' +
-      'No backend, todo endpoint de projeto precisa validar UUID, confirmar pertencimento à organização atual e responder 404 genérico para recursos fora do tenant.',
-  },
-  {
-    kind: 'readme',
-    title: 'README operacional do repositório demo',
-    uri: 'demo://forge-web-app/readme',
-    version: '2026-09-24',
-    content:
-      'Contas demo: tech-lead@acme-platform.example, dev@acme-platform.example, platform@acme-platform.example e admin@acme-platform.example, todas com senha demo1234.\n\n' +
-      'Fluxos já demonstráveis: login, listagem de projetos/tarefas, execução de agente seedada, exploração de código, playground de IA mock, auditoria, ambientes e solicitação de deployment com aprovação em produção.\n\n' +
-      'Sem Docker local por preferência do projeto. Validação de produção será feita no final com serviços gerenciados como Neon, Vercel, Render e Upstash.',
-  },
-  {
-    kind: 'repository_doc',
-    title: 'Handoff de QA e continuidade',
-    uri: 'demo://forge-web-app/docs/final-qa-handoff',
-    version: '2026-09-24',
-    content:
-      'O handoff atual registra que builds, lint, typecheck e testes direcionados passam. A suíte agregada pode sofrer timeout em PGlite quando múltiplos pacotes disputam banco em paralelo; rodar database isolado confirma estabilidade.\n\n' +
-      'Próximas frentes: conectar conhecimento persistido aos agentes, substituir mocks por provedores reais, configurar produção sem Docker local e completar aprovações operacionais.',
-  },
-];
-
+/**
+ * Indexador automático real de conhecimento (Fase 12, continuação):
+ * substitui a inserção manual de `knowledge_sources`/`knowledge_chunks` que
+ * existia aqui antes — documentos escritos à mão no seed, sem vínculo com
+ * nenhum arquivo real. Agora lê arquivos de verdade em disco (o repositório
+ * demo em `fixtures/acme-platform-web/` e documentos reais do próprio
+ * Forge — `README.md`, `docs/threat-model.md`) e gera as fontes/chunks via
+ * `indexKnowledgeFiles()`/`chunkKnowledge()` de `@forge/knowledge` — nunca
+ * um chunk escrito à mão.
+ *
+ * Dois lotes, com escopo diferente: os arquivos do fixture ficam
+ * `projectId: project.id` (conhecimento específico do projeto "Forge Web
+ * App"); os documentos do próprio Forge ficam `projectId: null`
+ * (conhecimento de organização/produto, visível para qualquer projeto —
+ * mesma regra de escopo que `KnowledgeRepository.listSourcesByProject` já
+ * resolve com `isNull(projectId)`, sem mudança nenhuma na API/orquestrador).
+ */
 async function ensureDemoKnowledge(db: Database, organizationId: string): Promise<void> {
   const project = await db.query.projects.findFirst({
     where: and(eq(projects.organizationId, organizationId), eq(projects.slug, 'forge-web-app')),
   });
   if (!project) return;
 
-  for (const document of DEMO_KNOWLEDGE_DOCUMENTS) {
-    const existing = await db.query.knowledgeSources.findFirst({
-      where: and(
-        eq(knowledgeSources.organizationId, organizationId),
-        eq(knowledgeSources.projectId, project.id),
-        eq(knowledgeSources.uri, document.uri),
-      ),
-      with: { chunks: true },
-    });
+  const [fixtureFiles, forgeProductFiles] = await Promise.all([
+    loadFixtureKnowledgeFiles('acme-platform-web'),
+    loadForgeProductKnowledgeFiles(),
+  ]);
 
-    const source =
-      existing ??
-      (
-        await db
-          .insert(knowledgeSources)
-          .values({
-            organizationId,
-            projectId: project.id,
-            workspaceId: null,
-            kind: document.kind,
-            title: document.title,
-            uri: document.uri,
-            version: document.version,
-          })
-          .returning()
-      )[0];
-    if (!source) throw new Error(`Falha ao inserir knowledge source "${document.title}"`);
-    if (existing && existing.chunks.length > 0) continue;
+  const indexedSources = [
+    ...indexKnowledgeFiles(fixtureFiles, {
+      organizationId,
+      projectId: project.id,
+      workspaceId: null,
+      uriPrefix: 'repo://acme-platform-web',
+      version: null,
+      maxTokens: 120,
+      overlapTokens: 16,
+    }),
+    ...indexKnowledgeFiles(forgeProductFiles, {
+      organizationId,
+      projectId: null,
+      workspaceId: null,
+      uriPrefix: 'forge://forge-ai-software-factory',
+      version: null,
+      maxTokens: 120,
+      overlapTokens: 16,
+    }),
+  ];
 
-    await db.insert(knowledgeChunks).values(
-      chunkKnowledge({
-        sourceId: source.id,
-        content: document.content,
-        maxTokens: 120,
-        overlapTokens: 16,
-      }).map((chunk) => ({
-        knowledgeSourceId: chunk.knowledgeSourceId,
-        content: chunk.content,
-        chunkIndex: chunk.chunkIndex,
-        tokenCount: chunk.tokenCount,
-      })),
-    );
-  }
+  await persistIndexedKnowledgeSources(db, indexedSources);
 }
 
 /**

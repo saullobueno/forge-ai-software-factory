@@ -24,7 +24,7 @@ Este threat model cobre as superfícies pedidas na Fase 14: runner/sandbox, ferr
 | API -> Banco | Queries por organização | `organizationId` no `WHERE`, 404 genérico entre inexistente/outro tenant | Auditoria de todo endpoint mutável ainda parcial |
 | Agente -> Tool | Tool name/args gerados por IA | `agent.allowedTools` + `authorizeToolCall` + política de comandos | Aprovação humana real para todas as ações pendentes |
 | Runner -> Workspace | Comandos/processos | path guard, env allowlist, timeout, bloqueio destrutivo | Isolamento forte exige Docker/Firecracker/limites de rede em produção |
-| IA -> Contexto RAG | Docs/ADRs/repo | `wrapUntrustedKnowledge`, detector de prompt injection | Indexador/persistência ainda não ligados ao orquestrador |
+| IA -> Contexto RAG | Docs/ADRs/repo | `wrapUntrustedKnowledge`, detector de prompt injection, indexador real (`indexKnowledgeFiles`) sobre arquivos de verdade do fixture e do próprio Forge, conectado ao orquestrador | Embeddings/ranking semântico e gestão operacional de fontes além do seed/reindex ainda pendentes |
 | API -> Git/Deploy | Branches, commits, deployments | Providers mock/fronteiras injetáveis | Credenciais reais e branch protections ainda pendentes |
 | API -> Realtime | SSE de agent runs | Canal por endpoint autenticado/tenant scoped | Backpressure, replay e quotas por conexão ainda pendentes |
 

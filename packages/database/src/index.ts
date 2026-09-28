@@ -1,5 +1,16 @@
 export * from './client.ts';
 export * from './env.ts';
+export * from './knowledge-indexing.ts';
+/**
+ * `runSeed`/`DEMO_PASSWORD` reexportados aqui (não só via `packages/
+ * database/src/seed.ts`, o entrypoint do CLI `db:seed`) para que apps
+ * consumidoras (`apps/api`) consigam rodar o seed real de ponta a ponta em
+ * testes e2e sobre um PGlite efêmero próprio — mesmo padrão já usado por
+ * `migratePglite` acima, evitando depender de um caminho de import
+ * profundo (`@forge/database/src/seed/run-seed.ts`) que o `exports` map de
+ * `package.json` não expõe.
+ */
+export { DEMO_PASSWORD, runSeed, type SeedSummary } from './seed/run-seed.ts';
 
 /**
  * Reexporta os combinadores de query do Drizzle mais usados por
