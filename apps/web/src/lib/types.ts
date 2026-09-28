@@ -433,3 +433,40 @@ export interface ApiAuditLog {
   createdAt: string;
   actorUser: { id: string; name: string; email: string; role: string } | null;
 }
+
+/**
+ * Resposta de `GET /approvals/pending` (Fase 17 continuação #2) — painel
+ * cross-execução de aprovações pendentes. Discriminado por `subjectType`,
+ * mesma forma que a API devolve (ver `ApprovalsRepository` em
+ * `apps/api/src/modules/approvals/`); cada variante carrega os campos de
+ * navegação suficientes para linkar até a página de detalhe do recurso
+ * (execução de IA ou ambiente do projeto).
+ */
+export interface ApiPendingAgentRunApproval {
+  id: string;
+  subjectType: 'agent_run';
+  createdAt: string;
+  requestedByUserId: string | null;
+  reason: string | null;
+  agentRunId: string;
+  agentRunObjective: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string;
+  projectName: string;
+}
+
+export interface ApiPendingDeploymentApproval {
+  id: string;
+  subjectType: 'deployment';
+  createdAt: string;
+  requestedByUserId: string | null;
+  reason: string | null;
+  deploymentId: string;
+  environmentId: string;
+  environmentName: string;
+  projectId: string;
+  projectName: string;
+}
+
+export type ApiPendingApproval = ApiPendingAgentRunApproval | ApiPendingDeploymentApproval;

@@ -2,7 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { apiFetch } from '@/lib/api-client';
+import { canApproveAgentRuns } from '@/lib/agent-run-approval-permission';
+import { canApproveDeployments } from '@/lib/deployment-approval-permission';
+import type { ApiCurrentUser, ApiPendingApproval } from '@/lib/types';
 
 /**
  * Reflete a hierarquia da Arquitetura de Informação (spec §3) sem
@@ -34,6 +39,37 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const firstNavLinkRef = useRef<HTMLAnchorElement>(null);
+
+  // Mesma queryKey (`['auth', 'me']`) já usada por
+  // `agent-run-detail-view.tsx` — o TanStack Query dedupe/cacheia entre as
+  // duas, então isto não gera uma segunda chamada de rede extra para quem
+  // já está numa página que também consulta o próprio usuário.
+  const meQuery = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => apiFetch<ApiCurrentUser>('/auth/me'),
+  });
+  const canSeeApprovals =
+    meQuery.data !== undefined && (canApproveAgentRuns(meQuery.data.role) || canApproveDeployments(meQuery.data.role));
+
+  // Contador do menu (Fase 17 continuação #2): só busca quando o usuário
+  // já é sabidamente alguém com pelo menos uma permissão de decisão
+  // (`enabled: canSeeApprovals`) — nunca dispara `GET /approvals/pending`
+  // para quem sempre receberia 403 (ex.: `developer`), o que evitaria só
+  // gerar tráfego/retries sem propósito. `staleTime` de 30s: um contador de
+  // pendências não precisa estar atualizado ao milissegundo, e isso evita
+  // refetch a cada troca de rota dentro do produto (`ProductShell` fica
+  // montado o tempo todo, uma navegação client-side não o remonta).
+  const pendingApprovalsQuery = useQuery({
+    queryKey: ['approvals', 'pending'],
+    queryFn: () => apiFetch<ApiPendingApproval[]>('/approvals/pending'),
+    enabled: canSeeApprovals,
+    staleTime: 30_000,
+  });
+  const pendingApprovalsCount = pendingApprovalsQuery.data?.length ?? 0;
+
+  const navItems = canSeeApprovals
+    ? [...NAV_ITEMS.slice(0, 1), { label: 'Aprovações', href: '/approvals' }, ...NAV_ITEMS.slice(1)]
+    : NAV_ITEMS;
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -74,16 +110,24 @@ export function ProductShell({ children }: { children: ReactNode }) {
       >
         <span className="px-2 font-mono text-sm font-semibold tracking-tight">forge</span>
         <nav aria-label="navegação principal" className="mt-6 flex flex-col gap-1">
-          {NAV_ITEMS.map((item, index) =>
+          {navItems.map((item, index) =>
             item.href ? (
               <Link
                 key={item.label}
                 ref={index === 0 ? firstNavLinkRef : undefined}
                 href={item.href}
                 onClick={() => setMobileNavOpen(false)}
-                className="rounded-md px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
               >
                 {item.label}
+                {item.label === 'Aprovações' && pendingApprovalsCount > 0 && (
+                  <span
+                    aria-label={`${pendingApprovalsCount} aprovações pendentes`}
+                    className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground"
+                  >
+                    {pendingApprovalsCount}
+                  </span>
+                )}
               </Link>
             ) : (
               <span
