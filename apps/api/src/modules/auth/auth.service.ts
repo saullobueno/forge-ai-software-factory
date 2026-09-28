@@ -26,7 +26,22 @@ export class AuthService {
       where: eq(schema.users.email, input.email),
     });
 
-    if (!row || !row.passwordHash) {
+    if (!row) {
+      // Email de verdade não existe: não há `organizationId` real para
+      // escopar um audit log (`audit_logs.organization_id` é `NOT NULL`,
+      // FK real para `organizations` — nunca um valor inventado). Nada
+      // sensato para gravar aqui; a mensagem genérica abaixo já evita
+      // account enumeration no lado do cliente.
+      throw new UnauthorizedException(GENERIC_AUTH_ERROR);
+    }
+
+    if (!row.passwordHash) {
+      // Diferente do caso acima: o usuário existe de verdade (conta sem
+      // senha configurada, ex.: pensada para SSO) — há `organizationId`/
+      // `actorUserId` reais para registrar a tentativa, mesmo padrão já
+      // usado para senha errada abaixo. A resposta ao cliente continua
+      // idêntica (mesma mensagem genérica, mesmo 401).
+      await this.recordLoginAudit(row, 'auth.login_failed', { reason: 'no_password_configured' });
       throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     }
 

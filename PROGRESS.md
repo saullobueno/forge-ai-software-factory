@@ -202,6 +202,36 @@ Implementado nesta sessão: a lacuna explícita registrada desde a criação da 
 
 Validações direcionadas desta continuação: `pnpm --filter @forge/api typecheck` → passou; `pnpm --filter @forge/api lint` → passou; `pnpm --filter @forge/api test` → **6 arquivos / 16 testes** passou; `pnpm --filter @forge/api test:e2e` → **13 arquivos / 110 testes** passou (inclui `runtime-smoke.e2e-spec.ts` e o novo `otel-tracing.e2e-spec.ts`); `pnpm turbo run build lint typecheck test` (sem `--force`, com cache) → **34/34** passou. Uma rodada com `--force` (sem cache) apresentou o flake pré-existente e já documentado de `@forge/database#test` (`beforeAll`/PGlite sob contenção, `hookTimeout` 120s) — não relacionado a esta mudança (`packages/database` não foi tocado); confirmado não-regressão rodando `pnpm --filter @forge/database test` isolado → **6 arquivos / 18 testes** passou. Suíte Playwright completa (`apps/web`) → **21/21** passou.
 
+## Fase 14 continuação #2 — auditoria completa de endpoints mutáveis (`audit_logs`)
+
+Implementado nesta sessão, a partir da pendência registrada na tabela de fases ("Fase 14: audit log em mais endpoints"): levantamento real de todo endpoint de escrita da API (`grep -rn "@Post\|@Patch\|@Put\|@Delete" apps/api/src/modules --include="*.controller.ts"`, confirmado lendo cada controller/service de verdade, não por suposição). Resultado: **a API inteira tem só 9 endpoints de escrita, nenhum `@Patch`/`@Put`/`@Delete` existe no projeto**, e nenhum dos outros controllers (`projects`, `code`, `artifacts`, `audit-logs`, `knowledge`, `ai-usage`) expõe qualquer mutação — todos são só `@Get`. Cobertura confirmada, um a um:
+
+| Endpoint | Audit log já gravado |
+|---|---|
+| `POST /auth/login` | `auth.login_succeeded` / `auth.login_failed` |
+| `POST /tasks/:id/agent-runs` | `agent_run.triggered` |
+| `POST /agent-runs/:id/cancel` | `agent_run.cancelled` |
+| `POST /agent-runs/:id/approve` | `agent_run.approved` (+ `agent_run.changes_applied` quando há escrita real aplicada) |
+| `POST /agent-runs/:id/reject` | `agent_run.rejected` |
+| `POST /ai-playground/evaluations` | `ai_playground.evaluated` |
+| `POST /projects/:id/environments/:envId/deployments` | `deployment.requested` + `deployment.approval_required`/`deployment.succeeded` |
+| `POST .../deployments/:id/approve` | `deployment.approved` |
+| `POST .../deployments/:id/reject` | `deployment.rejected` |
+
+**Conclusão real: todo endpoint mutável já gravava audit log antes desta continuação.** A pendência na tabela da Fase 14 ficou desatualizada — as Fases 17, 18 e a continuação #2 da Fase 11 (todas implementadas depois daquela nota original) já tinham fechado a cobertura de `agent_run.approve/reject` e `deployment.approve/reject`, sem que a nota fosse revisada. Não foi adicionado audit log "porque sim" em nenhum endpoint — não havia nenhum endpoint de escrita genuíno sem cobertura.
+
+**O gap real encontrado não é um endpoint faltando, é um branch sem auditoria dentro de um fluxo JÁ auditado**: `AuthService.login` (`apps/api/src/modules/auth/auth.service.ts`) tratava dois casos bem diferentes sob a mesma condição, `if (!row || !row.passwordHash)`: (1) email que não existe de verdade, e (2) uma conta que existe mas está sem `passwordHash` configurado (coluna nullable, `packages/database/src/schema/organizations.ts:34` — pensada para contas só-SSO). Só o branch de senha errada, mais abaixo, gravava `auth.login_failed`; os dois casos combinados acima nunca gravavam nada. Separado em dois `if`s:
+- O caso "email não existe" **continua, deliberada e corretamente, sem audit log** — `audit_logs.organization_id` é `NOT NULL` com FK real para `organizations` (`packages/database/src/schema/audit.ts:11-13`), então não existe uma organização real pra escopar esse log sem inventar uma. Isso não é uma lacuna, é uma restrição estrutural do modelo multi-tenant.
+- O caso "conta existe, sem senha" **agora grava `auth.login_failed`** com `metadata.reason: 'no_password_configured'`, mesmo padrão já usado pelo branch de senha errada (`reason: 'invalid_credentials'`) — havia `organizationId`/`actorUserId` reais disponíveis, só não estavam sendo usados.
+
+A resposta ao cliente permanece byte-a-byte idêntica nos dois casos (mesmo 401 genérico, mesma mensagem `Credenciais inválidas.`) — nenhuma regressão na proteção contra account enumeration (spec §1); só o registro server-side de auditoria mudou.
+
+Teste novo: `apps/api/test/auth.e2e-spec.ts` ganhou um caso que semeia um usuário real com `passwordHash: null`, confirma o 401 genérico idêntico ao dos outros casos, e confirma a linha real de audit log (`organizationId`/`actorUserId`/`action`/`targetType`/`targetId`/`metadata.reason`) — mesmo padrão dos dois casos já existentes (login bem-sucedido, senha errada).
+
+**Nada mais foi adicionado deliberadamente**: reindex sob demanda de conhecimento (`POST /projects/:id/knowledge/reindex`) continua não implementado — decisão já registrada e justificada na continuação da Fase 12, não uma omissão desta tarefa (não existe esse endpoint pra auditar).
+
+Validações desta continuação: `pnpm --filter @forge/api typecheck` → passou; `pnpm --filter @forge/api lint` → passou; `pnpm --filter @forge/api test:e2e` completo → **17 arquivos / 121 testes** passou (120 anteriores + 1 novo); `pnpm turbo run build lint typecheck test` → **34/34** passou; suíte Playwright completa (`apps/web`) → **21/22** passou numa rodada (1 falha isolada em `code-explorer.spec.ts`, esperando `diff-editor`), o mesmo flake de contenção sob carga já documentado extensivamente nesta sessão em continuações anteriores — confirmada não-regressão rodando o arquivo isolado logo em seguida (**1/1** passou).
+
 ## Fase 11 continuação #2 — decisão de aprovação de deployment (queued -> approve/reject)
 
 Implementado nesta sessão: a lacuna registrada na tabela acima ("decisão approve/reject do gate... pendentes") — até aqui um `deployment` protegido ficava `queued` com uma `approval` `pending` para sempre, sem nenhum jeito de decidi-la. `POST /projects/:projectId/environments/:environmentId/deployments/:deploymentId/approve` e `.../reject` (`apps/api/src/modules/environments/environments.controller.ts`/`.service.ts`/`.repository.ts`) resolvem isso, seguindo o mesmo padrão já validado por `AgentRunsService.approve`/`reject`/`decide` (Fase 17): 409 se o `deployment` não estiver `queued` ou não houver uma `approval` `pending` para ele, 404 genérico cross-tenant (projeto/ambiente/deployment fora do tenant), audit log `deployment.approved`/`deployment.rejected`.
@@ -276,7 +306,7 @@ Outras lacunas menores, por fase (detalhe em cada seção do `docs/final-qa-hand
 - Fase 11: execução real em provedor externo; logs/saúde reais de ambiente. (decisão approve/reject já implementada nesta sessão — ver seção acima)
 - Fase 12: indexador automático já conectado ao seed (arquivos reais do fixture + docs reais do Forge, ver seção dedicada acima); **pendente**: embeddings/vector store, ranking semântico, reindex sob demanda via API (avaliado e deliberadamente não implementado nesta continuação — ver justificativa acima) e detecção de conteúdo desatualizado (staleness) num arquivo já indexado que mudou.
 - Fase 13: limites por usuário, UI operacional para selecionar provider/modelo, séries históricas de custo/latência e adapter Anthropic se necessário. Dashboard inicial de custo/token/latência já existe em `/ai-usage`; limites diários por organização já existem via `AI_ORG_DAILY_*`.
-- Fase 14: audit log em mais endpoints; exporter/reader de métricas OTel (só traces foram conectados); propagação de trace context entre `apps/web` e `apps/api` (cada requisição do proxy Next.js hoje inicia um trace novo, sem `traceparent` herdado); instrumentação retroativa de módulos além de HTTP/execução de agente (ex. queries Drizzle individuais não ganham span próprio, só o span HTTP que as envolve).
+- Fase 14: audit log em mais endpoints — **resolvido nesta sessão** (ver "Fase 14 continuação #2" acima: levantamento confirmou que todo endpoint mutável real já tinha cobertura; o único gap real era um branch de login sem auditoria, corrigido); exporter/reader de métricas OTel (só traces foram conectados); propagação de trace context entre `apps/web` e `apps/api` (cada requisição do proxy Next.js hoje inicia um trace novo, sem `traceparent` herdado); instrumentação retroativa de módulos além de HTTP/execução de agente (ex. queries Drizzle individuais não ganham span próprio, só o span HTTP que as envolve).
 - Fase 15: budgets por chunk/bundle em CI e refinamentos responsivos para telas futuras.
 - Fase 17: a `approval` gravada nasce já decidida (aprovada/rejeitada) — não existe hoje um registro `pending` da própria aprovação criado quando a execução entra em `approval_required` (o estado "pendente" é representado pelo `agentRun.status`/`toolCall.status`, não por uma linha própria em `approvals`); um painel "aprovações pendentes" cross-execução (fora da página de uma execução específica) exigiria isso.
 

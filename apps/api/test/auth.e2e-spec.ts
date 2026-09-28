@@ -11,8 +11,10 @@ import type { TestApp } from './support/bootstrap-app.js';
 let testApp: TestApp;
 let organizationId: string;
 let userId: string;
+let userWithoutPasswordId: string;
 const password = 'demo1234';
 const userEmail = 'dev@acme-auth-e2e-test.example';
+const userWithoutPasswordEmail = 'sso-only@acme-auth-e2e-test.example';
 
 beforeAll(async () => {
   const { bootstrapTestApp } = await import('./support/bootstrap-app.js');
@@ -37,6 +39,19 @@ beforeAll(async () => {
     .returning();
   if (!user) throw new Error('user não inserido');
   userId = user.id;
+
+  const [userWithoutPassword] = await testApp.db
+    .insert(testApp.schema.users)
+    .values({
+      organizationId: organization.id,
+      email: userWithoutPasswordEmail,
+      name: 'SSO Only E2E',
+      role: 'developer',
+      passwordHash: null,
+    })
+    .returning();
+  if (!userWithoutPassword) throw new Error('user sem senha não inserido');
+  userWithoutPasswordId = userWithoutPassword.id;
 }, 60_000);
 
 afterAll(async () => {
@@ -111,6 +126,33 @@ describe('POST /auth/login', () => {
       .expect(401);
 
     expect(response.body.message).toBe('Credenciais inválidas.');
+  });
+
+  it('retorna o mesmo 401 genérico para uma conta sem senha configurada, mas grava audit log real (diferente do email inexistente, que não tem organizationId pra registrar)', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userWithoutPasswordEmail, password })
+      .expect(401);
+
+    expect(response.body.message).toBe('Credenciais inválidas.');
+
+    const { and, eq } = await import('@forge/database');
+    const [auditLog] = await testApp.db.query.auditLogs.findMany({
+      where: and(
+        eq(testApp.schema.auditLogs.action, 'auth.login_failed'),
+        eq(testApp.schema.auditLogs.actorUserId, userWithoutPasswordId),
+      ),
+      limit: 1,
+    });
+    expect(auditLog).toMatchObject({
+      organizationId,
+      actorType: 'user',
+      actorUserId: userWithoutPasswordId,
+      action: 'auth.login_failed',
+      targetType: 'user',
+      targetId: userWithoutPasswordId,
+    });
+    expect(auditLog?.metadata).toEqual({ role: 'developer', reason: 'no_password_configured' });
   });
 
   it('retorna 400 para corpo de requisição malformado', async () => {
