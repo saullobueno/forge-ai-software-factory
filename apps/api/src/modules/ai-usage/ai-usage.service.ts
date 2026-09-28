@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { readAiUsageLimits, type AiUsageLimits } from '../../infrastructure/config/env.js';
+import { readAiUsageLimits, readAiUserUsageLimits, type AiUsageLimits } from '../../infrastructure/config/env.js';
 import { AiUsageRepository, type AiUsageRow } from './ai-usage.repository.js';
 
 export interface AiUsageTotals {
@@ -37,6 +37,19 @@ export interface AiUsageSummary {
   byProvider: AiUsageProviderSummary[];
   recent: AiUsageRecentItem[];
   sampleSize: number;
+}
+
+/**
+ * Resumo do uso do PRÓPRIO usuário autenticado nas últimas 24h (Fase 13
+ * continuação #7), consumido por `GET /ai-usage/me` — deliberadamente sem
+ * `byProvider`/`recent` (que exigiriam mais dados/decisões de UI do que o
+ * escopo mínimo desta continuação: só o essencial para alguém enxergar o
+ * quão perto está do próprio limite antes de bater nele).
+ */
+export interface AiUserUsageSummary {
+  totals: AiUsageTotals;
+  limits: AiUsageLimits;
+  windowStartedAt: Date;
 }
 
 const EMPTY_TOTALS: AiUsageTotals = {
@@ -138,11 +151,74 @@ export class AiUsageService {
 
     throw new HttpException({
       message: 'Limite diário de uso de IA atingido para esta organização.',
+      scope: 'organization',
       limits,
       totals: finalizeTotals(totals),
       exceeded,
       windowStartedAt,
     }, HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  /**
+   * Camada ADICIONAL sobre `assertWithinOrganizationLimits` (Fase 13
+   * continuação #7): avalia o uso das últimas 24h do USUÁRIO que está
+   * disparando a execução (`agentRuns.requestedByUserId`, não
+   * `organizationId`) contra `AI_USER_DAILY_TOKEN_LIMIT`/
+   * `AI_USER_DAILY_COST_LIMIT_USD`. Os dois limites (organização e
+   * usuário) podem estar ativos simultaneamente; qualquer um dos dois já
+   * sendo atingido basta para bloquear com 429 — esta chamada é
+   * independente da de organização (`AgentRunsService.triggerForTask`
+   * chama as duas), nunca substitui aquela.
+   *
+   * O corpo da exceção usa `scope: 'user'` (em vez de `'organization'`)
+   * para que quem recebe o 429 (UI ou audit log de erro, se algum dia
+   * existir) saiba exatamente qual dos dois limites foi o motivo — nunca
+   * uma mensagem genérica que misturasse os dois.
+   */
+  async assertWithinUserLimits(organizationId: string, userId: string): Promise<void> {
+    const limits = readAiUserUsageLimits();
+    if (!limits.dailyTokenLimit && !limits.dailyCostLimitUsd) return;
+
+    const windowStartedAt = new Date(Date.now() - DAILY_LIMIT_WINDOW_MS);
+    const usages = await this.aiUsageRepository.listByUserSince(organizationId, userId, windowStartedAt);
+    const totals = createAccumulator();
+    for (const usage of usages) {
+      addUsage(totals, usage);
+    }
+
+    const exceeded = this.getExceededLimits(totals, limits);
+    if (exceeded.length === 0) return;
+
+    throw new HttpException({
+      message: 'Limite diário de uso de IA atingido para este usuário.',
+      scope: 'user',
+      limits,
+      totals: finalizeTotals(totals),
+      exceeded,
+      windowStartedAt,
+    }, HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  /**
+   * Uso do PRÓPRIO usuário autenticado nas últimas 24h (Fase 13
+   * continuação #7), consumido por `GET /ai-usage/me` — deliberadamente
+   * sem exigir `audit_log:read` (ao contrário de `summarizeByOrganization`):
+   * qualquer usuário autenticado pode ver o próprio uso/proximidade do
+   * próprio limite, mesmo quem não tem permissão para ver o agregado da
+   * organização inteira (ex. `developer`). Reaproveita a mesma janela de
+   * 24h e o mesmo `listByUserSince` já usado por `assertWithinUserLimits`
+   * — nenhuma consulta nova.
+   */
+  async summarizeForUser(organizationId: string, userId: string): Promise<AiUserUsageSummary> {
+    const limits = readAiUserUsageLimits();
+    const windowStartedAt = new Date(Date.now() - DAILY_LIMIT_WINDOW_MS);
+    const usages = await this.aiUsageRepository.listByUserSince(organizationId, userId, windowStartedAt);
+    const totals = createAccumulator();
+    for (const usage of usages) {
+      addUsage(totals, usage);
+    }
+
+    return { totals: finalizeTotals(totals), limits, windowStartedAt };
   }
 
   private getExceededLimits(totals: AiUsageTotals, limits: AiUsageLimits): string[] {

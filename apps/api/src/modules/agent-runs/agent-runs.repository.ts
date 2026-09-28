@@ -39,6 +39,13 @@ export interface CreateAgentRunInput {
   taskId: string;
   agentId: string;
   objective: string;
+  /**
+   * Usuário que chamou `POST /tasks/:id/agent-runs` (Fase 13 continuação
+   * #7 — limites diários por usuário). `null` só é aceitável quando não há
+   * um ator real disponível (não deveria acontecer no fluxo real, que
+   * sempre tem um usuário autenticado — ver `AgentRunsService.triggerForTask`).
+   */
+  requestedByUserId: string | null;
 }
 
 const TERMINAL_STATUSES: readonly AgentRunStatus[] = ['completed', 'failed', 'cancelled'];
@@ -64,6 +71,7 @@ export class AgentRunsRepository {
         taskId: input.taskId,
         agentId: input.agentId,
         objective: input.objective,
+        requestedByUserId: input.requestedByUserId,
         status: 'queued',
       })
       .returning();

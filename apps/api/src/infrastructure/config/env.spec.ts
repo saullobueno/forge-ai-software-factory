@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_DEVELOPMENT_JWT_SECRET, parseEnv, readAiUsageLimits } from './env.js';
+import { DEFAULT_DEVELOPMENT_JWT_SECRET, parseEnv, readAiUsageLimits, readAiUserUsageLimits } from './env.js';
 
 describe('parseEnv', () => {
   it('mantém fallbacks locais fora de produção', () => {
@@ -33,7 +33,7 @@ describe('parseEnv', () => {
     });
   });
 
-  it('lê limites opcionais de uso de IA', () => {
+  it('lê limites opcionais de uso de IA por organização', () => {
     expect(
       readAiUsageLimits({
         AI_ORG_DAILY_TOKEN_LIMIT: '100000',
@@ -42,6 +42,32 @@ describe('parseEnv', () => {
     ).toEqual({
       dailyTokenLimit: 100000,
       dailyCostLimitUsd: 2.5,
+    });
+  });
+
+  it('sem env vars, os limites por organização ficam nulos (comportamento idêntico ao anterior)', () => {
+    expect(readAiUsageLimits({} as NodeJS.ProcessEnv)).toEqual({
+      dailyTokenLimit: null,
+      dailyCostLimitUsd: null,
+    });
+  });
+
+  it('lê limites opcionais de uso de IA por usuário (Fase 13 continuação #7)', () => {
+    expect(
+      readAiUserUsageLimits({
+        AI_USER_DAILY_TOKEN_LIMIT: '20000',
+        AI_USER_DAILY_COST_LIMIT_USD: '0.75',
+      } as NodeJS.ProcessEnv),
+    ).toEqual({
+      dailyTokenLimit: 20000,
+      dailyCostLimitUsd: 0.75,
+    });
+  });
+
+  it('sem env vars, os limites por usuário ficam nulos (comportamento idêntico ao anterior)', () => {
+    expect(readAiUserUsageLimits({} as NodeJS.ProcessEnv)).toEqual({
+      dailyTokenLimit: null,
+      dailyCostLimitUsd: null,
     });
   });
 });

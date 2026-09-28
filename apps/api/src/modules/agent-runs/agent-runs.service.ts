@@ -47,6 +47,14 @@ export class AgentRunsService {
    * propagado pela fila para que o orquestrador avalie cada tool call com
    * o RBAC real desse usuário (spec §8/§20), não um papel de "sistema"
    * fixo.
+   *
+   * Antes de criar o `agentRun`, dois limites diários independentes são
+   * avaliados (Fase 13 continuações #5 e #7): por organização
+   * (`AI_ORG_DAILY_*`) e por usuário (`AI_USER_DAILY_*`, camada adicional
+   * — qualquer um dos dois bastando para bloquear com 429). `actorUserId`
+   * também é persistido em `agentRuns.requestedByUserId`, a única forma de
+   * `ai_usages` (que só guarda `organizationId`) ser filtrável por usuário
+   * depois, via JOIN.
    */
   async triggerForTask(task: TaskRow, actor: OrchestratorActor, actorUserId: string): Promise<AgentRunRow> {
     const agent = await this.agentsRepository.findPlannerOrFirstEnabled(task.organizationId);
@@ -56,12 +64,14 @@ export class AgentRunsService {
       );
     }
     await this.aiUsageService.assertWithinOrganizationLimits(task.organizationId);
+    await this.aiUsageService.assertWithinUserLimits(task.organizationId, actorUserId);
 
     const created = await this.agentRunsRepository.create({
       organizationId: task.organizationId,
       taskId: task.id,
       agentId: agent.id,
       objective: `Implementar: ${task.title}`,
+      requestedByUserId: actorUserId,
     });
 
     await this.agentRunWorker.enqueue(created.id, actor);

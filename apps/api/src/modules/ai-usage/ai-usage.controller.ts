@@ -16,4 +16,17 @@ export class AiUsageController {
   async summary(@CurrentUser() user: AuthenticatedUser) {
     return this.aiUsageService.summarizeByOrganization(user.organizationId);
   }
+
+  /**
+   * Uso do PRÓPRIO usuário autenticado nas últimas 24h (Fase 13
+   * continuação #7) — sem `@RequirePermission`, de propósito: é o dado do
+   * PRÓPRIO usuário, não um agregado da organização (que continua exigindo
+   * `audit_log:read` em `/summary` acima). Qualquer papel autenticado,
+   * incluindo `developer`, pode consultar o quão perto está do próprio
+   * limite (`AI_USER_DAILY_*`) antes de bater nele.
+   */
+  @Get('me')
+  async me(@CurrentUser() user: AuthenticatedUser) {
+    return this.aiUsageService.summarizeForUser(user.organizationId, user.userId);
+  }
 }

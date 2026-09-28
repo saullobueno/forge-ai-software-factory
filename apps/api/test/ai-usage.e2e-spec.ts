@@ -7,6 +7,9 @@ let testApp: TestApp;
 let techLeadToken: string;
 let developerToken: string;
 let taskAId: string;
+let organizationAId: string;
+let techLeadUserId: string;
+let agentAId: string;
 
 const password = 'demo1234';
 
@@ -45,6 +48,8 @@ beforeAll(async () => {
     ])
     .returning();
   if (!techLead || !developer) throw new Error('users não inseridos');
+  organizationAId = organizationA.id;
+  techLeadUserId = techLead.id;
 
   const [projectA] = await testApp.db
     .insert(testApp.schema.projects)
@@ -64,6 +69,7 @@ beforeAll(async () => {
     .values({ organizationId: organizationA.id, role: 'planner', name: 'Planner Usage Limits' })
     .returning();
   if (!agentA) throw new Error('agent não inserido');
+  agentAId = agentA.id;
 
   const [agentRunA] = await testApp.db
     .insert(testApp.schema.agentRuns)
@@ -225,6 +231,25 @@ describe('GET /ai-usage/summary', () => {
   });
 });
 
+describe('GET /ai-usage/me', () => {
+  it('retorna o uso das últimas 24h do PRÓPRIO usuário, mesmo sem audit_log:read', async () => {
+    // `developer` não tem `audit_log:read` (403 em /ai-usage/summary, ver
+    // acima) — `/me` (Fase 13 continuação #7) é dado do próprio usuário,
+    // não um agregado da organização, então não exige essa permissão.
+    const response = await request(testApp.app.getHttpServer())
+      .get('/ai-usage/me')
+      .set('Authorization', `Bearer ${developerToken}`)
+      .expect(200);
+
+    expect(response.body.totals.totalTokens).toBe(0);
+    expect(response.body.limits).toEqual({ dailyTokenLimit: null, dailyCostLimitUsd: null });
+  });
+
+  it('retorna 401 sem token', async () => {
+    await request(testApp.app.getHttpServer()).get('/ai-usage/me').expect(401);
+  });
+});
+
 describe('limites de uso de IA', () => {
   it('bloqueia nova execução quando o limite diário de tokens da organização já foi atingido', async () => {
     process.env['AI_ORG_DAILY_TOKEN_LIMIT'] = '400';
@@ -235,10 +260,84 @@ describe('limites de uso de IA', () => {
         .expect(429);
 
       expect(response.body.message).toBe('Limite diário de uso de IA atingido para esta organização.');
+      expect(response.body.scope).toBe('organization');
       expect(response.body.exceeded).toContain('tokens');
       expect(response.body.totals.totalTokens).toBe(475);
     } finally {
       delete process.env['AI_ORG_DAILY_TOKEN_LIMIT'];
+    }
+  });
+
+  /**
+   * Camada ADICIONAL por usuário (Fase 13 continuação #7): seed próprio
+   * (não reaproveita `agentRunA`/`ai_usages` do `beforeAll`, que nunca
+   * teve `requestedByUserId` preenchido) — um `agentRun` real atribuído a
+   * `techLead` via `requestedByUserId`, com uso de IA real associado, que
+   * sozinho já ultrapassa um limite POR USUÁRIO bem menor que qualquer
+   * teto de organização configurado neste describe block.
+   */
+  it('bloqueia nova execução quando o limite diário de tokens do USUÁRIO já foi atingido, mesmo a organização estando dentro do limite', async () => {
+    const [techLeadAgentRun] = await testApp.db
+      .insert(testApp.schema.agentRuns)
+      .values({
+        organizationId: organizationAId,
+        taskId: taskAId,
+        agentId: agentAId,
+        status: 'completed',
+        objective: 'Execução atribuída ao tech lead (teste de limite por usuário)',
+        requestedByUserId: techLeadUserId,
+      })
+      .returning();
+    if (!techLeadAgentRun) throw new Error('agentRun do tech lead não inserido');
+
+    await testApp.db.insert(testApp.schema.aiUsages).values({
+      organizationId: organizationAId,
+      agentRunId: techLeadAgentRun.id,
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      promptTokens: 300,
+      completionTokens: 300,
+      totalTokens: 600,
+      costUsd: '0.006000',
+    });
+
+    process.env['AI_USER_DAILY_TOKEN_LIMIT'] = '500';
+    try {
+      const response = await request(testApp.app.getHttpServer())
+        .post(`/tasks/${taskAId}/agent-runs`)
+        .set('Authorization', `Bearer ${techLeadToken}`)
+        .expect(429);
+
+      expect(response.body.message).toBe('Limite diário de uso de IA atingido para este usuário.');
+      expect(response.body.scope).toBe('user');
+      expect(response.body.exceeded).toContain('tokens');
+      expect(response.body.totals.totalTokens).toBe(600);
+
+      // Prova de isolamento: `GET /ai-usage/me` do PRÓPRIO tech lead
+      // reflete o mesmo total usado para bloquear — não um número
+      // inventado à parte.
+      const me = await request(testApp.app.getHttpServer())
+        .get('/ai-usage/me')
+        .set('Authorization', `Bearer ${techLeadToken}`)
+        .expect(200);
+      expect(me.body.totals.totalTokens).toBe(600);
+    } finally {
+      delete process.env['AI_USER_DAILY_TOKEN_LIMIT'];
+    }
+  });
+
+  it('NÃO bloqueia outro usuário da mesma organização quando só o limite por usuário do primeiro foi atingido', async () => {
+    // `developer` nunca teve nenhum `agentRun`/`ai_usages` atribuído a si
+    // (`requestedByUserId`) neste arquivo — o total por usuário dele é
+    // sempre 0, então mesmo um limite de 500 tokens não bloqueia.
+    process.env['AI_USER_DAILY_TOKEN_LIMIT'] = '500';
+    try {
+      await request(testApp.app.getHttpServer())
+        .post(`/tasks/${taskAId}/agent-runs`)
+        .set('Authorization', `Bearer ${developerToken}`)
+        .expect(201);
+    } finally {
+      delete process.env['AI_USER_DAILY_TOKEN_LIMIT'];
     }
   });
 });

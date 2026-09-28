@@ -12,6 +12,8 @@ const envSchema = z.object({
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
   AI_ORG_DAILY_TOKEN_LIMIT: z.coerce.number().int().positive().optional(),
   AI_ORG_DAILY_COST_LIMIT_USD: z.coerce.number().positive().optional(),
+  AI_USER_DAILY_TOKEN_LIMIT: z.coerce.number().int().positive().optional(),
+  AI_USER_DAILY_COST_LIMIT_USD: z.coerce.number().positive().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
@@ -45,6 +47,28 @@ export function readAiUsageLimits(source: NodeJS.ProcessEnv = process.env): AiUs
   return {
     dailyTokenLimit: parsed.AI_ORG_DAILY_TOKEN_LIMIT ?? null,
     dailyCostLimitUsd: parsed.AI_ORG_DAILY_COST_LIMIT_USD ?? null,
+  };
+}
+
+/**
+ * Limites diários por USUÁRIO (Fase 13 continuação #7), camada ADICIONAL
+ * sobre `readAiUsageLimits` (por organização) — mesmo formato
+ * (`AiUsageLimits`, os dois só têm `dailyTokenLimit`/`dailyCostLimitUsd`),
+ * mesma convenção de nome/validação/opcionalidade, só um par de env vars
+ * diferente. Sem essas env vars, o comportamento é idêntico a antes desta
+ * continuação (nenhum teto por usuário é avaliado).
+ */
+export function readAiUserUsageLimits(source: NodeJS.ProcessEnv = process.env): AiUsageLimits {
+  const parsed = envSchema
+    .pick({
+      AI_USER_DAILY_TOKEN_LIMIT: true,
+      AI_USER_DAILY_COST_LIMIT_USD: true,
+    })
+    .parse(source);
+
+  return {
+    dailyTokenLimit: parsed.AI_USER_DAILY_TOKEN_LIMIT ?? null,
+    dailyCostLimitUsd: parsed.AI_USER_DAILY_COST_LIMIT_USD ?? null,
   };
 }
 
