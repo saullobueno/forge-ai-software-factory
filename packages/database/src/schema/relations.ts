@@ -130,6 +130,10 @@ export const agentRunsRelations = relations(agentRuns, ({ one, many }) => ({
   task: one(tasks, { fields: [agentRuns.taskId], references: [tasks.id] }),
   agent: one(agents, { fields: [agentRuns.agentId], references: [agents.id] }),
   workspace: one(workspaces, { fields: [agentRuns.workspaceId], references: [workspaces.id] }),
+  requestedByUser: one(users, {
+    fields: [agentRuns.requestedByUserId],
+    references: [users.id],
+  }),
   steps: many(agentSteps),
   codeChanges: many(codeChanges),
   testRuns: many(testRuns),

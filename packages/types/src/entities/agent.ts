@@ -37,6 +37,12 @@ export const agentRunSchema = z
     taskId: idSchema,
     agentId: idSchema,
     workspaceId: idSchema.nullable(),
+    /**
+     * Usuário que disparou `POST /tasks/:id/agent-runs` (Fase 13
+     * continuação #7 — limites diários por usuário). `null` só para dados
+     * legados/seedados diretamente no banco sem passar pelo endpoint real.
+     */
+    requestedByUserId: idSchema.nullable(),
     status: agentRunStatusSchema.default('queued'),
     objective: z.string().min(1).max(4000),
     scope: z.record(z.string(), z.unknown()).default({}),

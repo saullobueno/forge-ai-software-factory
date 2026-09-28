@@ -16,7 +16,7 @@ import {
   agentToolNameEnum,
   toolCallStatusEnum,
 } from './enums.ts';
-import { organizations } from './organizations.ts';
+import { organizations, users } from './organizations.ts';
 import { tasks } from './tasks.ts';
 import { workspaces } from './workspaces.ts';
 
@@ -53,6 +53,21 @@ export const agentRuns = pgTable('agent_runs', {
   status: agentRunStatusEnum('status').notNull().default('queued'),
   objective: text('objective').notNull(),
   scope: jsonb('scope').notNull().$type<Record<string, unknown>>().default({}),
+  /**
+   * Usuário que chamou `POST /tasks/:id/agent-runs` (Fase 13 continuação
+   * #7 — limites diários por USUÁRIO, além do já existente por
+   * organização). Nullable/`onDelete: 'set null'`, mesmo padrão de
+   * `approvals.requestedByUserId`/`approvedByUserId`: nunca bloqueia a
+   * exclusão de um usuário, e dados legados/seedados diretamente no banco
+   * (sem passar pelo endpoint real) simplesmente não têm este dado —
+   * degrada graciosamente (a execução some do cálculo de limite por
+   * usuário, nunca quebra). É a única forma direta e eficiente de
+   * `ai_usages` (que não guarda usuário nenhum, só `organizationId`) ser
+   * filtrável por usuário: um JOIN em `agent_runs.requested_by_user_id`,
+   * já indexado abaixo, em vez de uma consulta reativa ao audit log
+   * `agent_run.triggered` a cada avaliação de limite.
+   */
+  requestedByUserId: uuid('requested_by_user_id').references(() => users.id, { onDelete: 'set null' }),
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   totalTokens: integer('total_tokens').notNull().default(0),
@@ -63,6 +78,7 @@ export const agentRuns = pgTable('agent_runs', {
   index('agent_runs_organization_id_idx').on(table.organizationId),
   index('agent_runs_task_id_idx').on(table.taskId),
   index('agent_runs_status_idx').on(table.status),
+  index('agent_runs_requested_by_user_id_idx').on(table.requestedByUserId),
 ]);
 
 export const agentSteps = pgTable('agent_steps', {

@@ -8,6 +8,7 @@ const baseRun = {
   taskId: id,
   agentId: id,
   workspaceId: null,
+  requestedByUserId: null,
   objective: 'Implementar endpoint de login',
   scope: {},
   totalTokens: 0,
