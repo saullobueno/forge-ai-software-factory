@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_sources" ADD COLUMN "content_hash" text;

@@ -232,6 +232,13 @@ export interface ApiKnowledgeSearchResult {
   hasPromptInjectionRisk: boolean;
 }
 
+export interface ApiKnowledgeReindexResult {
+  createdSources: number;
+  updatedSources: number;
+  unchangedSources: number;
+  totalSources: number;
+}
+
 /**
  * Modelos de view da Fase 6 (`AgentRunsModule`/`ArtifactsModule` — spec §9
  * "Modelo de execução"). Mesma regra das interfaces acima: espelham a

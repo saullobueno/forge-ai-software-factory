@@ -5,29 +5,46 @@ import { knowledgeChunks, knowledgeSources } from './schema/index.ts';
 
 export interface PersistIndexedKnowledgeSourcesResult {
   createdSourceCount: number;
+  updatedSourceCount: number;
+  unchangedSourceCount: number;
   createdChunkCount: number;
+  updatedChunkCount: number;
 }
 
 /**
- * Persiste de forma idempotente um lote de fontes já indexadas por
- * `indexKnowledgeFiles()` (`@forge/knowledge`, Fase 12 continuação) — o
+ * Persiste de forma idempotente e com detecção real de staleness um lote de
+ * fontes já indexadas por `indexKnowledgeFiles()` (`@forge/knowledge`) — o
  * único ponto que grava `knowledge_sources`/`knowledge_chunks` a partir de
  * arquivos reais, reaproveitado tanto pelo seed (`packages/database/src/
- * seed/run-seed.ts`) quanto por um reindex sob demanda via API
- * (`apps/api`), para nunca duplicar esta lógica de idempotência.
+ * seed/run-seed.ts`) quanto pelo reindex sob demanda via API
+ * (`POST /projects/:id/knowledge/reindex`, `apps/api`), para nunca duplicar
+ * esta lógica de idempotência/staleness.
  *
- * Uma fonte é identificada por `(organizationId, projectId, uri)` — a
- * mesma tripla que já era usada manualmente antes desta continuação.
- * Reindexar o mesmo arquivo não cria uma segunda linha em `knowledge_sources`;
- * só grava chunks quando a fonte é criada agora ou quando já existia mas
- * ainda não tinha nenhum chunk (mesma regra que o seed manual já seguia).
+ * Uma fonte é identificada por `(organizationId, projectId, uri)` — a mesma
+ * tripla já usada desde a versão manual original. Três casos reais:
+ * 1. Fonte nova (nenhuma linha com essa tripla): INSERT de `knowledge_sources`
+ *    (já com `contentHash`) + INSERT de todos os chunks.
+ * 2. Fonte já existente e "stale" — `contentHash` armazenado é `null`
+ *    (fonte seedada antes desta coluna existir, ou uma inserção anterior que
+ *    falhou entre os dois INSERTs e nunca chegou a gravar nenhum chunk) OU
+ *    diferente do `contentHash` novo (o arquivo real mudou desde a última
+ *    indexação): os chunks antigos são DELETADOS e os novos INSERIDOS (nunca
+ *    acumulados/duplicados), e `contentHash`/`title`/`kind`/`version` da
+ *    linha são atualizados.
+ * 3. Fonte já existente e não-stale (`contentHash` igual e já tem pelo menos
+ *    um chunk): não faz nada — é exatamente o caso "arquivo não mudou desde
+ *    a última indexação", o ponto central de por que este reindex é real e
+ *    não um recurso "meio pronto" que só soubesse adicionar fontes novas.
  */
 export async function persistIndexedKnowledgeSources(
   db: Database,
   sources: readonly IndexedKnowledgeSource[],
 ): Promise<PersistIndexedKnowledgeSourcesResult> {
   let createdSourceCount = 0;
+  let updatedSourceCount = 0;
+  let unchangedSourceCount = 0;
   let createdChunkCount = 0;
+  let updatedChunkCount = 0;
 
   for (const source of sources) {
     const existing = await db.query.knowledgeSources.findFirst({
@@ -39,36 +56,65 @@ export async function persistIndexedKnowledgeSources(
       with: { chunks: true },
     });
 
-    const row =
-      existing ??
-      (
-        await db
-          .insert(knowledgeSources)
-          .values({
-            organizationId: source.organizationId,
-            projectId: source.projectId,
-            workspaceId: source.workspaceId,
-            kind: source.kind,
-            title: source.title,
-            uri: source.uri,
-            version: source.version,
-          })
-          .returning()
-      )[0];
-    if (!row) throw new Error(`Falha ao inserir knowledge source "${source.title}" (${source.uri}).`);
-    if (!existing) createdSourceCount += 1;
-    if (existing && existing.chunks.length > 0) continue;
+    if (!existing) {
+      const [row] = await db
+        .insert(knowledgeSources)
+        .values({
+          organizationId: source.organizationId,
+          projectId: source.projectId,
+          workspaceId: source.workspaceId,
+          kind: source.kind,
+          title: source.title,
+          uri: source.uri,
+          version: source.version,
+          contentHash: source.contentHash,
+        })
+        .returning();
+      if (!row) throw new Error(`Falha ao inserir knowledge source "${source.title}" (${source.uri}).`);
 
+      await db.insert(knowledgeChunks).values(
+        source.chunks.map((chunk) => ({
+          knowledgeSourceId: row.id,
+          content: chunk.content,
+          chunkIndex: chunk.chunkIndex,
+          tokenCount: chunk.tokenCount,
+        })),
+      );
+
+      createdSourceCount += 1;
+      createdChunkCount += source.chunks.length;
+      continue;
+    }
+
+    const isStale = existing.contentHash !== source.contentHash || existing.chunks.length === 0;
+    if (!isStale) {
+      unchangedSourceCount += 1;
+      continue;
+    }
+
+    await db.delete(knowledgeChunks).where(eq(knowledgeChunks.knowledgeSourceId, existing.id));
     await db.insert(knowledgeChunks).values(
       source.chunks.map((chunk) => ({
-        knowledgeSourceId: row.id,
+        knowledgeSourceId: existing.id,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
         tokenCount: chunk.tokenCount,
       })),
     );
-    createdChunkCount += source.chunks.length;
+    await db
+      .update(knowledgeSources)
+      .set({
+        title: source.title,
+        kind: source.kind,
+        version: source.version,
+        contentHash: source.contentHash,
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgeSources.id, existing.id));
+
+    updatedSourceCount += 1;
+    updatedChunkCount += source.chunks.length;
   }
 
-  return { createdSourceCount, createdChunkCount };
+  return { createdSourceCount, updatedSourceCount, unchangedSourceCount, createdChunkCount, updatedChunkCount };
 }

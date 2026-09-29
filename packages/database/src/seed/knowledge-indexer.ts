@@ -1,4 +1,4 @@
-import type { IndexableFile } from '@forge/knowledge';
+import { isRepositoryKnowledgeFile, type IndexableFile } from '@forge/knowledge';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,16 +41,6 @@ async function collectMatchingFiles(
   }
 }
 
-function isFixtureKnowledgeFile(relativePath: string): boolean {
-  if (relativePath === 'README.md') return true;
-  // Código-fonte real como conhecimento (spec §14 — sem tabela dedicada a
-  // "código-fonte" no enum de kind, ver `inferKnowledgeSourceKind`),
-  // excluindo arquivos de teste (`*.test.ts`) — não agregam conhecimento de
-  // produto/arquitetura, só duplicariam o que os próprios módulos já
-  // documentam.
-  return relativePath.startsWith('src/') && relativePath.endsWith('.ts') && !relativePath.endsWith('.test.ts');
-}
-
 /**
  * Lista os arquivos reais do repositório demo (`fixtures/<repositoryName>`)
  * que fazem sentido indexar como conhecimento de projeto: o README do
@@ -62,7 +52,12 @@ function isFixtureKnowledgeFile(relativePath: string): boolean {
 export async function loadFixtureKnowledgeFiles(repositoryName: string): Promise<IndexableFile[]> {
   const root = join(FIXTURES_ROOT, repositoryName);
   const files: IndexableFile[] = [];
-  await collectMatchingFiles(root, '', isFixtureKnowledgeFile, files);
+  // `isRepositoryKnowledgeFile` (`@forge/knowledge`) é a mesma regra usada
+  // pelo reindex sob demanda em `apps/api` (que varre a mesma árvore via
+  // `RepositoryFsService` em vez de `node:fs` direto) — extraída para lá
+  // justamente para as duas varreduras nunca divergirem sobre quais
+  // arquivos contam como conhecimento de projeto.
+  await collectMatchingFiles(root, '', isRepositoryKnowledgeFile, files);
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 

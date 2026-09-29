@@ -8,6 +8,7 @@ import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { canApproveDeployments } from '@/lib/deployment-approval-permission';
+import { canReindexKnowledge } from '@/lib/knowledge-reindex-permission';
 import {
   DEPLOYMENT_STATUS_LABELS,
   ENVIRONMENT_KIND_LABELS,
@@ -20,6 +21,7 @@ import type {
   ApiCurrentUser,
   ApiDeploymentSummary,
   ApiEnvironment,
+  ApiKnowledgeReindexResult,
   ApiKnowledgeSearchResult,
   ApiKnowledgeSourceSummary,
   ApiProject,
@@ -151,7 +153,7 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
         </div>
       </section>
 
-      <KnowledgePanel projectId={projectId} />
+      <KnowledgePanel projectId={projectId} canReindex={currentUserQuery.data !== undefined && canReindexKnowledge(currentUserQuery.data.role)} />
 
       <section>
         <h2 className="text-sm font-medium">Tarefas</h2>
@@ -319,13 +321,30 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   );
 }
 
-function KnowledgePanel({ projectId }: { projectId: string }) {
+function KnowledgePanel({ projectId, canReindex }: { projectId: string; canReindex: boolean }) {
+  const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState('arquitetura');
   const [submittedQuery, setSubmittedQuery] = useState('arquitetura');
 
   const sourcesQuery = useQuery({
     queryKey: ['projects', projectId, 'knowledge'],
     queryFn: () => apiFetch<ApiKnowledgeSourceSummary[]>(`/projects/${projectId}/knowledge`),
+  });
+
+  /**
+   * Reindex sob demanda (Fase 12, continuação): relê os arquivos reais do
+   * repositório do projeto + os documentos de organização do Forge e
+   * detecta staleness real por hash — nunca só "adiciona fontes novas" sem
+   * atualizar o que já mudou (ver `KnowledgeService.reindex`, `apps/api`).
+   * Invalida a query de fontes para refletir o resultado sem reload manual
+   * da página, mesmo padrão já usado por `requestDeployment` acima.
+   */
+  const reindex = useMutation({
+    mutationFn: () => apiFetch<ApiKnowledgeReindexResult>(`/projects/${projectId}/knowledge/reindex`, { method: 'POST' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'knowledge'] });
+      void queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+    },
   });
 
   const searchQuery = useQuery({
@@ -348,8 +367,32 @@ function KnowledgePanel({ projectId }: { projectId: string }) {
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium">Conhecimento</h2>
-        <span className="font-mono text-xs text-muted-foreground">fontes indexadas e busca contextual</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-mono text-xs text-muted-foreground">fontes indexadas e busca contextual</span>
+          {canReindex && (
+            <button
+              type="button"
+              className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={reindex.isPending}
+              onClick={() => reindex.mutate()}
+            >
+              {reindex.isPending ? 'Reindexando…' : 'Reindexar'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {reindex.isError && (
+        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {reindex.error instanceof ApiError ? reindex.error.message : 'Não foi possível reindexar o conhecimento.'}
+        </p>
+      )}
+      {reindex.data && (
+        <p className="mt-2 text-sm text-muted-foreground" data-testid="knowledge-reindex-result">
+          Reindexação concluída: {reindex.data.createdSources} nova(s), {reindex.data.updatedSources} atualizada(s),{' '}
+          {reindex.data.unchangedSources} já em dia.
+        </p>
+      )}
 
       <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
         <div className="rounded-lg border border-border p-4">

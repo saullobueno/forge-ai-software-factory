@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { KnowledgeSourceKind } from '@forge/types';
 import { chunkKnowledge } from './chunking.ts';
 import type { PreparedKnowledgeChunk } from './types.ts';
@@ -43,6 +44,18 @@ export interface IndexedKnowledgeSource {
   title: string;
   uri: string;
   version: string | null;
+  /**
+   * SHA-256 (hex) do conteúdo original do arquivo (mesmo `content` já
+   * trimado usado para chunkar, calculado UMA vez antes de chunkar) — não
+   * um hash dos chunks resultantes. Decisão deliberada: `chunkKnowledge()`
+   * recebe `maxTokens`/`overlapTokens` que variam por chamador (seed usa
+   * 120/16 para o fixture, defaults para os docs do Forge); hashear os
+   * chunks tornaria a detecção de staleness sensível a um parâmetro que
+   * nada tem a ver com o arquivo real ter mudado. Hashear o conteúdo bruto
+   * é a única forma de "o arquivo mudou de verdade?" que é estável entre
+   * chamadas com parâmetros de chunking diferentes.
+   */
+  contentHash: string;
   chunks: PreparedKnowledgeChunk[];
 }
 
@@ -74,6 +87,21 @@ export function inferKnowledgeSourceKind(path: string): KnowledgeSourceKind {
   if (base === 'readme.md') return 'readme';
   if (segments.includes('adr') || base.startsWith('adr-') || base.startsWith('adr_')) return 'adr';
   return 'repository_doc';
+}
+
+/**
+ * Regra real de "o que conta como conhecimento de um repositório de
+ * projeto" (README na raiz + código-fonte real em `src/`, exceto testes) —
+ * extraída para `@forge/knowledge` (pura, sem I/O) para que os dois
+ * consumidores reais que precisam da MESMA regra (o seed, que varre
+ * `fixtures/<repositoryName>` via `node:fs` direto, e o reindex sob demanda
+ * em `apps/api`, que varre a mesma árvore via `RepositoryFsService`) nunca
+ * divirjam silenciosamente sobre quais arquivos entram no índice.
+ */
+export function isRepositoryKnowledgeFile(relativePath: string): boolean {
+  const normalized = normalizePath(relativePath);
+  if (normalized === 'README.md') return true;
+  return normalized.startsWith('src/') && normalized.endsWith('.ts') && !normalized.endsWith('.test.ts');
 }
 
 /**
@@ -115,6 +143,7 @@ export function indexKnowledgeFiles(
       title: normalizedPath,
       uri,
       version: options.version,
+      contentHash: createHash('sha256').update(content).digest('hex'),
       chunks,
     });
   }

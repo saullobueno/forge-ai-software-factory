@@ -1,8 +1,9 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { indexKnowledgeFiles, inferKnowledgeSourceKind } from './indexing.ts';
+import { indexKnowledgeFiles, inferKnowledgeSourceKind, isRepositoryKnowledgeFile } from './indexing.ts';
 import { retrieveKnowledge } from './retrieval.ts';
 import type { KnowledgeDocument } from './types.ts';
 
@@ -124,5 +125,51 @@ describe('indexKnowledgeFiles', () => {
     expect(inferKnowledgeSourceKind('adr-002-cache.md')).toBe('adr');
     expect(inferKnowledgeSourceKind('docs/threat-model.md')).toBe('repository_doc');
     expect(inferKnowledgeSourceKind('src/lib/format-currency.ts')).toBe('repository_doc');
+  });
+
+  it('calcula contentHash real (sha256 do conteúdo trimado) — mesmo conteúdo produz o mesmo hash, conteúdo diferente produz hash diferente', () => {
+    const realContent = readFileSync(FIXTURE_README_PATH, 'utf8');
+    const expectedHash = createHash('sha256').update(realContent.trim()).digest('hex');
+
+    const [firstRun] = indexKnowledgeFiles([{ path: 'README.md', content: realContent }], {
+      organizationId: 'org-1',
+      projectId: 'project-1',
+      workspaceId: null,
+      uriPrefix: 'repo://acme-platform-web',
+      version: null,
+    });
+    // Reindexar o mesmo conteúdo com parâmetros de chunking DIFERENTES
+    // precisa produzir o MESMO contentHash — é exatamente o cenário real de
+    // staleness: o hash decide "o arquivo mudou?", não "os chunks mudaram?".
+    const [secondRun] = indexKnowledgeFiles([{ path: 'README.md', content: realContent }], {
+      organizationId: 'org-1',
+      projectId: 'project-1',
+      workspaceId: null,
+      uriPrefix: 'repo://acme-platform-web',
+      version: null,
+      maxTokens: 40,
+      overlapTokens: 4,
+    });
+
+    expect(firstRun?.contentHash).toBe(expectedHash);
+    expect(secondRun?.contentHash).toBe(expectedHash);
+    expect(firstRun?.chunks.length).not.toBe(secondRun?.chunks.length);
+
+    const [changed] = indexKnowledgeFiles([{ path: 'README.md', content: `${realContent}\nmais uma linha real` }], {
+      organizationId: 'org-1',
+      projectId: 'project-1',
+      workspaceId: null,
+      uriPrefix: 'repo://acme-platform-web',
+      version: null,
+    });
+    expect(changed?.contentHash).not.toBe(expectedHash);
+  });
+
+  it('isRepositoryKnowledgeFile aceita README.md e código-fonte real em src/ (exceto testes), rejeita o resto', () => {
+    expect(isRepositoryKnowledgeFile('README.md')).toBe(true);
+    expect(isRepositoryKnowledgeFile('src/lib/format-currency.ts')).toBe(true);
+    expect(isRepositoryKnowledgeFile('src/lib/format-currency.test.ts')).toBe(false);
+    expect(isRepositoryKnowledgeFile('package.json')).toBe(false);
+    expect(isRepositoryKnowledgeFile('docs/threat-model.md')).toBe(false);
   });
 });

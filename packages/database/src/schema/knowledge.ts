@@ -15,6 +15,15 @@ export const knowledgeSources = pgTable('knowledge_sources', {
   title: text('title').notNull(),
   uri: text('uri').notNull(),
   version: text('version'),
+  /**
+   * SHA-256 (hex) do conteúdo real por trás desta fonte (`IndexedKnowledgeSource.contentHash`,
+   * `@forge/knowledge`) — permite detectar staleness real num reindex sob
+   * demanda (arquivo já indexado que mudou desde a última vez). Nullable
+   * para não quebrar fontes seedadas antes desta coluna existir; nesse caso
+   * o reindex trata a ausência de hash como "desatualizado" e regrava os
+   * chunks na primeira passada, preenchendo o hash a partir daí.
+   */
+  contentHash: text('content_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

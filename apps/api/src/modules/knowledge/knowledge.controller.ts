@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { idSchema } from '@forge/types';
 import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -46,5 +46,25 @@ export class KnowledgeController {
   ) {
     const project = await this.requireProject(id, user.organizationId);
     return this.knowledgeService.search(project.id, user.organizationId, query.q, query.limit);
+  }
+
+  /**
+   * Reindex sob demanda (Fase 12, pendência explícita). `project:write` — a
+   * mesma permissão de RBAC já modelada desde a Fase 2 para "quem molda a
+   * configuração de um projeto" (`tech_lead`/`admin`), e que até esta
+   * continuação não tinha nenhum endpoint real que a exigisse. Reaproveitada
+   * em vez de criar uma permissão nova: reindexar conhecimento é uma ação de
+   * escrita sobre a configuração do projeto, não sobre execuções de IA
+   * (`agent_run:*`) nem sobre deploy (`environment:*`). `HttpCode(200)`:
+   * mesmo raciocínio já usado por `AgentRunsController.cancel`/`.approve` —
+   * o default do Nest para `@Post` é 201 (criação), mas isto é uma operação
+   * sobre um recurso já existente, não a criação de um novo.
+   */
+  @Post('reindex')
+  @RequirePermission('project:write')
+  @HttpCode(200)
+  async reindex(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const project = await this.requireProject(id, user.organizationId);
+    return this.knowledgeService.reindex(project.id, user.organizationId, user.userId);
   }
 }
