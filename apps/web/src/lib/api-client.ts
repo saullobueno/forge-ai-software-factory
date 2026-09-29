@@ -41,7 +41,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       // TanStack Query da sessão expirada de propósito, em vez de deixar
       // dados de um usuário desautenticado visíveis até o próximo refetch.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = '/login';
+      window.location.href = '/login?expired=1';
     }
     throw new ApiError('Não autenticado.', 401);
   }

@@ -53,6 +53,14 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname === '/login' && hasSession) {
+    // `expired=1` vem de `apiFetch` num 401: o cookie existe mas a API o
+    // rejeitou (JWT de 8h vencido). Devolver para /projects aqui criaria um
+    // loop infinito, então o cookie inválido é descartado e o login é exibido.
+    if (request.nextUrl.searchParams.get('expired') === '1') {
+      const response = NextResponse.next();
+      response.cookies.delete(SESSION_COOKIE_NAME);
+      return response;
+    }
     return NextResponse.redirect(new URL('/projects', request.url));
   }
 

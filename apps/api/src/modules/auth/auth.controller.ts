@@ -9,6 +9,9 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import type { AuthenticatedUser } from './types.js';
 
 const SESSION_COOKIE_NAME = 'forge_session';
+// Igual ao `expiresIn: '8h'` do JwtModule (auth.module.ts): o cookie não pode
+// sobreviver ao token, senão o navegador continua enviando um JWT vencido.
+const SESSION_COOKIE_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 @Controller('auth')
 export class AuthController {
@@ -32,6 +35,7 @@ export class AuthController {
       httpOnly: true,
       sameSite: 'lax',
       secure: env.NODE_ENV === 'production',
+      maxAge: SESSION_COOKIE_MAX_AGE_MS,
     });
 
     return result;
