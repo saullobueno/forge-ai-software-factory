@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test": "node --test scripts/*.test.mjs",
+    "test:e2e": "playwright test",
+    "check:bundle-budgets": "node scripts/check-bundle-budgets.mjs"
   },
   "dependencies": {
     "@forge/types": "workspace:*",

@@ -37,3 +37,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Bundle budgets (apps/web)
+        run: pnpm --filter @forge/web check:bundle-budgets
