@@ -30,22 +30,21 @@ JWT_SECRET=<segredo-longo-aleatorio>
 
 Em produção, a API agora falha cedo se `DATABASE_URL`, `REDIS_URL` ou um `JWT_SECRET` real não estiverem definidos.
 
-Comando de build/start sugerido para Render:
+Comandos no Render (Settings do serviço da API):
 
-```bash
-pnpm install --frozen-lockfile
-pnpm --filter @forge/api build
-pnpm --filter @forge/database db:migrate
-pnpm --filter @forge/database db:seed
-pnpm --filter @forge/api start:prod
-```
+- **Build Command**: `pnpm install --frozen-lockfile && pnpm --filter @forge/api build`
+- **Start Command**: `pnpm --filter @forge/database db:migrate:deploy && pnpm --filter @forge/api start:prod`
+
+O Start Command aplica as migrações pendentes **antes** de subir a API, a cada deploy/restart. `db:migrate:deploy` roda só com Node (`node src/migrate.ts`, sem `tsx`, que é dependência de desenvolvimento e pode não existir no runtime do Render) e é idempotente: sem migração nova, não faz nada. Se a migração falhar, a API não sobe (falha cedo, em vez de rodar com o schema errado) — veja os logs do Render. O seed **não** entra no Start Command: rode `db:seed` uma única vez, manualmente, na criação do banco.
 
 Para uma primeira demo, o seed pode ser aceitável. Para ambiente público, substitua por bootstrap administrativo controlado antes de abrir acesso.
 
-**Migrações NÃO rodam sozinhas no deploy** (o build/start real do Render só faz `build` e `start:prod`). Todo commit que gera uma migração nova em `packages/database/drizzle/` exige rodar `db:migrate` contra o Neon **antes ou logo depois** de o Render publicar a API — caso contrário as rotas que usam as colunas novas respondem 500 e a UI entra em loop de tentativas (react-query faz 1 + 3 retries por rota). Da sua máquina, com a `DATABASE_URL` do Neon (a mesma configurada no Render):
+**Migrações rodam sozinhas no deploy** (Start Command acima). Se algum dia o Start Command voltar a ser só `start:prod`, todo commit que gerar migração nova em `packages/database/drizzle/` exigirá rodar `db:migrate` manualmente contra o Neon — sem isso as rotas que usam as colunas novas respondem 500 e a UI fica tentando de novo (react-query faz 1 + 3 retries por rota). Rodar manualmente, no PowerShell, com a `DATABASE_URL` do Neon (a mesma do Render):
 
-```bash
-DATABASE_URL="<url do Neon>" pnpm --filter @forge/database db:migrate
+```powershell
+$env:DATABASE_URL = "<url do Neon>"
+pnpm --filter @forge/database db:migrate
+Remove-Item Env:DATABASE_URL
 ```
 
 Depois, para popular as fontes de conhecimento já com hash/embedding, use o botão "Reindexar" na tela do projeto (logado como tech lead ou admin). O seed não precisa ser rodado de novo.
