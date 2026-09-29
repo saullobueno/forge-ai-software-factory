@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AgentRunsModule } from '../agent-runs/agent-runs.module.js';
+import { AuditLogWriterModule } from '../audit-logs/audit-log-writer.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { TasksController } from './tasks.controller.js';
 import { TasksRepository } from './tasks.repository.js';
 import { TasksService } from './tasks.service.js';
 
 @Module({
-  imports: [AuthModule, AgentRunsModule],
+  imports: [AuthModule, AgentRunsModule, AuditLogWriterModule],
   controllers: [TasksController],
   providers: [TasksRepository, TasksService],
   // Exportado para que `ProjectsModule` reutilize `TasksService` em

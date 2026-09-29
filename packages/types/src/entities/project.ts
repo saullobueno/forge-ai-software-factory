@@ -22,6 +22,19 @@ export const projectSchema = z.object({
 });
 export type Project = z.infer<typeof projectSchema>;
 
+/**
+ * Corpo de `POST /projects`. `slug` e o repositório demo vinculado são
+ * decididos pelo servidor, nunca informados pelo cliente.
+ */
+export const createProjectRequestSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(4000).optional(),
+  languages: z.array(z.string().trim().min(1).max(50)).max(20).default([]),
+  frameworks: z.array(z.string().trim().min(1).max(50)).max(20).default([]),
+  packageManager: z.string().trim().min(1).max(50).optional(),
+});
+export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
+
 export const repositorySchema = z.object({
   id: idSchema,
   organizationId: idSchema,

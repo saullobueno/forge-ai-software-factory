@@ -20,7 +20,7 @@ export { DEMO_PASSWORD, runSeed, type SeedSummary } from './seed/run-seed.ts';
  * para montar `where` — uma única versão do driver em todo o monorepo,
  * resolvida aqui junto do schema/client.
  */
-export { and, asc, desc, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm';
+export { and, asc, desc, eq, gt, inArray, isNull, like, lt, or } from 'drizzle-orm';
 
 /**
  * Reexporta o migrator do PGlite (mesmo usado por `db:migrate` — ver

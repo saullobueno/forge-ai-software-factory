@@ -6,9 +6,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
+import { NewTaskForm } from '@/components/new-task-form';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { canApproveDeployments } from '@/lib/deployment-approval-permission';
 import { canReindexKnowledge } from '@/lib/knowledge-reindex-permission';
+import { canCreateTask } from '@/lib/project-permissions';
 import {
   DEPLOYMENT_STATUS_LABELS,
   ENVIRONMENT_KIND_LABELS,
@@ -30,6 +32,7 @@ import type {
 
 export function ProjectDetailView({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const [creatingTask, setCreatingTask] = useState(false);
 
   const projectQuery = useQuery({
     queryKey: ['projects', projectId],
@@ -156,7 +159,20 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
       <KnowledgePanel projectId={projectId} canReindex={currentUserQuery.data !== undefined && canReindexKnowledge(currentUserQuery.data.role)} />
 
       <section>
-        <h2 className="text-sm font-medium">Tarefas</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">Tarefas</h2>
+          {currentUserQuery.data !== undefined && canCreateTask(currentUserQuery.data.role) && !creatingTask && (
+            <button
+              type="button"
+              onClick={() => setCreatingTask(true)}
+              className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              Nova tarefa
+            </button>
+          )}
+        </div>
+
+        {creatingTask && <NewTaskForm projectId={projectId} onDone={() => setCreatingTask(false)} />}
 
         {tasksQuery.isLoading && <p className="mt-2 text-sm text-muted-foreground">Carregando tarefas…</p>}
         {tasksQuery.isError && (

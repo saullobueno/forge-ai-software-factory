@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, lt, or, schema } from '@forge/database';
-import type { PaginationRequest } from '@forge/types';
+import { and, desc, eq, like, lt, or, schema } from '@forge/database';
+import type { PaginationRequest, TechProfile } from '@forge/types';
 import { decodeCursor, encodeCursor } from '../../infrastructure/pagination/cursor.js';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
@@ -61,4 +61,64 @@ export class ProjectsRepository {
 
     return { items, nextCursor };
   }
+
+  async findSlugsWithPrefix(organizationId: string, prefix: string): Promise<string[]> {
+    const rows = await this.database.db
+      .select({ slug: schema.projects.slug })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.organizationId, organizationId), like(schema.projects.slug, `${prefix}%`)));
+    return rows.map((row) => row.slug);
+  }
+
+  /**
+   * Projeto + repositório demo na mesma transação: um projeto sem
+   * repositório nunca existe pela metade (o explorador de código e as
+   * execuções de IA dependem dele).
+   */
+  async createWithDemoRepository(input: {
+    organizationId: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    techProfile: TechProfile;
+  }): Promise<ProjectRow> {
+    return this.database.db.transaction(async (tx) => {
+      const [project] = await tx
+        .insert(schema.projects)
+        .values({
+          organizationId: input.organizationId,
+          name: input.name,
+          slug: input.slug,
+          description: input.description,
+          techProfile: input.techProfile,
+        })
+        .returning();
+      if (!project) throw new Error('Falha ao inserir o projeto.');
+
+      await tx.insert(schema.repositories).values({
+        organizationId: input.organizationId,
+        projectId: project.id,
+        provider: 'mock',
+        owner: DEMO_REPOSITORY.owner,
+        name: DEMO_REPOSITORY.name,
+        defaultBranch: 'main',
+        url: DEMO_REPOSITORY.url,
+      });
+
+      return project;
+    });
+  }
 }
+
+/**
+ * Todo projeto criado pela UI é vinculado ao mesmo repositório demo do seed
+ * (`fixtures/acme-platform-web/`, provider `mock`): é ele que alimenta o
+ * explorador de código, o conhecimento e as execuções de IA. Cada projeto
+ * ganha a própria linha de `repositories`, então cópias de workspace e
+ * branches do `MockGitProvider` (chaveados por `repositoryId`) não se misturam.
+ */
+const DEMO_REPOSITORY = {
+  owner: 'acme-platform',
+  name: 'acme-platform-web',
+  url: 'mock://acme-platform/acme-platform-web',
+} as const;

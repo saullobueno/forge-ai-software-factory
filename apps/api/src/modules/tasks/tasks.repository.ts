@@ -43,4 +43,20 @@ export class TasksRepository {
       orderBy: [asc(schema.tasks.createdAt)],
     });
   }
+
+  async create(input: {
+    organizationId: string;
+    projectId: string;
+    title: string;
+    description: string | null;
+    acceptanceCriteria: string | null;
+    priority: TaskRow['priority'];
+  }): Promise<TaskRow> {
+    const [task] = await this.database.db
+      .insert(schema.tasks)
+      .values({ ...input, status: 'ready' })
+      .returning();
+    if (!task) throw new Error('Falha ao inserir a tarefa.');
+    return task;
+  }
 }

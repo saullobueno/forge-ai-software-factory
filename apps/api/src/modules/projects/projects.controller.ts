@@ -1,5 +1,13 @@
-import { Controller, Get, NotFoundException, Param, Query, UseGuards } from '@nestjs/common';
-import { idSchema, paginationRequestSchema, type PaginationRequest } from '@forge/types';
+import { Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  createProjectRequestSchema,
+  createTaskRequestSchema,
+  idSchema,
+  paginationRequestSchema,
+  type CreateProjectRequest,
+  type CreateTaskRequest,
+  type PaginationRequest,
+} from '@forge/types';
 import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -12,8 +20,9 @@ import { TasksService } from '../tasks/tasks.service.js';
 /**
  * Fase 2 só tinha `GET /projects/:id` (prova de isolamento de tenant de
  * ponta a ponta). Fase 4 adiciona a listagem paginada e as tarefas de um
- * projeto — ainda não é o CRUD completo de projetos (escrita/edição de
- * `techProfile`/`architectureNotes`/`codeRules` continua fora de escopo).
+ * projeto. Criação de projeto (`POST /projects`, `project:write`) e de
+ * tarefa (`POST /projects/:id/tasks`, `task:manage`) vieram depois; edição
+ * de `techProfile`/`architectureNotes`/`codeRules` continua fora de escopo.
  */
 @Controller('projects')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -30,6 +39,15 @@ export class ProjectsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.projectsService.listByOrganization(user.organizationId, pagination);
+  }
+
+  @Post()
+  @RequirePermission('project:write')
+  async create(
+    @Body(new ZodValidationPipe(createProjectRequestSchema)) body: CreateProjectRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.projectsService.create(user.organizationId, user.userId, body);
   }
 
   @Get(':id')
@@ -68,5 +86,24 @@ export class ProjectsController {
     }
 
     return this.tasksService.listByProject(project.id, user.organizationId);
+  }
+
+  @Post(':id/tasks')
+  @RequirePermission('task:manage')
+  async createTask(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createTaskRequestSchema)) body: CreateTaskRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
+
+    const project = await this.projectsService.findById(id, user.organizationId);
+    if (!project) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
+
+    return this.tasksService.create(project.id, user.organizationId, user.userId, body);
   }
 }

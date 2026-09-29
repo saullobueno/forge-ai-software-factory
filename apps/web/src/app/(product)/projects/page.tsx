@@ -1,10 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Breadcrumb } from '@/components/breadcrumb';
+import { NewProjectForm } from '@/components/new-project-form';
 import { apiFetch } from '@/lib/api-client';
-import type { ApiProject, Paginated } from '@/lib/types';
+import { canCreateProject } from '@/lib/project-permissions';
+import type { ApiCurrentUser, ApiProject, Paginated } from '@/lib/types';
 
 function techProfileSummary(project: ApiProject): string {
   const parts = [...project.techProfile.languages, ...project.techProfile.frameworks];
@@ -12,19 +15,38 @@ function techProfileSummary(project: ApiProject): string {
 }
 
 export default function ProjectsPage() {
+  const [creating, setCreating] = useState(false);
   const { data, isLoading, isError } = useQuery({
     queryKey: ['projects'],
     queryFn: () => apiFetch<Paginated<ApiProject>>('/projects'),
   });
+  const currentUserQuery = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => apiFetch<ApiCurrentUser>('/auth/me'),
+  });
+  const canCreate = currentUserQuery.data !== undefined && canCreateProject(currentUserQuery.data.role);
 
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumb items={[{ label: 'Projetos' }]} />
 
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Projetos</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Projetos da sua organização no Forge.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Projetos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Projetos da sua organização no Forge.</p>
+        </div>
+        {canCreate && !creating && (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Novo projeto
+          </button>
+        )}
       </div>
+
+      {canCreate && creating && <NewProjectForm onCancel={() => setCreating(false)} />}
 
       {isLoading && <p className="text-sm text-muted-foreground">Carregando projetos…</p>}
       {isError && (

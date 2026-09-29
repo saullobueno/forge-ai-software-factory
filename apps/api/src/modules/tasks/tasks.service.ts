@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import type { MemberRole } from '@forge/types';
+import type { CreateTaskRequest, MemberRole } from '@forge/types';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
-import { TasksRepository, type TaskWithDependencies } from './tasks.repository.js';
+import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
+import { TasksRepository, type TaskRow, type TaskWithDependencies } from './tasks.repository.js';
 
 @Injectable()
 export class TasksService {
   constructor(
     private readonly tasksRepository: TasksRepository,
     private readonly agentRunsService: AgentRunsService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   /**
@@ -22,6 +24,39 @@ export class TasksService {
 
   async listByProject(projectId: string, organizationId: string): Promise<TaskWithDependencies[]> {
     return this.tasksRepository.listByProject(projectId, organizationId);
+  }
+
+  /**
+   * Quem chama já validou que `projectId` existe no tenant (mesmo 404
+   * genérico de `ProjectsController`). Nasce em `ready`: o objetivo de criar
+   * uma tarefa aqui é poder disparar uma execução de IA sobre ela.
+   */
+  async create(
+    projectId: string,
+    organizationId: string,
+    actorUserId: string,
+    input: CreateTaskRequest,
+  ): Promise<TaskRow> {
+    const task = await this.tasksRepository.create({
+      organizationId,
+      projectId,
+      title: input.title,
+      description: input.description ?? null,
+      acceptanceCriteria: input.acceptanceCriteria ?? null,
+      priority: input.priority,
+    });
+
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.created',
+      targetType: 'task',
+      targetId: task.id,
+      metadata: { projectId, title: task.title, priority: task.priority },
+    });
+
+    return task;
   }
 
   /**

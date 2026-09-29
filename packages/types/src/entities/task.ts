@@ -17,6 +17,15 @@ export const taskSchema = z.object({
 });
 export type Task = z.infer<typeof taskSchema>;
 
+/** Corpo de `POST /projects/:id/tasks`. */
+export const createTaskRequestSchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  description: z.string().trim().max(10_000).optional(),
+  acceptanceCriteria: z.string().trim().max(10_000).optional(),
+  priority: taskPrioritySchema.default('medium'),
+});
+export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
+
 export const taskDependencySchema = z
   .object({
     id: idSchema,
