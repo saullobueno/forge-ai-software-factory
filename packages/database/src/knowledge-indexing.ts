@@ -78,6 +78,12 @@ export async function persistIndexedKnowledgeSources(
           content: chunk.content,
           chunkIndex: chunk.chunkIndex,
           tokenCount: chunk.tokenCount,
+          // `chunk.embedding` já vem calculado por `chunkKnowledge()`
+          // (`@forge/knowledge`, `embedText`) — nunca recalculado aqui, para
+          // não duplicar a lógica de embedding. `?? null` só cobre o caso de
+          // um `PreparedKnowledgeChunk` construído manualmente sem esse
+          // campo (ex. fixtures de teste).
+          embedding: chunk.embedding ?? null,
         })),
       );
 
@@ -99,6 +105,7 @@ export async function persistIndexedKnowledgeSources(
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
         tokenCount: chunk.tokenCount,
+        embedding: chunk.embedding ?? null,
       })),
     );
     await db

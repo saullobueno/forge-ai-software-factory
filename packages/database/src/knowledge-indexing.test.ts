@@ -1,4 +1,4 @@
-import type { IndexedKnowledgeSource } from '@forge/knowledge';
+import { EMBEDDING_DIMENSIONS, embedText, type IndexedKnowledgeSource } from '@forge/knowledge';
 import { eq } from 'drizzle-orm';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,9 +25,9 @@ let organizationId: string;
 let projectId: string;
 
 function buildSource(
-  overrides: { content: string } & Partial<Omit<IndexedKnowledgeSource, 'chunks' | 'contentHash'>>,
+  overrides: { content: string; embedding?: number[] } & Partial<Omit<IndexedKnowledgeSource, 'chunks' | 'contentHash'>>,
 ): IndexedKnowledgeSource {
-  const { content, ...rest } = overrides;
+  const { content, embedding, ...rest } = overrides;
   return {
     organizationId,
     projectId,
@@ -38,7 +38,16 @@ function buildSource(
     version: null,
     ...rest,
     contentHash: `hash-of:${content}`,
-    chunks: [{ knowledgeSourceId: 'placeholder', content, chunkIndex: 0, tokenCount: 3, hasPromptInjectionRisk: false }],
+    chunks: [
+      {
+        knowledgeSourceId: 'placeholder',
+        content,
+        chunkIndex: 0,
+        tokenCount: 3,
+        hasPromptInjectionRisk: false,
+        ...(embedding !== undefined ? { embedding } : {}),
+      },
+    ],
   };
 }
 
@@ -176,5 +185,48 @@ describe('persistIndexedKnowledgeSources (PGlite + migrações reais)', () => {
     expect(updated.contentHash).toBe('hash-of:conteúdo real vindo do arquivo, com hash de verdade');
     expect(updated.chunks).toHaveLength(1);
     expect(updated.chunks[0]?.content).toBe('conteúdo real vindo do arquivo, com hash de verdade');
+  });
+
+  it('persiste e recupera o embedding real de um chunk (jsonb, array de floats de tamanho fixo, ida e volta pelo PGlite)', async () => {
+    const embedding = embedText('conteúdo real do chunk usado para o embedding');
+    await persistIndexedKnowledgeSources(db, [
+      buildSource({
+        title: 'src/lib/embedding-example.ts',
+        uri: 'repo://knowledge-indexing-test/src/lib/embedding-example.ts',
+        content: 'conteúdo real do chunk usado para o embedding',
+        embedding,
+      }),
+    ]);
+
+    const row = await db.query.knowledgeSources.findFirst({
+      where: eq(knowledgeSources.uri, 'repo://knowledge-indexing-test/src/lib/embedding-example.ts'),
+      with: { chunks: true },
+    });
+    if (!row) throw new Error('knowledge source não encontrada após criação');
+
+    expect(row.chunks).toHaveLength(1);
+    expect(row.chunks[0]?.embedding).toHaveLength(EMBEDDING_DIMENSIONS);
+    // Ida e volta pelo PGlite real (jsonb) precisa preservar o vetor
+    // exatamente, número a número — nunca truncado/arredondado.
+    expect(row.chunks[0]?.embedding).toEqual(embedding);
+  });
+
+  it('fonte sem embedding calculado (chunk construído manualmente, sem passar por chunkKnowledge) persiste embedding null, sem erro', async () => {
+    await persistIndexedKnowledgeSources(db, [
+      buildSource({
+        title: 'src/lib/no-embedding-example.ts',
+        uri: 'repo://knowledge-indexing-test/src/lib/no-embedding-example.ts',
+        content: 'conteúdo sem embedding calculado',
+      }),
+    ]);
+
+    const row = await db.query.knowledgeSources.findFirst({
+      where: eq(knowledgeSources.uri, 'repo://knowledge-indexing-test/src/lib/no-embedding-example.ts'),
+      with: { chunks: true },
+    });
+    if (!row) throw new Error('knowledge source não encontrada após criação');
+
+    expect(row.chunks).toHaveLength(1);
+    expect(row.chunks[0]?.embedding).toBeNull();
   });
 });

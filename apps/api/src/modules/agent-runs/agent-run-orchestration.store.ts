@@ -108,6 +108,7 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
         version: source.version,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
+        embedding: chunk.embedding,
       })),
     );
 

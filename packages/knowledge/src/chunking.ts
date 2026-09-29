@@ -1,3 +1,4 @@
+import { embedText } from './embedding.ts';
 import { hasPromptInjectionRisk } from './prompt-injection.ts';
 import type { KnowledgeChunkInput, PreparedKnowledgeChunk } from './types.ts';
 
@@ -56,6 +57,11 @@ export function chunkKnowledge(input: KnowledgeChunkInput): PreparedKnowledgeChu
     chunkIndex,
     tokenCount: estimateTokenCount(content),
     hasPromptInjectionRisk: hasPromptInjectionRisk(content),
+    // Embedding determinístico calculado aqui (único funil real de
+    // chunking, reaproveitado por `indexKnowledgeFiles`/seed/reindex) — nunca
+    // recalculado/duplicado em `packages/database`, que só persiste o que já
+    // vem pronto deste array.
+    embedding: embedText(content),
   }));
 }
 

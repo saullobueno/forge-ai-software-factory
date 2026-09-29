@@ -39,7 +39,12 @@ export interface KnowledgeSearchResult {
   content: string;
   wrappedContent: string;
   chunkIndex: number;
+  /** Score lexical bruto (contagem de termos da query encontrados) — mantido como campo estável para compatibilidade com consumidores existentes. */
   score: number;
+  /** Similaridade de cosseno com a query (embedding determinístico local, `@forge/knowledge`) — `0` para chunks sem embedding (legados). */
+  semanticScore: number;
+  /** Combinação lexical+semântica usada para ORDENAR `search()` — ver `retrieveKnowledge()` em `@forge/knowledge`. */
+  hybridScore: number;
   hasPromptInjectionRisk: boolean;
 }
 

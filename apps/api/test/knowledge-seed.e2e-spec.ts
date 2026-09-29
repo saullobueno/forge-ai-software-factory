@@ -67,22 +67,40 @@ describe('db:seed real -> GET /projects/:id/knowledge (e2e)', () => {
   });
 
   it('busca por um termo real do README do fixture e devolve o chunk correto, embrulhado como não confiável', async () => {
-    // "estornos" só existe de verdade em fixtures/acme-platform-web/README.md
-    // (confirmado: não aparece em nenhum outro documento indexado nesta
-    // organização) — termo real do arquivo, não escolhido arbitrariamente
-    // para o teste passar.
+    // "estornos" é um termo real do README do fixture
+    // (`fixtures/acme-platform-web/README.md`) — mas, ao contrário do que
+    // este teste assumia antes desta continuação, NÃO é exclusivo dele:
+    // `src/lib/format-currency.ts`/`src/lib/invoice.ts` também mencionam
+    // "estornos" de verdade (confirmado por grep no fixture real). Com uma
+    // query de um único termo, os três empatam no score lexical (1) — o
+    // ranking híbrido (Fase 12, embeddings/ranking semântico) agora
+    // desempata por similaridade de cosseno em vez de só ordem alfabética
+    // do título, então este teste não assume mais qual dos três vem
+    // primeiro, só que o chunk do README está presente, correto e
+    // embrulhado, e que a resposta inteira respeita a ordenação
+    // documentada (`hybridScore` decrescente).
     const response = await request(testApp.app.getHttpServer())
       .get(`/projects/${projectId}/knowledge/search`)
       .query({ q: 'estornos' })
       .set('Authorization', `Bearer ${techLeadToken}`)
       .expect(200);
 
-    expect(response.body.length).toBeGreaterThan(0);
-    expect(response.body[0]).toMatchObject({
-      uri: 'repo://acme-platform-web/README.md',
-      kind: 'readme',
-    });
-    expect(response.body[0].content).toContain('estornos');
-    expect(response.body[0].wrappedContent).toContain('<untrusted_knowledge>');
+    const searchResults = response.body as {
+      uri: string;
+      content: string;
+      wrappedContent: string;
+      hybridScore: number;
+    }[];
+    expect(searchResults.length).toBeGreaterThan(0);
+    const readmeResult = searchResults.find(
+      (result) => result.uri === 'repo://acme-platform-web/README.md',
+    );
+    expect(readmeResult).toMatchObject({ kind: 'readme', score: 1 });
+    expect(readmeResult?.content).toContain('estornos');
+    expect(readmeResult?.wrappedContent).toContain('<untrusted_knowledge>');
+
+    for (let index = 1; index < searchResults.length; index += 1) {
+      expect(searchResults[index - 1].hybridScore).toBeGreaterThanOrEqual(searchResults[index].hybridScore);
+    }
   });
 });

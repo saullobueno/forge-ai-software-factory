@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { knowledgeSourceKindEnum } from './enums.ts';
 import { organizations } from './organizations.ts';
 import { projects } from './projects.ts';
@@ -44,6 +44,23 @@ export const knowledgeChunks = pgTable('knowledge_chunks', {
   content: text('content').notNull(),
   chunkIndex: integer('chunk_index').notNull(),
   tokenCount: integer('token_count'),
+  /**
+   * Embedding determinístico local do chunk (`embedText`, `@forge/knowledge`
+   * — "hashing trick"/feature hashing, NÃO um embedding semântico real, ver
+   * a doc daquele módulo), tamanho fixo (`EMBEDDING_DIMENSIONS`, 256).
+   * `jsonb` em vez de um tipo array nativo do Postgres (`real[]`): mesma
+   * convenção já usada em todo este schema para "lista de valores de
+   * tamanho variável/estruturado" (`allowedTools`/`labels`/`permissions`
+   * string[], `rules`/`scope` objetos — ver `agents.ts`/`organizations.ts`/
+   * `tasks.ts`/`policies.ts`), suportado de forma idêntica por PGlite e
+   * Postgres real sem depender de nenhuma extensão (`pgvector` não é usado
+   * aqui, de propósito — ver PROGRESS.md), e sem exigir um tipo Drizzle
+   * diferente de todo o resto deste arquivo. Nullable: chunks legados
+   * (seedados/persistidos antes desta coluna existir) ou nunca reindexados
+   * desde então ficam `null` — `retrieveKnowledge()` degrada para o score
+   * puramente lexical nesse caso, sem erro.
+   */
+  embedding: jsonb('embedding').$type<number[]>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index('knowledge_chunks_knowledge_source_id_idx').on(table.knowledgeSourceId)]);

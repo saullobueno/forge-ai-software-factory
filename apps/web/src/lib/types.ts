@@ -229,6 +229,15 @@ export interface ApiKnowledgeSearchResult {
   wrappedContent: string;
   chunkIndex: number;
   score: number;
+  /**
+   * Similaridade semântica (embedding determinístico local — "hashing
+   * trick", `@forge/knowledge` — não um embedding semântico real) usada
+   * para refinar a ordenação em `retrieveKnowledge()`. Não exibida na UI
+   * ainda (`score`, lexical, continua sendo o único valor renderizado) —
+   * exposta aqui só para manter o tipo fiel ao contrato real da API.
+   */
+  semanticScore: number;
+  hybridScore: number;
   hasPromptInjectionRisk: boolean;
 }
 

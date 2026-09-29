@@ -68,6 +68,7 @@ export class KnowledgeRepository {
         version: source.version,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
+        embedding: chunk.embedding,
       })),
     );
   }
