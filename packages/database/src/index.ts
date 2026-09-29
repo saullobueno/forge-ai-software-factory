@@ -1,6 +1,7 @@
 export * from './client.ts';
 export * from './env.ts';
 export * from './knowledge-indexing.ts';
+export * from './sql-operation.ts';
 /**
  * `runSeed`/`DEMO_PASSWORD` reexportados aqui (não só via `packages/
  * database/src/seed.ts`, o entrypoint do CLI `db:seed`) para que apps

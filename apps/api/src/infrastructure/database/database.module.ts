@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { DatabaseQueryOtelRecorder } from './database-query-otel-recorder.js';
 import { DatabaseService } from './database.service.js';
 
 /**
@@ -9,7 +10,7 @@ import { DatabaseService } from './database.service.js';
  */
 @Global()
 @Module({
-  providers: [DatabaseService],
+  providers: [DatabaseService, DatabaseQueryOtelRecorder],
   exports: [DatabaseService],
 })
 export class DatabaseModule {}
