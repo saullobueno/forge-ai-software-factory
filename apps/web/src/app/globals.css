@@ -13,13 +13,15 @@
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --muted: #18181b;
-  --muted-foreground: #a1a1aa;
-  --border: #27272a;
-  --primary: #ededed;
-  --primary-foreground: #0a0a0a;
+  /* Escala derivada de #27272A (zinc-800), a cor mais escura do tema:
+     cada camada é o fundo misturado com branco (muted ~8%, border ~16%). */
+  --background: #27272a;
+  --foreground: #f4f4f5;
+  --muted: #38383b;
+  --muted-foreground: #b0b0b8;
+  --border: #4a4a4d;
+  --primary: #f4f4f5;
+  --primary-foreground: #27272a;
 }
 
 @theme inline {

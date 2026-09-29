@@ -85,4 +85,27 @@ test.describe('auditoria automatizada de acessibilidade', () => {
 
     await expectNoAxeViolations(page);
   });
+
+  test('não encontra violações axe (contraste) no tema escuro derivado de #27272A', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/login');
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    await expectNoAxeViolations(page);
+
+    await login(page);
+    await expect(page.getByRole('heading', { name: 'Projetos' })).toBeVisible();
+    await expectNoAxeViolations(page);
+
+    await page.getByRole('link', { name: 'Forge Web App' }).first().click();
+    await expect(page.getByRole('heading', { name: 'Conhecimento' })).toBeVisible();
+    await page.getByTestId('user-menu-trigger').click();
+    await expectNoAxeViolations(page);
+    await page.keyboard.press('Escape');
+
+    for (const name of ['Uso IA', 'Auditoria', 'Playground IA']) {
+      await page.getByRole('link', { name, exact: true }).click();
+      await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+      await expectNoAxeViolations(page);
+    }
+  });
 });

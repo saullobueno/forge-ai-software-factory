@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import type { OnMount } from '@monaco-editor/react';
+import type { BeforeMount, OnMount } from '@monaco-editor/react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
@@ -26,6 +26,22 @@ import { FileTree } from './file-tree';
 // (spec §10) — não existe (e não deveria existir aqui) nenhum caminho de
 // gravação; isso é Fase 7/8, quando agentes aplicam patches de verdade via
 // runner.
+// Fundo do editor igual ao `--background` do tema escuro (#27272A), em vez do
+// #1e1e1e padrão do `vs-dark`.
+const defineForgeTheme: BeforeMount = (monaco) => {
+  monaco.editor.defineTheme('forge-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#27272a',
+      'editorGutter.background': '#27272a',
+      'editor.lineHighlightBackground': '#38383b',
+      'editorLineNumber.foreground': '#8b8b93',
+    },
+  });
+};
+
 const MonacoEditor = dynamic(() => import('@monaco-editor/react').then((mod) => mod.Editor), { ssr: false });
 const MonacoDiffEditor = dynamic(() => import('@monaco-editor/react').then((mod) => mod.DiffEditor), { ssr: false });
 
@@ -61,7 +77,7 @@ function languageFromPath(path: string): string {
 
 export function CodeExplorerView({ projectId }: { projectId: string }) {
   const { resolvedTheme } = useTheme();
-  const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light';
+  const monacoTheme = resolvedTheme === 'dark' ? 'forge-dark' : 'light';
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('file');
@@ -300,6 +316,7 @@ export function CodeExplorerView({ projectId }: { projectId: string }) {
                           language={fileQuery.data.language}
                           value={fileQuery.data.content}
                           theme={monacoTheme}
+                          beforeMount={defineForgeTheme}
                           path={fileQuery.data.path}
                           onMount={(editorInstance) => {
                             editorRef.current = editorInstance;
@@ -383,6 +400,7 @@ export function CodeExplorerView({ projectId }: { projectId: string }) {
                           original={diffTexts.original}
                           modified={diffTexts.modified}
                           theme={monacoTheme}
+                          beforeMount={defineForgeTheme}
                           options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
                         />
                       </div>
