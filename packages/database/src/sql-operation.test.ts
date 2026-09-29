@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createDatabase } from './client.ts';
+import type { createDatabase as CreateDatabase } from './client.ts';
 import { describeSqlOperation } from './sql-operation.ts';
 import { organizations } from './schema/organizations.ts';
 
@@ -15,16 +15,17 @@ import { organizations } from './schema/organizations.ts';
  * set`/`delete from`, parametrização via `$1`).
  */
 describe('describeSqlOperation', () => {
-  let db: ReturnType<typeof createDatabase>['db'];
+  let db: ReturnType<typeof CreateDatabase>['db'];
   let close: () => Promise<void>;
   let dataDir: string;
 
-  // Uma única instância isolada em diretório temporário: `.toSQL()` não executa
-  // nada, então subir um PGlite por teste (no caminho padrão do banco de dev)
-  // só gerava disputa de inicialização do WASM entre arquivos de teste em paralelo.
-  beforeAll(() => {
+  // Uma única instância isolada em diretório temporário (`.toSQL()` não
+  // executa nada). `databaseEnv` lê `DATABASE_LOCAL_PATH` no import, então o
+  // `import()` de `client.ts` só acontece depois de definir o caminho.
+  beforeAll(async () => {
     dataDir = mkdtempSync(join(tmpdir(), 'forge-db-sql-operation-'));
     process.env['DATABASE_LOCAL_PATH'] = join(dataDir, 'forge-sql-operation-test.pglite');
+    const { createDatabase } = await import('./client.ts');
     const created = createDatabase();
     db = created.db;
     close = created.close;
