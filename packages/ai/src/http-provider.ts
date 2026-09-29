@@ -1,7 +1,7 @@
 import { agentToolNameSchema } from '@forge/types';
 import type { AiGenerateRequest, AiGenerateResult, AiProposedToolCall, AiProvider, AiUsage } from './types.ts';
 
-export type HttpAiProviderKind = 'gemini' | 'groq';
+export type HttpAiProviderKind = 'gemini' | 'groq' | 'anthropic';
 
 export interface HttpTransportInit {
   method: 'POST';
@@ -38,6 +38,9 @@ const SYSTEM_PROMPT = [
   'Só proponha toolCalls presentes em availableTools. Se não houver ferramenta adequada, retorne toolCalls vazio.',
 ].join('\n');
 
+const ANTHROPIC_API_VERSION = '2023-06-01';
+const ANTHROPIC_MAX_TOKENS = 4_096;
+
 export class HttpAiProvider implements AiProvider {
   readonly name: HttpAiProviderKind;
   readonly model: string;
@@ -73,6 +76,9 @@ export class HttpAiProvider implements AiProvider {
     try {
       if (this.name === 'groq') {
         return await this.callGroq(prompt, controller.signal);
+      }
+      if (this.name === 'anthropic') {
+        return await this.callAnthropic(prompt, controller.signal);
       }
       return await this.callGemini(prompt, controller.signal);
     } finally {
@@ -137,6 +143,36 @@ export class HttpAiProvider implements AiProvider {
             completionTokens: readNumber(usageRecord, 'candidatesTokenCount') ?? 0,
             totalTokens: readNumber(usageRecord, 'totalTokenCount') ?? 0,
           }
+        : null,
+    };
+  }
+
+  private async callAnthropic(prompt: string, signal: AbortSignal): Promise<ProviderResponse> {
+    const body = {
+      model: this.model,
+      max_tokens: ANTHROPIC_MAX_TOKENS,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+    };
+    const raw = await this.postJson('https://api.anthropic.com/v1/messages', body, {
+      'x-api-key': this.apiKey,
+      'anthropic-version': ANTHROPIC_API_VERSION,
+    }, signal);
+    const json = parseJsonObject(raw);
+    const contentBlocks = Array.isArray(json['content']) ? json['content'] : [];
+    const firstTextBlock = contentBlocks
+      .map((block) => asRecord(block))
+      .find((block): block is Record<string, unknown> => block !== null && block['type'] === 'text');
+    const text = typeof firstTextBlock?.['text'] === 'string' ? firstTextBlock['text'] : raw;
+    const usageRecord = asRecord(json['usage']);
+    const inputTokens = usageRecord ? readNumber(usageRecord, 'input_tokens') ?? 0 : 0;
+    const outputTokens = usageRecord ? readNumber(usageRecord, 'output_tokens') ?? 0 : 0;
+
+    return {
+      text,
+      usage: usageRecord
+        ? { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens }
         : null,
     };
   }

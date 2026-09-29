@@ -19,6 +19,7 @@ const envSchema = z.object({
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().optional(),
   /**
    * Segredo de assinatura dos JWTs de sessão (Fase 2 — Auth/RBAC). O
    * default só existe para não bloquear `pnpm dev`/testes locais sem

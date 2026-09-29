@@ -24,12 +24,19 @@ describe('createAiProvider', () => {
     expect(provider.name).toBe('gemini');
   });
 
+  it('cria provider Anthropic usando ANTHROPIC_MODEL quando definido', () => {
+    const provider = createAiProvider({
+      AI_PROVIDER: 'anthropic',
+      ANTHROPIC_API_KEY: 'key',
+      ANTHROPIC_MODEL: 'claude-test',
+    });
+    expect(provider).toBeInstanceOf(HttpAiProvider);
+    expect(provider.name).toBe('anthropic');
+  });
+
   it('falha cedo quando provider real não tem chave/modelo', () => {
     expect(() => createAiProvider({ AI_PROVIDER: 'groq', GROQ_API_KEY: 'key' })).toThrow(/AI_MODEL/);
     expect(() => createAiProvider({ AI_PROVIDER: 'gemini', AI_MODEL: 'gemini-test' })).toThrow(/GEMINI_API_KEY/);
-  });
-
-  it('mantém Anthropic como erro explícito até o provider existir', () => {
-    expect(() => createAiProvider({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'key' })).toThrow(/anthropic/i);
+    expect(() => createAiProvider({ AI_PROVIDER: 'anthropic', AI_MODEL: 'claude-test' })).toThrow(/ANTHROPIC_API_KEY/);
   });
 });

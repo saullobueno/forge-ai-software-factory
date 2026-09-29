@@ -95,6 +95,44 @@ describe('HttpAiProvider', () => {
     expect(result.usage).toEqual({ promptTokens: 11, completionTokens: 7, totalTokens: 18 });
   });
 
+  it('adapta resposta Anthropic Messages API para AiGenerateResult', async () => {
+    const calls: Array<{ url: string; headers: Record<string, string>; body: Record<string, unknown> }> = [];
+    const transport: HttpTransport = async (url, init) => {
+      calls.push({ url, headers: init.headers, body: JSON.parse(init.body) as Record<string, unknown> });
+      return jsonResponse({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              summary: 'Resumo Anthropic.',
+              output: { verdict: 'ok' },
+              toolCalls: [],
+            }),
+          },
+        ],
+        usage: { input_tokens: 12, output_tokens: 6 },
+      });
+    };
+    const provider = new HttpAiProvider({
+      provider: 'anthropic',
+      apiKey: 'anthropic-key',
+      model: 'claude-test',
+      transport,
+    });
+
+    const result = await provider.generate(baseRequest({ role: 'reviewer' }));
+
+    expect(calls[0]?.url).toBe('https://api.anthropic.com/v1/messages');
+    expect(calls[0]?.headers['x-api-key']).toBe('anthropic-key');
+    expect(calls[0]?.headers['anthropic-version']).toBe('2023-06-01');
+    expect(calls[0]?.headers['Authorization']).toBeUndefined();
+    expect(calls[0]?.body['model']).toBe('claude-test');
+    expect(calls[0]?.body['messages']).toEqual([{ role: 'user', content: expect.stringContaining('objective: ') }]);
+    expect(result.summary).toBe('Resumo Anthropic.');
+    expect(result.output).toEqual({ verdict: 'ok' });
+    expect(result.usage).toEqual({ promptTokens: 12, completionTokens: 6, totalTokens: 18 });
+  });
+
   it('inclui conhecimento embrulhado no prompt enviado ao provider real', async () => {
     let prompt = '';
     const transport: HttpTransport = async (_url, init) => {

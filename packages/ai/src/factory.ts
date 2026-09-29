@@ -18,6 +18,7 @@ export interface AiProviderEnv {
   GROQ_API_KEY?: string | undefined;
   GROQ_MODEL?: string | undefined;
   ANTHROPIC_API_KEY?: string | undefined;
+  ANTHROPIC_MODEL?: string | undefined;
 }
 
 export interface CreateAiProviderOptions {
@@ -54,11 +55,16 @@ export function createAiProvider(
     });
   }
 
-  if (provider === 'anthropic' || env.ANTHROPIC_API_KEY) {
-    throw new Error('AI_PROVIDER=anthropic ainda não está implementado. Use mock, gemini ou groq.');
+  if (provider === 'anthropic') {
+    return new HttpAiProvider({
+      provider: 'anthropic',
+      apiKey: requireEnv(env.ANTHROPIC_API_KEY, 'ANTHROPIC_API_KEY'),
+      model: requireEnv(env.ANTHROPIC_MODEL ?? env.AI_MODEL, 'ANTHROPIC_MODEL ou AI_MODEL'),
+      ...sharedOptions,
+    });
   }
 
-  throw new Error(`AI_PROVIDER inválido: "${provider}". Use mock, gemini ou groq.`);
+  throw new Error(`AI_PROVIDER inválido: "${provider}". Use mock, gemini, groq ou anthropic.`);
 }
 
 function requireEnv(value: string | undefined, name: string): string {
