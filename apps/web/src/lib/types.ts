@@ -414,11 +414,39 @@ export interface ApiAiUsageRecentItem {
   createdAt: string;
 }
 
+/**
+ * Um ponto diário da série histórica de `GET /ai-usage/summary`
+ * (`timeseries`, Fase 13 — "séries históricas pendentes"). `date` é
+ * `YYYY-MM-DD` em UTC; dias sem uso vêm com zeros/`null`, nunca omitidos.
+ */
+export interface ApiAiUsageDailyPoint {
+  date: string;
+  totalTokens: number;
+  costUsd: number;
+  callCount: number;
+  averageDurationMs: number | null;
+}
+
 export interface ApiAiUsageSummary {
   totals: ApiAiUsageTotals;
   byProvider: ApiAiUsageProviderSummary[];
   recent: ApiAiUsageRecentItem[];
   sampleSize: number;
+  timeseries: ApiAiUsageDailyPoint[];
+}
+
+/**
+ * `GET /ai-usage/provider-config` — provider/modelo REALMENTE configurado
+ * no processo da API via env (leitura read-only; nunca expõe a própria
+ * chave, só se está presente via `apiKeyConfigured`). Fase 13 — "UI
+ * operacional para selecionar provider/modelo" (a seleção em si continua
+ * só via env do processo; esta rota só permite EXIBIR qual é a atual).
+ */
+export interface ApiAiProviderConfig {
+  provider: 'mock' | 'gemini' | 'groq' | 'anthropic';
+  model: string | null;
+  apiKeyConfigured: boolean;
+  requestTimeoutMs: number | null;
 }
 
 /**

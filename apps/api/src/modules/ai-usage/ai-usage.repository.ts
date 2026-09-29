@@ -35,6 +35,32 @@ export class AiUsageRepository {
   }
 
   /**
+   * Equivalente a `listByOrganizationSince`, mas com o mesmo `with:
+   * { agentStep: { columns: { durationMs: true } } }` de
+   * `listRecentByOrganization` — usado pela série histórica diária
+   * (`AiUsageService.buildTimeseries`), que precisa de latência por dia
+   * além de tokens/custo.
+   */
+  async listByOrganizationSinceWithDuration(
+    organizationId: string,
+    since: Date,
+    limit = 5_000,
+  ): Promise<AiUsageWithStep[]> {
+    return this.database.db.query.aiUsages.findMany({
+      where: and(eq(schema.aiUsages.organizationId, organizationId), gt(schema.aiUsages.createdAt, since)),
+      orderBy: [desc(schema.aiUsages.createdAt), desc(schema.aiUsages.id)],
+      limit,
+      with: {
+        agentStep: {
+          columns: {
+            durationMs: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
    * Equivalente de `listByOrganizationSince`, mas escopado por USUÁRIO
    * (Fase 13 continuação #7 — limites diários por usuário). `ai_usages`
    * não guarda nenhum identificador de usuário diretamente (só

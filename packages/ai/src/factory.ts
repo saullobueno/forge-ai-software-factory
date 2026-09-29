@@ -72,6 +72,74 @@ function requireEnv(value: string | undefined, name: string): string {
   throw new Error(`Configuração de IA incompleta: defina ${name}.`);
 }
 
+export type AiProviderName = 'mock' | 'gemini' | 'groq' | 'anthropic';
+
+export interface AiProviderConfigSummary {
+  provider: AiProviderName;
+  model: string | null;
+  apiKeyConfigured: boolean;
+  requestTimeoutMs: number | null;
+}
+
+/**
+ * Leitura read-only da configuração de provider/modelo ATUALMENTE ativa via
+ * env — nunca instancia o provider real nem valida a API key
+ * (`createAiProvider` já faz isso e lança cedo se faltar algo); aqui o
+ * objetivo é só permitir que uma UI operacional mostre "provider ativo: X,
+ * modelo: Y" sem precisar de uma segunda cópia da mesma lógica de
+ * resolução de provider/modelo/fallback já implementada acima. Nunca
+ * retorna a própria API key, só se ela está presente (`apiKeyConfigured`).
+ * Troca de provider em runtime continua fora de escopo: é sempre a mesma
+ * env var que `createAiProvider()` já lê na inicialização do processo.
+ */
+export function describeAiProviderConfig(env: AiProviderEnv = process.env): AiProviderConfigSummary {
+  const provider = normalizeProviderName(env.AI_PROVIDER);
+  const requestTimeoutMs = env.AI_REQUEST_TIMEOUT_MS ? (parseTimeoutMs(env.AI_REQUEST_TIMEOUT_MS) ?? null) : null;
+
+  if (provider === 'groq') {
+    return {
+      provider,
+      model: optionalEnv(env.GROQ_MODEL ?? env.AI_MODEL),
+      apiKeyConfigured: hasValue(env.GROQ_API_KEY),
+      requestTimeoutMs,
+    };
+  }
+
+  if (provider === 'gemini') {
+    return {
+      provider,
+      model: optionalEnv(env.GEMINI_MODEL ?? env.AI_MODEL),
+      apiKeyConfigured: hasValue(env.GEMINI_API_KEY),
+      requestTimeoutMs,
+    };
+  }
+
+  if (provider === 'anthropic') {
+    return {
+      provider,
+      model: optionalEnv(env.ANTHROPIC_MODEL ?? env.AI_MODEL),
+      apiKeyConfigured: hasValue(env.ANTHROPIC_API_KEY),
+      requestTimeoutMs,
+    };
+  }
+
+  return { provider: 'mock', model: null, apiKeyConfigured: true, requestTimeoutMs };
+}
+
+function normalizeProviderName(value: string | undefined): AiProviderName {
+  const normalized = (value ?? 'mock').trim().toLowerCase();
+  if (normalized === 'groq' || normalized === 'gemini' || normalized === 'anthropic') return normalized;
+  return 'mock';
+}
+
+function hasValue(value: string | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function optionalEnv(value: string | undefined): string | null {
+  return hasValue(value) ? value!.trim() : null;
+}
+
 function parseTimeoutMs(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);

@@ -29,4 +29,17 @@ export class AiUsageController {
   async me(@CurrentUser() user: AuthenticatedUser) {
     return this.aiUsageService.summarizeForUser(user.organizationId, user.userId);
   }
+
+  /**
+   * Provider/modelo ATUALMENTE configurado no processo da API (leitura de
+   * env, read-only) — mesmo raciocínio de `/me` acima: não é um agregado
+   * de organização (não consulta `ai_usages`/banco nenhum, é o mesmo para
+   * qualquer organização deste processo), então não exige
+   * `audit_log:read`. Qualquer usuário autenticado pode ver qual
+   * provider/modelo será usado ao disparar uma execução de agente.
+   */
+  @Get('provider-config')
+  providerConfig() {
+    return this.aiUsageService.getProviderConfig();
+  }
 }

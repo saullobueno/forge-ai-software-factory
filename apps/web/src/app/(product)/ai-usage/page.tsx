@@ -5,7 +5,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { apiFetch } from '@/lib/api-client';
-import type { ApiAiUsageSummary, ApiAiUserUsageSummary } from '@/lib/types';
+import type { ApiAiProviderConfig, ApiAiUsageSummary, ApiAiUserUsageSummary } from '@/lib/types';
+
+const PROVIDER_LABEL: Record<ApiAiProviderConfig['provider'], string> = {
+  mock: 'Mock (sem rede)',
+  gemini: 'Gemini',
+  groq: 'Groq',
+  anthropic: 'Anthropic',
+};
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value);
@@ -54,6 +61,15 @@ export default function AiUsagePage() {
     queryFn: () => apiFetch<ApiAiUserUsageSummary>('/ai-usage/me'),
   });
 
+  // Provider/modelo REALMENTE configurado no processo da API (Fase 13, "UI
+  // operacional para selecionar provider/modelo") — mesma consulta
+  // independente, sem `audit_log:read`, visível para qualquer usuário
+  // autenticado (ver `AiUsageController.providerConfig`).
+  const { data: providerConfig } = useQuery({
+    queryKey: ['ai-usage-provider-config'],
+    queryFn: () => apiFetch<ApiAiProviderConfig>('/ai-usage/provider-config'),
+  });
+
   const myUsageItems = useMemo(() => {
     if (!myUsage) return [];
     const items: { label: string; value: string }[] = [
@@ -97,6 +113,31 @@ export default function AiUsagePage() {
         </p>
       </div>
 
+      {providerConfig && (
+        <section data-testid="ai-provider-config" className="rounded-lg border border-border bg-card p-4">
+          <h2 className="text-base font-semibold">Provider de IA ativo</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Configurado via variáveis de ambiente do processo da API; esta tela só exibe o valor atual, não permite
+            trocar em runtime.
+          </p>
+          <p className="mt-3 text-sm">
+            Provider ativo: <Badge>{PROVIDER_LABEL[providerConfig.provider]}</Badge>
+            {providerConfig.model && (
+              <>
+                {' '}
+                · Modelo: <span className="font-mono text-xs">{providerConfig.model}</span>
+              </>
+            )}
+          </p>
+          {providerConfig.provider !== 'mock' && !providerConfig.apiKeyConfigured && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+              Chave de API deste provider não está configurada no processo da API — execuções reais falharão até que
+              seja definida.
+            </p>
+          )}
+        </section>
+      )}
+
       <section data-testid="my-ai-usage" className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-semibold">Meu uso (últimas 24h)</h2>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -128,6 +169,41 @@ export default function AiUsagePage() {
               </div>
             ))}
           </div>
+
+          <section className="min-w-0">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">Série histórica (últimos 14 dias)</h2>
+              <Badge>{data.timeseries.length} dias</Badge>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Dia</th>
+                    <th className="px-3 py-2 text-right font-medium">Chamadas</th>
+                    <th className="px-3 py-2 text-right font-medium">Tokens</th>
+                    <th className="px-3 py-2 text-right font-medium">Latência média</th>
+                    <th className="px-3 py-2 text-right font-medium">Custo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {data.timeseries.map((point) => (
+                    <tr key={point.date}>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-muted-foreground">
+                        {point.date}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-xs">{formatInteger(point.callCount)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-xs">{formatInteger(point.totalTokens)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-xs">
+                        {formatDuration(point.averageDurationMs)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-xs">{formatUsd(point.costUsd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <section className="min-w-0">

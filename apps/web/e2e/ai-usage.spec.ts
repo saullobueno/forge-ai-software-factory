@@ -35,5 +35,18 @@ test.describe('uso de IA', () => {
     const myUsage = page.getByTestId('my-ai-usage');
     await expect(myUsage.getByRole('heading', { name: 'Meu uso (últimas 24h)' })).toBeVisible();
     await expect(myUsage.getByText('Custo estimado', { exact: true })).toBeVisible();
+
+    // Provider de IA ativo (`GET /ai-usage/provider-config`) — seed local
+    // roda sem `AI_PROVIDER`, então o provider ativo é sempre "mock".
+    const providerConfig = page.getByTestId('ai-provider-config');
+    await expect(providerConfig.getByRole('heading', { name: 'Provider de IA ativo' })).toBeVisible();
+    await expect(providerConfig.getByText('Provider ativo:')).toBeVisible();
+    await expect(providerConfig.getByText('Mock (sem rede)')).toBeVisible();
+
+    // Série histórica diária (14 dias) — sempre 14 linhas, mesmo sem uso
+    // algum registrado (dias com zero aparecem, nunca são omitidos).
+    await expect(page.getByRole('heading', { name: 'Série histórica (últimos 14 dias)' })).toBeVisible();
+    const timeseriesRows = page.locator('table').filter({ hasText: 'Latência média' }).first().locator('tbody tr');
+    await expect(timeseriesRows).toHaveCount(14);
   });
 });

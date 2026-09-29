@@ -219,6 +219,29 @@ describe('GET /ai-usage/summary', () => {
     expect(JSON.stringify(response.body)).not.toContain('9.99');
   });
 
+  it('inclui uma série histórica diária (14 dias, hoje com os totais reais seedados)', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .get('/ai-usage/summary')
+      .set('Authorization', `Bearer ${techLeadToken}`)
+      .expect(200);
+
+    expect(response.body.timeseries).toHaveLength(14);
+
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const dates = response.body.timeseries.map((point: { date: string }) => point.date);
+    expect(dates).toEqual([...dates].sort((left, right) => left.localeCompare(right)));
+    expect(dates[dates.length - 1]).toBe(todayKey);
+    expect(new Set(dates).size).toBe(14);
+
+    const today = response.body.timeseries.find((point: { date: string }) => point.date === todayKey);
+    expect(today).toMatchObject({ totalTokens: 475, callCount: 3 });
+    expect(today.costUsd).toBeCloseTo(0.00475);
+
+    // Nenhum ponto da série pode carregar dados de outra organização (Org
+    // B, seedada no `beforeAll` com 1998 tokens/custo 9.99).
+    expect(JSON.stringify(response.body.timeseries)).not.toContain('9.99');
+  });
+
   it('retorna 403 para papel sem audit_log:read', async () => {
     await request(testApp.app.getHttpServer())
       .get('/ai-usage/summary')
@@ -247,6 +270,71 @@ describe('GET /ai-usage/me', () => {
 
   it('retorna 401 sem token', async () => {
     await request(testApp.app.getHttpServer()).get('/ai-usage/me').expect(401);
+  });
+});
+
+describe('GET /ai-usage/provider-config', () => {
+  it('retorna mock por padrão (sem AI_PROVIDER), visível mesmo sem audit_log:read', async () => {
+    const response = await request(testApp.app.getHttpServer())
+      .get('/ai-usage/provider-config')
+      .set('Authorization', `Bearer ${developerToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      provider: 'mock',
+      model: null,
+      apiKeyConfigured: true,
+      requestTimeoutMs: null,
+    });
+  });
+
+  it('reflete AI_PROVIDER/modelo/chave real configurados via env, sem nunca expor a chave', async () => {
+    process.env['AI_PROVIDER'] = 'groq';
+    process.env['GROQ_API_KEY'] = 'super-secret-test-key';
+    process.env['GROQ_MODEL'] = 'llama-3.1-70b-versatile';
+    try {
+      const response = await request(testApp.app.getHttpServer())
+        .get('/ai-usage/provider-config')
+        .set('Authorization', `Bearer ${techLeadToken}`)
+        .expect(200);
+
+      expect(response.body).toEqual({
+        provider: 'groq',
+        model: 'llama-3.1-70b-versatile',
+        apiKeyConfigured: true,
+        requestTimeoutMs: null,
+      });
+      expect(JSON.stringify(response.body)).not.toContain('super-secret-test-key');
+    } finally {
+      delete process.env['AI_PROVIDER'];
+      delete process.env['GROQ_API_KEY'];
+      delete process.env['GROQ_MODEL'];
+    }
+  });
+
+  it('reporta apiKeyConfigured=false quando o provider real está selecionado mas sem a chave', async () => {
+    process.env['AI_PROVIDER'] = 'anthropic';
+    process.env['ANTHROPIC_MODEL'] = 'claude-test';
+    try {
+      const response = await request(testApp.app.getHttpServer())
+        .get('/ai-usage/provider-config')
+        .set('Authorization', `Bearer ${techLeadToken}`)
+        .expect(200);
+
+      expect(response.body).toEqual({
+        provider: 'anthropic',
+        model: 'claude-test',
+        apiKeyConfigured: false,
+        requestTimeoutMs: null,
+      });
+    } finally {
+      delete process.env['AI_PROVIDER'];
+      delete process.env['ANTHROPIC_MODEL'];
+    }
+  });
+
+  it('retorna 401 sem token', async () => {
+    await request(testApp.app.getHttpServer()).get('/ai-usage/provider-config').expect(401);
   });
 });
 

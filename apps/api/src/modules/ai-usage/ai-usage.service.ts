@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { describeAiProviderConfig, type AiProviderConfigSummary } from '@forge/ai';
 import { readAiUsageLimits, readAiUserUsageLimits, type AiUsageLimits } from '../../infrastructure/config/env.js';
 import { AiUsageRepository, type AiUsageRow } from './ai-usage.repository.js';
 
@@ -32,11 +33,28 @@ export interface AiUsageRecentItem {
   createdAt: Date;
 }
 
+/**
+ * Um ponto diário da série histórica de uso de IA (Fase 13, pendência
+ * "séries históricas de custo/latência"). `date` é a chave `YYYY-MM-DD`
+ * em UTC (mesmo fuso que `ai_usages.createdAt`, coluna `timestamp` sem
+ * timezone própria gravada pelo banco em UTC) — dias sem nenhum uso
+ * aparecem com zeros/`null`, nunca omitidos, para que a UI possa desenhar
+ * uma janela contínua de `AI_USAGE_TIMESERIES_DAYS` dias.
+ */
+export interface AiUsageDailyPoint {
+  date: string;
+  totalTokens: number;
+  costUsd: number;
+  callCount: number;
+  averageDurationMs: number | null;
+}
+
 export interface AiUsageSummary {
   totals: AiUsageTotals;
   byProvider: AiUsageProviderSummary[];
   recent: AiUsageRecentItem[];
   sampleSize: number;
+  timeseries: AiUsageDailyPoint[];
 }
 
 /**
@@ -62,7 +80,20 @@ const EMPTY_TOTALS: AiUsageTotals = {
   durationSampleCount: 0,
 };
 
-const DAILY_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const DAILY_LIMIT_WINDOW_MS = ONE_DAY_MS;
+
+/**
+ * Janela da série histórica diária: 14 dias (duas semanas) — o suficiente
+ * para enxergar uma tendência real de custo/latência semana a semana
+ * (comparar esta semana com a anterior) sem escanear um histórico
+ * grande demais para um `GET` síncrono de dashboard. 30 dias foi
+ * considerado e descartado por ora: multiplicaria por ~2 o volume de
+ * `ai_usages` lido a cada carregamento de `/ai-usage` sem mudar a decisão
+ * operacional que a tela resolve (ver tendência recente); pode ser
+ * revisitado se um usuário real pedir mais alcance.
+ */
+const AI_USAGE_TIMESERIES_DAYS = 14;
 
 type AiUsageAccumulator = AiUsageTotals & { durationTotalMs: number };
 
@@ -90,12 +121,19 @@ function finalizeTotals(total: AiUsageAccumulator): AiUsageTotals {
   return result;
 }
 
+function dateKeyUTC(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 @Injectable()
 export class AiUsageService {
   constructor(private readonly aiUsageRepository: AiUsageRepository) {}
 
   async summarizeByOrganization(organizationId: string): Promise<AiUsageSummary> {
-    const usages = await this.aiUsageRepository.listRecentByOrganization(organizationId);
+    const [usages, timeseries] = await Promise.all([
+      this.aiUsageRepository.listRecentByOrganization(organizationId),
+      this.buildTimeseries(organizationId),
+    ]);
     const totals = createAccumulator();
     const byProvider = new Map<string, AiUsageProviderSummary & { durationTotalMs: number }>();
 
@@ -132,7 +170,47 @@ export class AiUsageService {
         createdAt: usage.createdAt,
       })),
       sampleSize: usages.length,
+      timeseries,
     };
+  }
+
+  /**
+   * Série histórica diária (Fase 13, "séries históricas pendentes"):
+   * agrupa `ai_usages` por dia (UTC) dos últimos `AI_USAGE_TIMESERIES_DAYS`
+   * dias, escopado por organização (mesma regra multi-tenant de todo
+   * endpoint de agregação já existente). Agregação em memória, mesmo
+   * estilo já usado por `summarizeByOrganization`/`assertWithin*Limits`
+   * (sem `GROUP BY` no banco) — coerente com o volume real desta demo e
+   * evita introduzir um segundo estilo de query só para este campo.
+   */
+  private async buildTimeseries(organizationId: string): Promise<AiUsageDailyPoint[]> {
+    const since = new Date(Date.now() - (AI_USAGE_TIMESERIES_DAYS - 1) * ONE_DAY_MS);
+    since.setUTCHours(0, 0, 0, 0);
+
+    const usages = await this.aiUsageRepository.listByOrganizationSinceWithDuration(organizationId, since);
+
+    const byDay = new Map<string, AiUsageAccumulator>();
+    for (const usage of usages) {
+      const key = dateKeyUTC(usage.createdAt);
+      const accumulator = byDay.get(key) ?? createAccumulator();
+      addUsage(accumulator, usage);
+      byDay.set(key, accumulator);
+    }
+
+    const points: AiUsageDailyPoint[] = [];
+    for (let offset = AI_USAGE_TIMESERIES_DAYS - 1; offset >= 0; offset -= 1) {
+      const key = dateKeyUTC(new Date(Date.now() - offset * ONE_DAY_MS));
+      const accumulator = byDay.get(key);
+      const totals = accumulator ? finalizeTotals(accumulator) : EMPTY_TOTALS;
+      points.push({
+        date: key,
+        totalTokens: totals.totalTokens,
+        costUsd: totals.costUsd,
+        callCount: totals.callCount,
+        averageDurationMs: totals.averageDurationMs,
+      });
+    }
+    return points;
   }
 
   async assertWithinOrganizationLimits(organizationId: string): Promise<void> {
@@ -219,6 +297,19 @@ export class AiUsageService {
     }
 
     return { totals: finalizeTotals(totals), limits, windowStartedAt };
+  }
+
+  /**
+   * Provider/modelo REALMENTE configurado no processo da API via env (Fase
+   * 13, "UI operacional para selecionar provider/modelo") — sempre
+   * read-only, nunca troca provider em runtime; `describeAiProviderConfig`
+   * (`@forge/ai`) reaproveita a mesma resolução de provider/modelo/fallback
+   * já usada por `createAiProvider()` (`AgentRunsModule`), então esta rota
+   * nunca pode divergir do provider de verdade usado para disparar
+   * execuções de agente.
+   */
+  getProviderConfig(): AiProviderConfigSummary {
+    return describeAiProviderConfig();
   }
 
   private getExceededLimits(totals: AiUsageTotals, limits: AiUsageLimits): string[] {
