@@ -198,3 +198,21 @@ describe('GET /auth/me', () => {
     expect(response.body.email).toBe(userEmail);
   });
 });
+
+describe('POST /auth/logout', () => {
+  it('apaga o cookie de sessão e a sessão deixa de valer', async () => {
+    const agent = request.agent(testApp.app.getHttpServer());
+    await agent.post('/auth/login').send({ email: userEmail, password }).expect(200);
+    await agent.get('/auth/me').expect(200);
+
+    const response = await agent.post('/auth/logout').expect(204);
+    const setCookie = ([] as string[]).concat(response.headers['set-cookie'] ?? []);
+    expect(setCookie.some((cookie) => cookie.startsWith('forge_session=;'))).toBe(true);
+
+    await agent.get('/auth/me').expect(401);
+  });
+
+  it('responde 204 mesmo sem sessão (quem tem JWT vencido precisa conseguir sair)', async () => {
+    await request(testApp.app.getHttpServer()).post('/auth/logout').expect(204);
+  });
+});

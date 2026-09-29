@@ -41,6 +41,18 @@ export class AuthController {
     return result;
   }
 
+  // Sem JwtAuthGuard de propósito: quem tem um JWT já vencido precisa
+  // conseguir sair (o cookie é httpOnly, só o servidor consegue apagá-lo).
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  logout(@Res({ passthrough: true }) response: Response): void {
+    response.clearCookie(SESSION_COOKIE_NAME, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+    });
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser() user: AuthenticatedUser): Promise<User> {

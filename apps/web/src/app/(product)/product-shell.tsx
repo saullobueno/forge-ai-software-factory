@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { UserMenu } from '@/components/user-menu';
 import { apiFetch } from '@/lib/api-client';
 import { canApproveAgentRuns } from '@/lib/agent-run-approval-permission';
 import { canApproveDeployments } from '@/lib/deployment-approval-permission';
@@ -166,7 +167,10 @@ export function ProductShell({ children }: { children: ReactNode }) {
               />
             </span>
           </button>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <UserMenu user={meQuery.data} />
+          </div>
         </header>
         <main id="conteudo" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none md:px-6">
           {children}
