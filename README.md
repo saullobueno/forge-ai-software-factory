@@ -1,5 +1,76 @@
 # Forge — Fábrica de Software com IA
 
+[![CI](https://github.com/saullobueno/forge-ai-software-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/saullobueno/forge-ai-software-factory/actions/workflows/ci.yml)
+
+Plataforma onde agentes de IA recebem tarefas de engenharia, propõem mudanças em código de verdade e **só as aplicam depois da aprovação de uma pessoa** — com RBAC multi-tenant, trilha de auditoria completa, observabilidade (OpenTelemetry) e controle de custo de IA. Projeto de portfólio full stack, feito de ponta a ponta: produto, domínio, API, front-end, infraestrutura e testes.
+
+**Demo ao vivo:** https://forge-ai-software-factory.vercel.app — o login já vem preenchido com uma conta de demonstração (dados fictícios da organização "Acme Platform"). A API roda em plano gratuito e pode levar alguns segundos para "acordar" na primeira chamada.
+
+![Projetos (tema escuro)](docs/screenshots/03-projetos-dark.png)
+
+## Destaques
+
+- **Humano no controle**: a IA planeja, inspeciona, implementa, testa e revisa; qualquer `write_file`/`apply_patch` fica em "Aguardando aprovação" até um tech lead/admin decidir. Aprovado, o patch é aplicado de verdade numa cópia isolada do repositório, e um PR é aberto (provider Git de demonstração).
+- **Multi-tenant e RBAC de verdade**: toda query filtra por organização; permissões por papel (admin, tech lead, developer, QA, PM, platform engineer) validadas no backend e refletidas na UI; recurso de outro tenant responde 404 genérico.
+- **Tempo real**: a timeline da execução atualiza ao vivo via SSE (proxy do Next.js repassando o stream sem buffer).
+- **IA trocável por configuração**: provider `mock` determinístico por padrão (zero custo, zero rede), ou Groq/Gemini/Anthropic reais por variável de ambiente; tokens, custo e latência por chamada, série histórica e limites diários por organização e por usuário.
+- **Conhecimento (RAG)**: indexação de arquivos reais, detecção de conteúdo desatualizado por hash, reindexação sob demanda e ranking híbrido (lexical + vetorial determinístico), com defesa contra prompt injection no contexto recuperado.
+- **Observabilidade**: traces, métricas e logs OpenTelemetry (inclusive um span por query SQL), correlação de trace entre front-end e API, redação de dados sensíveis.
+- **Qualidade**: CI no GitHub Actions (lint, typecheck, testes, build e *budgets* de bundle por rota), testes e2e reais (PGlite/Postgres e Playwright, sem mocks de banco), auditoria de acessibilidade com axe (claro e escuro) e Lighthouse.
+- **Acessível e responsivo**: tema claro/escuro persistente, navegação por teclado, skip link, layout mobile com menu recolhível.
+
+## Telas
+
+| | |
+|---|---|
+| ![Detalhe do projeto](docs/screenshots/05-projeto-detalhe-dark.png) **Projeto**: perfil técnico, conhecimento indexado, tarefas e ambientes | ![Aprovação humana](docs/screenshots/10-execucao-aprovacao-dark.png) **Execução de IA** parada aguardando aprovação, com a timeline e resultado dos testes |
+| ![Explorador de código](docs/screenshots/07-codigo-explorador-dark.png) **Explorador de código** (Monaco) com símbolos e busca | ![Diff](docs/screenshots/08-codigo-diff-dark.png) **Diff** do patch proposto pela IA |
+| ![Aprovações](docs/screenshots/11-aprovacoes-dark.png) **Fila de aprovações** pendentes, com contador no menu | ![Uso de IA](docs/screenshots/12-uso-ia-dark.png) **Uso de IA**: custo, tokens, latência e série histórica |
+| ![Playground](docs/screenshots/13-playground-scorecard-dark.png) **Playground**: compara modelos com scorecard | ![Auditoria](docs/screenshots/14-auditoria-dark.png) **Auditoria** de tudo que muda estado |
+| ![Novo projeto](docs/screenshots/15-novo-projeto-dark.png) **Criar projeto** (também editar/excluir, tarefas) | ![Menu do usuário](docs/screenshots/06-menu-usuario-dark.png) **Menu do usuário** com papel e logout |
+| ![Tema claro](docs/screenshots/16-projeto-detalhe-light.png) **Tema claro** | ![Mobile](docs/screenshots/18-mobile-menu-dark.png) **Mobile**, menu recolhível |
+
+Os screenshots são gerados por `pnpm --filter @forge/web screenshots` (ver `apps/web/scripts/capture-screenshots.mjs`).
+
+## Roteiro de demonstração (5 minutos)
+
+1. **Entre** com `tech-lead@acme-platform.example` / `demo1234` (já preenchido) e alterne o tema claro/escuro no topo; abra o **menu do usuário** (papel, e-mail, sair).
+2. **Crie um projeto** ("Novo projeto"): ele nasce vinculado ao repositório de demonstração. Abra-o e crie uma **tarefa** ("Nova tarefa"); edite e exclua para ver a confirmação em duas etapas.
+3. Abra a tarefa **"Estornos aparecem como cobrança positiva na fatura"** e clique em **Iniciar execução de IA**: a timeline avança ao vivo (planejar → inspecionar → implementar → documentar → testar → revisar) até **Aguardando aprovação**.
+4. Veja a proposta (`apply_patch`) e **aprove**: o patch é aplicado numa cópia isolada, um PR de demonstração é aberto e tudo fica na **Auditoria**. Rejeitar leva a execução a "Falhou".
+5. Em **Ver código**, navegue pela árvore, busque no repositório e veja o **diff** (o bug do `formatCurrency` perdendo o sinal de estornos).
+6. Na página do projeto, use a busca em **Conhecimento** e o botão **Reindexar** (hash de conteúdo detecta o que mudou).
+7. Confira **Uso IA** (custo/tokens/latência por dia), **Playground IA** (comparação de modelos) e **Auditoria**.
+8. Saia e entre como `dev@acme-platform.example` / `demo1234`: os botões de aprovar, criar/editar/excluir projeto e reindexar somem — o backend responde 403 mesmo se a chamada for feita à mão.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+  B[Navegador] --> W["apps/web<br/>Next.js (Vercel)"]
+  W -- "/api/* (proxy same-origin, SSE)" --> A["apps/api<br/>NestJS (Render)"]
+  A --> DB[("Postgres<br/>Neon / PGlite local")]
+  A --> Q[["Fila BullMQ<br/>Redis (Upstash) / memória"]]
+  A --> AI["Provider de IA<br/>mock · Groq · Gemini · Anthropic"]
+  A --> WS["Cópia isolada do repositório<br/>(patches aprovados)"]
+  A -. "traces · métricas · logs" .-> O["OpenTelemetry<br/>console / OTLP"]
+```
+
+Camadas do monorepo: `types` (schemas Zod) → `domain` (regras puras: RBAC, máquinas de estado, política de ferramentas) → `database` (Drizzle) → `agents`/`ai`/`knowledge`/`git`/`sandbox`/`testing` (pacotes sem framework) → `apps/api` e `apps/web`.
+
+## Escopo deliberado (o que é simulado, e por quê)
+
+Por ser um projeto de portfólio público, algumas fronteiras foram decididas de propósito:
+
+- **Deploy de ambientes**: o fluxo (gate de aprovação para ambientes protegidos, decisão, auditoria) é real; a publicação em si é simulada — não existe um app real de "Acme Platform" para publicar.
+- **`run_command`/`run_tests` da IA**: continuam simulados; executar comando de verdade exige isolamento de rede (Docker), que a hospedagem gratuita não oferece. A escrita de arquivos aprovada, em compensação, é real (numa cópia descartável).
+- **GitHub real**: o provider Git é um mock determinístico — nenhuma execução de IA abre PR num repositório de verdade.
+- **Embeddings**: vetoriais determinísticos e locais (hashing trick), sem chamada de rede; não capturam sinonímia semântica de verdade.
+
+A lista completa de decisões e o histórico de cada fase estão em [`PROGRESS.md`](PROGRESS.md); o deploy (Render/Vercel/Neon/Upstash) em [`docs/production-deployment.md`](docs/production-deployment.md).
+
+## Documentação técnica
+
 Monorepo do Forge, conforme `FORGE-SPECIFICATION.md` (produto) e `FORGE-CLAUDE-CODE-PROMPT.md` (prompt de implementação).
 
 ## Stack
@@ -78,11 +149,9 @@ Credenciais de demo:
 
 Rotas úteis para navegar após login:
 
-- `/projects`
-- `/projects/[id]`
-- `/projects/[id]/tasks/[taskId]`
-- `/ai-playground`
-- `/audit-logs`
+- `/projects` e `/projects/[id]` (criar/editar/excluir projeto, criar tarefa)
+- `/projects/[id]/tasks/[taskId]` (editar/excluir tarefa, iniciar execução de IA) e `/projects/[id]/code`
+- `/approvals`, `/ai-usage`, `/ai-playground`, `/audit-logs`
 
 ## Autenticação/RBAC (Fase 2)
 
@@ -102,6 +171,7 @@ Rotas úteis para navegar após login:
 - **Proteção de rotas**: `apps/web/src/proxy.ts` (Next.js 16 renomeou `middleware.ts` para `proxy.ts` — mesma função) checa só a presença do cookie `forge_session` e redireciona para `/login`; é uma checagem otimista, a validação de verdade continua sendo feita pela API a cada chamada — `apps/web/src/lib/api-client.ts` redireciona para `/login` em qualquer 401.
 - **Estado de servidor**: TanStack Query (`@tanstack/react-query`) para todas as chamadas à API a partir de Client Components.
 - **Endpoints novos em `apps/api`** (mesmo padrão de tenant scoping + RBAC de `GET /projects/:id`): `GET /projects` (paginado, `project:read`), `GET /projects/:id/tasks` (com dependências, `project:read`), `GET /tasks/:id` (`task:read`), `POST /tasks/:id/agent-runs` (`agent_run:trigger`) — cria um `agentRun` em `status: "queued"` para um agente existente da organização (`planner`, com fallback para o primeiro agente habilitado). Nenhum step é processado — o orquestrador de verdade é a Fase 7; a execução fica parada em fila, exatamente como a spec §9 descreve o primeiro estado do ciclo.
+- **Criar, editar e excluir (depois da Fase 4)**: `POST /projects` (`project:write`) cria o projeto já vinculado ao repositório demo (`provider: mock`) numa transação, com `slug` único por organização; `PATCH`/`DELETE /projects/:id` (`project:write`), `POST /projects/:id/tasks`, `PATCH`/`DELETE /tasks/:id` (`task:manage`). Tudo com audit log; a exclusão responde 409 enquanto houver execução de IA em andamento e remove, na mesma transação, as aprovações pendentes que apontam (sem FK) para as execuções/deployments apagados. O proxy `/api/*` repassa `GET`/`POST`/`PUT`/`PATCH`/`DELETE`.
 - **Pegadinha real descoberta em produção (Vercel + Render)**: a primeira versão deste proxy usava `rewrites()` do `next.config.ts`. Funciona local e contra qualquer host "normal", mas a Vercel bloqueia o destino de um `rewrites()` com `DNS_HOSTNAME_RESOLVED_PRIVATE` quando o host de destino fica atrás de Cloudflare (caso do domínio público do Render) — a checagem de DNS/IP privado da própria camada de proxy da plataforma, não algo controlável via `next.config.ts`. Por isso o proxy hoje é um Route Handler (acima) fazendo seu próprio `fetch()`: código de aplicação normal, fora daquela checagem de plataforma, e que lê `API_INTERNAL_URL` em runtime (não em build time — pode ser trocado sem rebuild, só reiniciando o processo).
 
 ## Regras de engenharia

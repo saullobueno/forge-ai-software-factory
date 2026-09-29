@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test scripts/*.test.mjs",
     "test:e2e": "playwright test",
-    "check:bundle-budgets": "node scripts/check-bundle-budgets.mjs"
+    "check:bundle-budgets": "node scripts/check-bundle-budgets.mjs",
+    "screenshots": "node scripts/capture-screenshots.mjs"
   },
   "dependencies": {
     "@forge/types": "workspace:*",
