@@ -7,6 +7,8 @@ import {
   type SpanExporter,
 } from '@opentelemetry/sdk-trace-base';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { ConsoleMetricExporter, PeriodicExportingMetricReader, type MetricReader } from '@opentelemetry/sdk-metrics';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
@@ -28,6 +30,20 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
  * span, sem buffer) e só exporta para um backend real de observabilidade
  * (Jaeger, Tempo, Honeycomb, etc.) quando `OTEL_EXPORTER_OTLP_ENDPOINT`
  * está definido — opt-in via env var, nunca exigido para rodar localmente.
+ *
+ * Métricas (continuação da Fase 14 — fecha a lacuna "sem exporter de
+ * métricas OTel" registrada em `PROGRESS.md`) seguem exatamente a mesma
+ * regra e reaproveitam a MESMA `OTEL_EXPORTER_OTLP_ENDPOINT` de traces, não
+ * uma env var separada: o padrão OTLP/HTTP usa o mesmo host/porta de
+ * coletor para os dois sinais, só variando o path (`/v1/traces` vs
+ * `/v1/metrics`) — é assim que um Collector/Jaeger/Tempo real espera
+ * receber ambos, então uma segunda env var só adicionaria uma forma de
+ * configuração divergir da outra sem ganho real. Sem essa env var, métricas
+ * (incluindo as de HTTP emitidas automaticamente por
+ * `getNodeAutoInstrumentations()` quando um `MeterProvider` está
+ * registrado — comportamento padrão dessas instrumentations, não precisa de
+ * configuração extra) vão para `ConsoleMetricExporter`, com um intervalo de
+ * exportação curto para ficarem visíveis rapidamente em uso local/manual.
  */
 
 const otlpEndpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
@@ -47,12 +63,32 @@ function buildSpanProcessor(): BatchSpanProcessor | SimpleSpanProcessor {
   return new SimpleSpanProcessor(new ConsoleSpanExporter());
 }
 
+const LOCAL_METRIC_EXPORT_INTERVAL_MS = 10_000;
+
+function buildMetricReader(): MetricReader {
+  if (otlpEndpoint) {
+    const url = `${otlpEndpoint.replace(/\/+$/, '')}/v1/metrics`;
+    return new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter({ url }) });
+  }
+  // `PeriodicExportingMetricReader` é o único tipo de leitor "push" que o
+  // SDK de métricas oferece (não existe um equivalente a
+  // `SimpleSpanProcessor` para métricas) — mesmo sem backend real, ele
+  // ainda precisa de um intervalo; 10s (bem menor que o default de 60s)
+  // deixa o `ConsoleMetricExporter` visível rápido o suficiente para
+  // verificação manual local, sem gerar ruído excessivo.
+  return new PeriodicExportingMetricReader({
+    exporter: new ConsoleMetricExporter(),
+    exportIntervalMillis: LOCAL_METRIC_EXPORT_INTERVAL_MS,
+  });
+}
+
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: process.env['OTEL_SERVICE_NAME'] ?? 'forge-api',
     [ATTR_SERVICE_VERSION]: process.env['npm_package_version'] ?? '0.0.0',
   }),
   spanProcessors: [buildSpanProcessor()],
+  metricReaders: [buildMetricReader()],
   instrumentations: [getNodeAutoInstrumentations()],
 });
 

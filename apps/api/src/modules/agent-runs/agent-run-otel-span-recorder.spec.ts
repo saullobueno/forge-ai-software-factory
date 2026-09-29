@@ -1,5 +1,12 @@
-import { trace } from '@opentelemetry/api';
+import { metrics, trace } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import {
+  AggregationTemporality,
+  DataPointType,
+  InMemoryMetricExporter,
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import type { AgentRunTraceEvent } from '@forge/agents';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { AgentRunOtelSpanRecorder } from './agent-run-otel-span-recorder.js';
@@ -17,18 +24,36 @@ import { AgentRunOtelSpanRecorder } from './agent-run-otel-span-recorder.js';
 describe('AgentRunOtelSpanRecorder', () => {
   let exporter: InMemorySpanExporter;
   let provider: BasicTracerProvider;
+  let metricExporter: InMemoryMetricExporter;
+  let metricReader: PeriodicExportingMetricReader;
+  let meterProvider: MeterProvider;
   let recorder: AgentRunOtelSpanRecorder;
 
   beforeEach(() => {
     exporter = new InMemorySpanExporter();
     provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
     trace.setGlobalTracerProvider(provider);
+
+    // Mesmo padrão oficial do SDK para testar métricas: um `MeterProvider`
+    // real com `InMemoryMetricExporter` (`@opentelemetry/sdk-metrics`), como
+    // o `InMemorySpanExporter` já usado acima para spans. `collect()` é
+    // chamado diretamente no leitor (nunca esperando o timer periódico).
+    metricExporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+    metricReader = new PeriodicExportingMetricReader({
+      exporter: metricExporter,
+      exportIntervalMillis: 100_000,
+    });
+    meterProvider = new MeterProvider({ readers: [metricReader] });
+    metrics.setGlobalMeterProvider(meterProvider);
+
     recorder = new AgentRunOtelSpanRecorder();
   });
 
   afterEach(async () => {
     trace.disable();
+    metrics.disable();
     await provider.shutdown();
+    await meterProvider.shutdown();
   });
 
   it('cria um span real para agent.step e um span filho real para tool.call, aninhados corretamente', async () => {
@@ -161,5 +186,89 @@ describe('AgentRunOtelSpanRecorder', () => {
 
     await provider.forceFlush();
     expect(exporter.getFinishedSpans()).toHaveLength(0);
+  });
+
+  async function collectMetric(name: string) {
+    const { resourceMetrics } = await metricReader.collect();
+    const scope = resourceMetrics.scopeMetrics.find((s) => s.scope.name === 'forge.agent-runs');
+    return scope?.metrics.find((m) => m.descriptor.name === name);
+  }
+
+  it('incrementa forge.tool_call.count real (via MeterProvider real) por nome da ferramenta e status', async () => {
+    const agentRunId = 'run-metrics-1';
+    const stepId = 'step-metrics-1';
+    const toolCallId = 'tool-call-metrics-1';
+
+    recorder.record({
+      name: 'tool.call',
+      phase: 'start',
+      agentRunId,
+      stepId,
+      toolCallId,
+      toolName: 'write_file',
+    });
+    recorder.record({
+      name: 'tool.call',
+      phase: 'end',
+      agentRunId,
+      stepId,
+      toolCallId,
+      toolName: 'write_file',
+      status: 'succeeded',
+    });
+
+    const metric = await collectMetric('forge.tool_call.count');
+    expect(metric).toBeDefined();
+    expect(metric!.dataPointType).toBe(DataPointType.SUM);
+    const point = metric!.dataPoints.find((p) => p.attributes['forge.tool_name'] === 'write_file');
+    expect(point).toBeDefined();
+    expect(point!.value).toBe(1);
+    expect(point!.attributes['forge.status']).toBe('succeeded');
+  });
+
+  it('não incrementa forge.tool_call.count para um evento end sem start correspondente', async () => {
+    recorder.record({
+      name: 'tool.call',
+      phase: 'end',
+      agentRunId: 'run-metrics-orfao',
+      stepId: 'step-orfao',
+      toolCallId: 'tool-call-orfao',
+      toolName: 'read_file',
+      status: 'succeeded',
+    });
+
+    const metric = await collectMetric('forge.tool_call.count');
+    expect(metric?.dataPoints ?? []).toHaveLength(0);
+  });
+
+  it('registra forge.agent_step.duration_ms real como histograma por papel e status', async () => {
+    const agentRunId = 'run-metrics-2';
+    const stepId = 'step-metrics-2';
+
+    recorder.record({
+      name: 'agent.step',
+      phase: 'start',
+      agentRunId,
+      stepId,
+      role: 'implementer',
+    });
+    recorder.record({
+      name: 'agent.step',
+      phase: 'end',
+      agentRunId,
+      stepId,
+      role: 'implementer',
+      status: 'succeeded',
+      durationMs: 250,
+    });
+
+    const metric = await collectMetric('forge.agent_step.duration_ms');
+    expect(metric).toBeDefined();
+    expect(metric!.dataPointType).toBe(DataPointType.HISTOGRAM);
+    const point = metric!.dataPoints.find((p) => p.attributes['forge.role'] === 'implementer');
+    expect(point).toBeDefined();
+    expect((point!.value as { count: number; sum?: number }).count).toBe(1);
+    expect((point!.value as { count: number; sum?: number }).sum).toBe(250);
+    expect(point!.attributes['forge.status']).toBe('succeeded');
   });
 });

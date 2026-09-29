@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { context, trace, type Span } from '@opentelemetry/api';
+import { context, metrics, trace, type Counter, type Histogram, type Span } from '@opentelemetry/api';
 import type { AgentRunTraceEvent } from '@forge/agents';
 import { redactSensitiveValues } from '../../infrastructure/logging/redaction.js';
 
@@ -32,12 +32,38 @@ type SpanAttributeValue = string | number | boolean;
  * indefinidamente sob operação normal; um evento `end` sem `start`
  * correspondente (ou vice-versa) é ignorado silenciosamente — observabilidade
  * nunca deve lançar nem afetar o resultado da execução real.
+ *
+ * Métricas (continuação da Fase 14 — mesma ponte, sem duplicar a lógica de
+ * parsing/aninhamento de eventos acima): além do span, cada `tool.call`
+ * concluído incrementa um contador (`forge.tool_call.count`, por nome da
+ * ferramenta/status) e cada `agent.step` concluído registra sua duração num
+ * histograma (`forge.agent_step.duration_ms`, por papel/status). Os labels
+ * usados (nome da ferramenta, papel, status) vêm de campos fixos do próprio
+ * `AgentRunTraceEvent` (`toolName`/`role`/`status`), nunca de
+ * `event.attributes` — por isso não passam por `redactSensitiveValues()`
+ * (não há nada ali que possa ser sensível, mesmo defesa em profundidade já
+ * aplicada aos atributos de span de `event.attributes` via
+ * `toSafeAttributes()`; se um label de métrica algum dia precisar vir de
+ * `event.attributes`, ele PRECISA passar por `toSafeAttributes()` primeiro).
  */
 @Injectable()
 export class AgentRunOtelSpanRecorder {
   private readonly tracer = trace.getTracer('forge.agent-runs');
+  private readonly meter = metrics.getMeter('forge.agent-runs');
   private readonly stepSpans = new Map<string, Span>();
   private readonly toolCallSpans = new Map<string, Span>();
+
+  private readonly toolCallCounter: Counter = this.meter.createCounter('forge.tool_call.count', {
+    description: 'Number of agent tool calls completed, labeled by tool name and status.',
+  });
+
+  private readonly agentStepDurationHistogram: Histogram = this.meter.createHistogram(
+    'forge.agent_step.duration_ms',
+    {
+      description: 'Duration of completed agent steps, labeled by role and status.',
+      unit: 'ms',
+    },
+  );
 
   record(event: AgentRunTraceEvent): void {
     if (event.name === 'agent.step') {
@@ -64,6 +90,13 @@ export class AgentRunOtelSpanRecorder {
     if (!span) return;
     this.applyEndAttributes(span, event);
     span.end();
+
+    if (typeof event.durationMs === 'number') {
+      this.agentStepDurationHistogram.record(event.durationMs, {
+        'forge.role': event.role ?? 'unknown',
+        'forge.status': event.status ?? 'unknown',
+      });
+    }
   }
 
   private recordToolCall(event: AgentRunTraceEvent): void {
@@ -87,6 +120,11 @@ export class AgentRunOtelSpanRecorder {
     if (!span) return;
     this.applyEndAttributes(span, event);
     span.end();
+
+    this.toolCallCounter.add(1, {
+      'forge.tool_name': event.toolName ?? 'unknown',
+      'forge.status': event.status ?? 'unknown',
+    });
   }
 
   private baseAttributes(event: AgentRunTraceEvent): Record<string, SpanAttributeValue> {
