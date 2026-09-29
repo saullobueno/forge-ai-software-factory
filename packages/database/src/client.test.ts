@@ -1,13 +1,26 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, type Database, type DatabaseQueryObserver } from './client.ts';
 
 describe('createDatabase (PGlite)', () => {
   let close: (() => Promise<void>) | undefined;
+  let dataDir: string;
+
+  // Cada teste abre o próprio PGlite em diretório temporário: o caminho padrão
+  // é o banco de dev do repositório e disputá-lo entre arquivos de teste em
+  // paralelo derruba a inicialização do WASM (`RuntimeError: Aborted()`).
+  beforeEach(() => {
+    dataDir = mkdtempSync(join(tmpdir(), 'forge-db-client-'));
+    process.env['DATABASE_LOCAL_PATH'] = join(dataDir, 'forge-client-test.pglite');
+  });
 
   afterEach(async () => {
     await close?.();
     close = undefined;
+    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it('conecta em um Postgres real embarcado (PGlite) e executa uma query', async () => {
