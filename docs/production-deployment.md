@@ -48,7 +48,7 @@ Configure no deploy do app web:
 API_INTERNAL_URL=https://<sua-api-render>.onrender.com
 ```
 
-Ponto importante: o Next.js resolve `rewrites()` durante o build. Defina `API_INTERNAL_URL` antes do build da Vercel, não apenas depois no runtime.
+O proxy same-origem (`/api/*`) é um Route Handler (`apps/web/src/app/api/[...path]/route.ts`) que faz seu próprio `fetch()` contra essa URL — a variável é lida em runtime (na primeira requisição depois de o processo subir), não em build time. **Não use `rewrites()` do `next.config.ts` para isso**: a Vercel bloqueia o destino de um `rewrites()` com o erro `DNS_HOSTNAME_RESOLVED_PRIVATE` quando o host de destino fica atrás de Cloudflare (caso do domínio público do Render), mesmo com a URL certa — foi por isso que este projeto migrou de `rewrites()` para um Route Handler.
 
 Comando de build sugerido:
 

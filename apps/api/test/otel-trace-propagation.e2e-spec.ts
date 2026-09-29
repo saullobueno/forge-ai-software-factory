@@ -12,10 +12,11 @@ import { fileURLToPath } from 'node:url';
  * `PROGRESS.md` ("propagação de trace context entre `apps/web` e
  * `apps/api` — cada requisição do proxy Next.js hoje inicia um trace
  * novo, sem `traceparent` herdado") está fechada: uma requisição real
- * feita ao proxy same-origin de `apps/web` (`/api/*`, `next.config.ts`
- * `rewrites()`) chega em `apps/api` com o MESMO `traceId` que o span real
- * criado no lado do Next.js (`apps/web/src/tracing.ts` +
- * `src/proxy.ts`) — não dois traces desconectados.
+ * feita ao proxy same-origin de `apps/web` (`/api/*`, Route Handler em
+ * `src/app/api/[...path]/route.ts`) chega em `apps/api` com o MESMO
+ * `traceId` que o span real criado no lado do Next.js
+ * (`apps/web/src/tracing.ts` + `src/proxy.ts`) — não dois traces
+ * desconectados.
  *
  * **Por que este teste mora em `apps/api`, não em `apps/web`**:
  * `apps/api` já tem toda a infraestrutura de subir um processo Node real
@@ -27,17 +28,13 @@ import { fileURLToPath } from 'node:url';
  * aqui é mais simples e honesto do que introduzir um segundo test runner
  * em `apps/web` só para este caso.
  *
- * **Por que `next dev`, não `next build && next start`**: `apps/web`
- * resolve `rewrites()` (`API_INTERNAL_URL`) em BUILD TIME quando roda em
- * modo produção (`next start` só reproduz o manifest gravado por
- * `next build` — ver o comentário equivalente em
- * `apps/web/playwright.config.ts`), o que exigiria um `next build`
- * completo a cada execução deste teste (o Playwright já paga esse custo,
- * mas lá o `webServer` é compartilhado por toda a suíte). `next dev`
- * reavalia `next.config.ts` (e portanto `API_INTERNAL_URL`) ao subir, sem
- * precisar de build separado — mais rápido, e o `proxy.ts`/rewrite que
- * este teste precisa exercitar funciona identicamente em dev e produção
- * (nenhum comportamento exclusivo de produção está em jogo aqui).
+ * **Por que `next dev`, não `next build && next start`**: o Route Handler
+ * lê `API_INTERNAL_URL` de `process.env` quando o módulo carrega, não em
+ * build time — `next dev` reavalia isso ao subir sem exigir um `next
+ * build` completo antes (mais rápido para um teste isolado como este); o
+ * `proxy.ts`/Route Handler que este teste precisa exercitar funciona
+ * identicamente em dev e produção (nenhum comportamento exclusivo de
+ * produção está em jogo aqui).
  *
  * **Isolamento de `.next`**: como este teste sobe seu próprio `next dev`
  * na mesma pasta `apps/web` que qualquer `pnpm dev`/Playwright já possa

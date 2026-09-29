@@ -24,15 +24,13 @@ const apiCommand = [
   'pnpm --filter @forge/api run start',
 ].join(' && ');
 
-// `next build` resolve `rewrites()` e GRAVA o destino resolvido em
-// `.next/routes-manifest.json` — `next start` só reproduz esse manifest,
-// nunca reavalia `next.config.ts` em runtime. Setar `API_INTERNAL_URL` só
-// no `env` do `next start` (sem rebuildar antes) não tem efeito nenhum: o
-// destino do rewrite continua sendo o que estava no ar durante o último
-// `next build` (ex.: o default http://127.0.0.1:3001 do build normal do
-// monorepo) — o que faria o proxy same-origin apontar silenciosamente
-// para a porta errada. Por isso o build entra na cadeia do webServer, com
-// a env var já definida antes dele.
+// O proxy same-origin (`src/app/api/[...path]/route.ts`) lê `API_INTERNAL_URL`
+// de `process.env` quando o módulo carrega, não em build time — diferente
+// do antigo `rewrites()`, um `next start` reaproveitando um build anterior
+// já pegaria a env var certa. Mesmo assim, o build entra na cadeia do
+// webServer (junto com `reuseExistingServer: false` abaixo): garante que
+// cada rodada da suíte testa o código fonte atual, não um artefato de build
+// antigo deixado por uma execução anterior.
 const webCommand = [
   'pnpm --filter @forge/web exec next build',
   `pnpm --filter @forge/web exec next start -p ${E2E_WEB_PORT}`,
@@ -77,10 +75,8 @@ export default defineConfig({
       command: webCommand,
       url: `http://127.0.0.1:${E2E_WEB_PORT}`,
       // Precisa ser `false`: reaproveitar um processo já rodando pularia o
-      // rebuild acima, e o proxy continuaria apontando para o destino
-      // gravado no `.next/routes-manifest.json` de um build anterior
-      // (possivelmente com uma porta de API diferente da API_PORT deste
-      // run).
+      // rebuild acima e testaria contra uma porta de API (`E2E_API_URL`)
+      // possivelmente diferente da deste run.
       reuseExistingServer: false,
       // Rebuild completo (Turbopack) + boot do `next start` encadeados.
       timeout: 120_000,
