@@ -20,11 +20,13 @@ Configure no serviço da API:
 
 ```bash
 NODE_ENV=production
-API_PORT=3001
+API_PORT=10000
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
 REDIS_URL=rediss://default:PASSWORD@HOST:6379
 JWT_SECRET=<segredo-longo-aleatorio>
 ```
+
+**`API_PORT=10000`, não `3001`**: o Render só varre um conjunto fixo de portas conhecidas para autodetectar onde o serviço escuta (10000, 3000, 8000, 8080, 4567); `3001` não está nessa lista e produz `No open ports detected` mesmo com o processo saudável. 10000 é a porta que o próprio Render usa como convenção/default para web services.
 
 Em produção, a API agora falha cedo se `DATABASE_URL`, `REDIS_URL` ou um `JWT_SECRET` real não estiverem definidos.
 
@@ -96,11 +98,13 @@ Para executar comandos reais em produção, implemente um runner isolado fora do
 
 ## Ordem Recomendada
 
+**Status real (2026-09-29): itens 1-5 concluídos, live em produção** (Render + Vercel + Neon + Upstash + Groq — ver `PROGRESS.md`, seção "Deploy real em produção", para os bugs reais encontrados e corrigidos ao longo desse processo, incluindo `API_PORT` e o proxy `/api/*`).
+
 | Ordem | Trabalho | Status |
 |---|---|---|
-| 1 | Configurar Neon/Upstash/Render/Vercel com `.env.production.example` | pronto para configuração |
-| 2 | Validar migrations/seed em banco Neon de staging | pendente |
-| 3 | Deploy API Render e health check | pendente |
-| 4 | Deploy Web Vercel com `API_INTERNAL_URL` correto | pendente |
-| 5 | Configurar `AI_PROVIDER=gemini` ou `groq` e validar uma execução de staging | pronto para configuração |
-| 6 | Implementar runner real seguro para `run_command` e execuções arbitrárias | pendente |
+| 1 | Configurar Neon/Upstash/Render/Vercel com `.env.production.example` | concluído |
+| 2 | Validar migrations/seed em banco Neon | concluído |
+| 3 | Deploy API Render e health check | concluído |
+| 4 | Deploy Web Vercel com `API_INTERNAL_URL` correto | concluído (via Route Handler, não `rewrites()` — ver `PROGRESS.md`) |
+| 5 | Configurar `AI_PROVIDER=gemini` ou `groq` e validar uma execução real | concluído (Groq) |
+| 6 | Implementar runner real seguro para `run_command` e execuções arbitrárias | pendente, decisão deliberada de não avançar por enquanto (ver `PROGRESS.md`, "O que falta") |
