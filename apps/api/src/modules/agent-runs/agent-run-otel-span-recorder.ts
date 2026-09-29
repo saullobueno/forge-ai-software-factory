@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { context, metrics, trace, type Counter, type Histogram, type Span } from '@opentelemetry/api';
+import { logs, SeverityNumber, type Logger as OtelLogger } from '@opentelemetry/api-logs';
 import type { AgentRunTraceEvent } from '@forge/agents';
 import { redactSensitiveValues } from '../../infrastructure/logging/redaction.js';
 
@@ -45,11 +46,29 @@ type SpanAttributeValue = string | number | boolean;
  * aplicada aos atributos de span de `event.attributes` via
  * `toSafeAttributes()`; se um label de métrica algum dia precisar vir de
  * `event.attributes`, ele PRECISA passar por `toSafeAttributes()` primeiro).
+ *
+ * Logs (continuação da Fase 14 — fecha a lacuna "sem reader de logs OTel"):
+ * mesma ponte de novo, ainda sem duplicar parsing/aninhamento. Cada
+ * start/end de `agent.step`/`tool.call` também emite um `LogRecord` real
+ * via `logs.getLogger()` (`@opentelemetry/api-logs`) — os MESMOS eventos que
+ * `AgentRunTraceLoggerService` já loga (condicionado a `FORGE_TRACE_LOGS=1`)
+ * agora também alimentam o pipeline real de logs OTel, sempre ativo (não
+ * depende de `FORGE_TRACE_LOGS`, mesma regra já usada para spans/métricas
+ * acima). Cada `LogRecord` leva um `context` explícito
+ * (`trace.setSpan(context.active(), span)`, com o span do próprio evento —
+ * o de step para `agent.step`, o de tool call para `tool.call`) — o SDK de
+ * logs (`Logger.emit`, `@opentelemetry/sdk-logs`) deriva `traceId`/`spanId`
+ * do `LogRecord` a partir desse `context`, sem precisar montar esses campos
+ * manualmente. Atributos vêm de `logAttributesFor()` (que reaproveita
+ * `baseAttributes()`), já passando `event.attributes` por
+ * `toSafeAttributes()`/`redactSensitiveValues()` — mesma defesa em
+ * profundidade já usada para spans, nunca um caminho novo sem redação.
  */
 @Injectable()
 export class AgentRunOtelSpanRecorder {
   private readonly tracer = trace.getTracer('forge.agent-runs');
   private readonly meter = metrics.getMeter('forge.agent-runs');
+  private readonly otelLogger: OtelLogger = logs.getLogger('forge.agent-runs');
   private readonly stepSpans = new Map<string, Span>();
   private readonly toolCallSpans = new Map<string, Span>();
 
@@ -82,6 +101,7 @@ export class AgentRunOtelSpanRecorder {
         attributes: this.baseAttributes(event),
       });
       this.stepSpans.set(stepId, span);
+      this.emitLog(span, event, `agent.step ${event.role ?? 'unknown'} started`);
       return;
     }
 
@@ -89,6 +109,7 @@ export class AgentRunOtelSpanRecorder {
     this.stepSpans.delete(stepId);
     if (!span) return;
     this.applyEndAttributes(span, event);
+    this.emitLog(span, event, `agent.step ${event.role ?? 'unknown'} ${event.status ?? 'ended'}`);
     span.end();
 
     if (typeof event.durationMs === 'number') {
@@ -112,6 +133,7 @@ export class AgentRunOtelSpanRecorder {
         parentContext,
       );
       this.toolCallSpans.set(toolCallId, span);
+      this.emitLog(span, event, `tool.call ${event.toolName ?? 'unknown'} started`);
       return;
     }
 
@@ -119,6 +141,7 @@ export class AgentRunOtelSpanRecorder {
     this.toolCallSpans.delete(toolCallId);
     if (!span) return;
     this.applyEndAttributes(span, event);
+    this.emitLog(span, event, `tool.call ${event.toolName ?? 'unknown'} ${event.status ?? 'ended'}`);
     span.end();
 
     this.toolCallCounter.add(1, {
@@ -144,6 +167,41 @@ export class AgentRunOtelSpanRecorder {
     for (const [key, value] of Object.entries(this.toSafeAttributes(event.attributes))) {
       span.setAttribute(key, value);
     }
+  }
+
+  /**
+   * Emite um `LogRecord` real correlacionado ao span do próprio evento,
+   * passando `context: trace.setSpan(context.active(), span)` explicitamente
+   * no `LogRecord` — mesmo idioma já usado em `recordToolCall` para montar o
+   * `parentContext` de um span filho (`trace.setSpan` só cria um novo
+   * `Context` imutável carregando `span`, sem depender de nenhum
+   * `ContextManager` registrado para "estar ativo"). `Logger.emit()`
+   * (`@opentelemetry/sdk-logs`) usa esse `context` explícito para derivar
+   * `traceId`/`spanId` do `LogRecord` (em vez de cair no default,
+   * `context.active()`, que em produção reflete o `AsyncHooksContextManager`
+   * real registrado por `NodeSDK.start()`, mas que os testes deste arquivo
+   * não registram — passar `context` explicitamente funciona nos dois
+   * casos). `status: 'failed'` vira `ERROR`; qualquer outro status
+   * (incluindo `undefined`, no caso do evento `start`) vira `INFO` — não
+   * existe hoje um terceiro nível de severidade no contrato de
+   * `AgentRunTraceEvent`.
+   */
+  private emitLog(span: Span, event: AgentRunTraceEvent, body: string): void {
+    const failed = event.status === 'failed';
+    this.otelLogger.emit({
+      body,
+      severityNumber: failed ? SeverityNumber.ERROR : SeverityNumber.INFO,
+      severityText: failed ? 'ERROR' : 'INFO',
+      attributes: this.logAttributesFor(event),
+      context: trace.setSpan(context.active(), span),
+    });
+  }
+
+  private logAttributesFor(event: AgentRunTraceEvent): Record<string, SpanAttributeValue> {
+    const attributes = this.baseAttributes(event);
+    if (event.status) attributes['forge.status'] = event.status;
+    if (typeof event.durationMs === 'number') attributes['forge.duration_ms'] = event.durationMs;
+    return attributes;
   }
 
   /**

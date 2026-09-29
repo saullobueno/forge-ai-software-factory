@@ -9,6 +9,13 @@ import {
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { ConsoleMetricExporter, PeriodicExportingMetricReader, type MetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import {
+  BatchLogRecordProcessor,
+  ConsoleLogRecordExporter,
+  SimpleLogRecordProcessor,
+  type LogRecordExporter,
+} from '@opentelemetry/sdk-logs';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
@@ -44,6 +51,20 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
  * registrado — comportamento padrão dessas instrumentations, não precisa de
  * configuração extra) vão para `ConsoleMetricExporter`, com um intervalo de
  * exportação curto para ficarem visíveis rapidamente em uso local/manual.
+ *
+ * Logs (continuação da Fase 14 — fecha a lacuna "sem reader de logs OTel"
+ * registrada em `PROGRESS.md`) seguem a mesma regra de novo, reaproveitando
+ * a MESMA `OTEL_EXPORTER_OTLP_ENDPOINT` de traces/métricas: um
+ * Collector/Jaeger/Tempo real espera os três sinais no mesmo host/porta, só
+ * variando o path (`/v1/logs`). Sem essa env var, os `LogRecord`s emitidos
+ * pela ponte de agentes (`AgentRunOtelSpanRecorder`, mesmo arquivo que já
+ * gera spans/métricas) vão para `ConsoleLogRecordExporter`, um `LogRecord`
+ * por linha assim que emitido (sem buffer), mesma filosofia de
+ * `ConsoleSpanExporter`. `NodeSDK` cria e registra o `LoggerProvider`
+ * global sozinho a partir de `logRecordProcessors` (mesmo padrão de
+ * `spanProcessors`/`metricReaders`) — nenhum código consumidor precisa
+ * conhecer o processor escolhido, só chamar `logs.getLogger(...)`
+ * (`@opentelemetry/api-logs`).
  */
 
 const otlpEndpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
@@ -82,6 +103,19 @@ function buildMetricReader(): MetricReader {
   });
 }
 
+function buildLogRecordProcessor(): BatchLogRecordProcessor | SimpleLogRecordProcessor {
+  if (otlpEndpoint) {
+    const url = `${otlpEndpoint.replace(/\/+$/, '')}/v1/logs`;
+    const exporter: LogRecordExporter = new OTLPLogExporter({ url });
+    // Exporter de rede real: usa buffer (`BatchLogRecordProcessor`) para não
+    // fazer uma chamada HTTP por log, mesmo raciocínio de `buildSpanProcessor()`.
+    return new BatchLogRecordProcessor({ exporter });
+  }
+  // Default local: imprime cada `LogRecord` no console assim que é emitido,
+  // sem buffer — mesma filosofia de `ConsoleSpanExporter`.
+  return new SimpleLogRecordProcessor({ exporter: new ConsoleLogRecordExporter() });
+}
+
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: process.env['OTEL_SERVICE_NAME'] ?? 'forge-api',
@@ -89,6 +123,7 @@ const sdk = new NodeSDK({
   }),
   spanProcessors: [buildSpanProcessor()],
   metricReaders: [buildMetricReader()],
+  logRecordProcessors: [buildLogRecordProcessor()],
   instrumentations: [getNodeAutoInstrumentations()],
 });
 

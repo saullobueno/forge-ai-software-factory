@@ -1,4 +1,5 @@
 import { metrics, trace } from '@opentelemetry/api';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import {
   AggregationTemporality,
@@ -7,6 +8,7 @@ import {
   MeterProvider,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
+import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import type { AgentRunTraceEvent } from '@forge/agents';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { AgentRunOtelSpanRecorder } from './agent-run-otel-span-recorder.js';
@@ -27,6 +29,8 @@ describe('AgentRunOtelSpanRecorder', () => {
   let metricExporter: InMemoryMetricExporter;
   let metricReader: PeriodicExportingMetricReader;
   let meterProvider: MeterProvider;
+  let logExporter: InMemoryLogRecordExporter;
+  let loggerProvider: LoggerProvider;
   let recorder: AgentRunOtelSpanRecorder;
 
   beforeEach(() => {
@@ -46,14 +50,28 @@ describe('AgentRunOtelSpanRecorder', () => {
     meterProvider = new MeterProvider({ readers: [metricReader] });
     metrics.setGlobalMeterProvider(meterProvider);
 
+    // Mesmo padrão oficial de novo, agora para logs: um `LoggerProvider`
+    // real (`@opentelemetry/sdk-logs`) com `InMemoryLogRecordExporter` no
+    // lugar do `ConsoleLogRecordExporter` que roda em produção/dev (ver
+    // `apps/api/src/tracing.ts`), registrado como provider global de logs
+    // do processo via `logs.setGlobalLoggerProvider()` — o mesmo mecanismo
+    // que `NodeSDK.start()` já usa por baixo em produção.
+    logExporter = new InMemoryLogRecordExporter();
+    loggerProvider = new LoggerProvider({
+      processors: [new SimpleLogRecordProcessor({ exporter: logExporter })],
+    });
+    logs.setGlobalLoggerProvider(loggerProvider);
+
     recorder = new AgentRunOtelSpanRecorder();
   });
 
   afterEach(async () => {
     trace.disable();
     metrics.disable();
+    logs.disable();
     await provider.shutdown();
     await meterProvider.shutdown();
+    await loggerProvider.shutdown();
   });
 
   it('cria um span real para agent.step e um span filho real para tool.call, aninhados corretamente', async () => {
@@ -270,5 +288,132 @@ describe('AgentRunOtelSpanRecorder', () => {
     expect((point!.value as { count: number; sum?: number }).count).toBe(1);
     expect((point!.value as { count: number; sum?: number }).sum).toBe(250);
     expect(point!.attributes['forge.status']).toBe('succeeded');
+  });
+
+  it('emite LogRecords reais para agent.step e tool.call, correlacionados ao span real de cada um (mesmo traceId/spanId)', async () => {
+    const agentRunId = 'run-logs-1';
+    const stepId = 'step-logs-1';
+    const toolCallId = 'tool-call-logs-1';
+
+    recorder.record({
+      name: 'agent.step',
+      phase: 'start',
+      agentRunId,
+      stepId,
+      role: 'implementer',
+    });
+    recorder.record({
+      name: 'tool.call',
+      phase: 'start',
+      agentRunId,
+      stepId,
+      toolCallId,
+      role: 'implementer',
+      toolName: 'write_file',
+    });
+    recorder.record({
+      name: 'tool.call',
+      phase: 'end',
+      agentRunId,
+      stepId,
+      toolCallId,
+      role: 'implementer',
+      toolName: 'write_file',
+      status: 'succeeded',
+      durationMs: 42,
+      attributes: { policyDecision: 'allow' },
+    });
+    recorder.record({
+      name: 'agent.step',
+      phase: 'end',
+      agentRunId,
+      stepId,
+      role: 'implementer',
+      status: 'succeeded',
+      durationMs: 100,
+    });
+
+    await provider.forceFlush();
+    await loggerProvider.forceFlush();
+
+    const spans = exporter.getFinishedSpans();
+    const toolSpan = spans.find((span) => span.name === 'tool.call write_file')!;
+    const stepSpan = spans.find((span) => span.name === 'agent.step implementer')!;
+    expect(toolSpan).toBeDefined();
+    expect(stepSpan).toBeDefined();
+
+    const logRecords = logExporter.getFinishedLogRecords();
+    // Um LogRecord por start/end de step + start/end de tool call.
+    expect(logRecords).toHaveLength(4);
+
+    const toolEndLog = logRecords.find((record) => record.body === 'tool.call write_file succeeded');
+    expect(toolEndLog).toBeDefined();
+    expect(toolEndLog!.severityNumber).toBe(SeverityNumber.INFO);
+    expect(toolEndLog!.spanContext?.spanId).toBe(toolSpan.spanContext().spanId);
+    expect(toolEndLog!.spanContext?.traceId).toBe(toolSpan.spanContext().traceId);
+    expect(toolEndLog!.attributes['forge.tool_name']).toBe('write_file');
+    expect(toolEndLog!.attributes['forge.status']).toBe('succeeded');
+    expect(toolEndLog!.attributes['forge.duration_ms']).toBe(42);
+    expect(toolEndLog!.attributes['policyDecision']).toBe('allow');
+
+    const stepEndLog = logRecords.find((record) => record.body === 'agent.step implementer succeeded');
+    expect(stepEndLog).toBeDefined();
+    expect(stepEndLog!.spanContext?.spanId).toBe(stepSpan.spanContext().spanId);
+
+    // Correlação real: o log do tool call (span filho) e o log do step (span
+    // pai) pertencem ao MESMO trace — prova de que o `LogRecord` foi emitido
+    // dentro do contexto do span certo, não de um trace desconectado.
+    expect(toolEndLog!.spanContext?.traceId).toBe(stepEndLog!.spanContext?.traceId);
+  });
+
+  it('redige atributos sensíveis antes de virarem atributo de LogRecord (reaproveita redactSensitiveValues) e usa severidade ERROR para status failed', async () => {
+    const agentRunId = 'run-logs-2';
+    const stepId = 'step-logs-2';
+
+    recorder.record({
+      name: 'agent.step',
+      phase: 'start',
+      agentRunId,
+      stepId,
+      role: 'reviewer',
+    });
+    recorder.record({
+      name: 'agent.step',
+      phase: 'end',
+      agentRunId,
+      stepId,
+      role: 'reviewer',
+      status: 'failed',
+      attributes: {
+        error: 'falhou de verdade',
+        apiKey: 'sk-super-secret-nao-pode-vazar',
+        authorization: 'Bearer segredo',
+      },
+    });
+
+    await loggerProvider.forceFlush();
+    const endLog = logExporter
+      .getFinishedLogRecords()
+      .find((record) => record.body === 'agent.step reviewer failed');
+    expect(endLog).toBeDefined();
+    expect(endLog!.severityNumber).toBe(SeverityNumber.ERROR);
+    expect(endLog!.attributes['error']).toBe('falhou de verdade');
+    expect(endLog!.attributes['apiKey']).toBe('[REDACTED]');
+    expect(endLog!.attributes['authorization']).toBe('[REDACTED]');
+  });
+
+  it('não emite LogRecord para um evento end sem start correspondente', async () => {
+    recorder.record({
+      name: 'tool.call',
+      phase: 'end',
+      agentRunId: 'run-logs-orfao',
+      stepId: 'step-orfao',
+      toolCallId: 'tool-call-orfao',
+      toolName: 'read_file',
+      status: 'succeeded',
+    });
+
+    await loggerProvider.forceFlush();
+    expect(logExporter.getFinishedLogRecords()).toHaveLength(0);
   });
 });
