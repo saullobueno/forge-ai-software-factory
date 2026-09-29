@@ -42,6 +42,14 @@ pnpm --filter @forge/api start:prod
 
 Para uma primeira demo, o seed pode ser aceitável. Para ambiente público, substitua por bootstrap administrativo controlado antes de abrir acesso.
 
+**Migrações NÃO rodam sozinhas no deploy** (o build/start real do Render só faz `build` e `start:prod`). Todo commit que gera uma migração nova em `packages/database/drizzle/` exige rodar `db:migrate` contra o Neon **antes ou logo depois** de o Render publicar a API — caso contrário as rotas que usam as colunas novas respondem 500 e a UI entra em loop de tentativas (react-query faz 1 + 3 retries por rota). Da sua máquina, com a `DATABASE_URL` do Neon (a mesma configurada no Render):
+
+```bash
+DATABASE_URL="<url do Neon>" pnpm --filter @forge/database db:migrate
+```
+
+Depois, para popular as fontes de conhecimento já com hash/embedding, use o botão "Reindexar" na tela do projeto (logado como tech lead ou admin). O seed não precisa ser rodado de novo.
+
 ## Web
 
 Configure no deploy do app web:
