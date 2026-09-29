@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, eq, schema } from '@forge/database';
+import { and, asc, eq, inArray, schema } from '@forge/database';
+import { ACTIVE_AGENT_RUN_STATUSES } from '../projects/projects.repository.js';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type TaskRow = typeof schema.tasks.$inferSelect;
@@ -58,5 +59,55 @@ export class TasksRepository {
       .returning();
     if (!task) throw new Error('Falha ao inserir a tarefa.');
     return task;
+  }
+
+  async update(
+    taskId: string,
+    organizationId: string,
+    patch: Partial<Pick<TaskRow, 'title' | 'description' | 'acceptanceCriteria' | 'priority'>>,
+  ): Promise<TaskRow | undefined> {
+    const [row] = await this.database.db
+      .update(schema.tasks)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.organizationId, organizationId)))
+      .returning();
+    return row;
+  }
+
+  async countActiveAgentRuns(taskId: string, organizationId: string): Promise<number> {
+    const rows = await this.database.db
+      .select({ id: schema.agentRuns.id })
+      .from(schema.agentRuns)
+      .where(
+        and(
+          eq(schema.agentRuns.taskId, taskId),
+          eq(schema.agentRuns.organizationId, organizationId),
+          inArray(schema.agentRuns.status, ACTIVE_AGENT_RUN_STATUSES),
+        ),
+      );
+    return rows.length;
+  }
+
+  /** Remove também as aprovações polimórficas (sem FK) das execuções da tarefa. */
+  async deleteWithDependents(taskId: string, organizationId: string): Promise<boolean> {
+    return this.database.db.transaction(async (tx) => {
+      const runIds = tx.select({ id: schema.agentRuns.id }).from(schema.agentRuns).where(eq(schema.agentRuns.taskId, taskId));
+
+      await tx
+        .delete(schema.approvals)
+        .where(
+          and(
+            eq(schema.approvals.organizationId, organizationId),
+            eq(schema.approvals.subjectType, 'agent_run'),
+            inArray(schema.approvals.subjectId, runIds),
+          ),
+        );
+
+      const deleted = await tx
+        .delete(schema.tasks)
+        .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.organizationId, organizationId)))
+        .returning();
+      return deleted.length > 0;
+    });
   }
 }

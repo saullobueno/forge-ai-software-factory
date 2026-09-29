@@ -1,12 +1,27 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   createProjectRequestSchema,
   createTaskRequestSchema,
   idSchema,
+  updateProjectRequestSchema,
   paginationRequestSchema,
   type CreateProjectRequest,
   type CreateTaskRequest,
   type PaginationRequest,
+  type UpdateProjectRequest,
 } from '@forge/types';
 import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -65,6 +80,39 @@ export class ProjectsController {
     }
 
     return project;
+  }
+
+  @Patch(':id')
+  @RequirePermission('project:write')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateProjectRequestSchema)) body: UpdateProjectRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
+
+    const project = await this.projectsService.update(id, user.organizationId, user.userId, body);
+    if (!project) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
+
+    return project;
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('project:write')
+  async remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
+
+    const removed = await this.projectsService.remove(id, user.organizationId, user.userId);
+    if (!removed) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
   }
 
   /**

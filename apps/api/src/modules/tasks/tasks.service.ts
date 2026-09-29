@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import type { CreateTaskRequest, MemberRole } from '@forge/types';
+import { ConflictException, Injectable } from '@nestjs/common';
+import type { CreateTaskRequest, MemberRole, UpdateTaskRequest } from '@forge/types';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
@@ -57,6 +57,64 @@ export class TasksService {
     });
 
     return task;
+  }
+
+  /** `undefined` quando a tarefa não existe no tenant (o controller responde 404 genérico). */
+  async update(
+    taskId: string,
+    organizationId: string,
+    actorUserId: string,
+    input: UpdateTaskRequest,
+  ): Promise<TaskRow | undefined> {
+    const updated = await this.tasksRepository.update(taskId, organizationId, {
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.acceptanceCriteria !== undefined ? { acceptanceCriteria: input.acceptanceCriteria } : {}),
+      ...(input.priority !== undefined ? { priority: input.priority } : {}),
+    });
+    if (!updated) return undefined;
+
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.updated',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { projectId: updated.projectId, changedFields: Object.keys(input) },
+    });
+
+    return updated;
+  }
+
+  /**
+   * `false` quando a tarefa não existe no tenant. Bloqueia (409) enquanto
+   * houver execução de IA em andamento sobre ela.
+   */
+  async remove(taskId: string, organizationId: string, actorUserId: string): Promise<boolean> {
+    const current = await this.tasksRepository.findById(taskId, organizationId);
+    if (!current) return false;
+
+    if ((await this.tasksRepository.countActiveAgentRuns(taskId, organizationId)) > 0) {
+      throw new ConflictException(
+        'Há uma execução de IA em andamento nesta tarefa. Aguarde a conclusão ou cancele-a antes de excluir.',
+      );
+    }
+
+    const deleted = await this.tasksRepository.deleteWithDependents(taskId, organizationId);
+    if (!deleted) return false;
+
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.deleted',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { projectId: current.projectId, title: current.title },
+    });
+
+    return true;
   }
 
   /**

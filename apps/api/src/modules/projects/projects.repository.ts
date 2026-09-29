@@ -1,10 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, like, lt, or, schema } from '@forge/database';
+import { and, desc, eq, inArray, like, lt, or, schema } from '@forge/database';
 import type { PaginationRequest, TechProfile } from '@forge/types';
 import { decodeCursor, encodeCursor } from '../../infrastructure/pagination/cursor.js';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type ProjectRow = typeof schema.projects.$inferSelect;
+
+export const ACTIVE_AGENT_RUN_STATUSES: (typeof schema.agentRuns.$inferSelect)['status'][] = [
+  'queued',
+  'planning',
+  'executing',
+  'testing',
+  'review',
+];
 
 export interface Page<T> {
   items: T[];
@@ -60,6 +68,71 @@ export class ProjectsRepository {
     const nextCursor = hasNextPage && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
 
     return { items, nextCursor };
+  }
+
+  async update(
+    projectId: string,
+    organizationId: string,
+    patch: Partial<Pick<ProjectRow, 'name' | 'description' | 'techProfile' | 'architectureNotes' | 'codeRules'>>,
+  ): Promise<ProjectRow | undefined> {
+    const [row] = await this.database.db
+      .update(schema.projects)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.organizationId, organizationId)))
+      .returning();
+    return row;
+  }
+
+  /** Execuções de IA ainda em andamento (não terminais) sobre qualquer tarefa do projeto. */
+  async countActiveAgentRuns(projectId: string, organizationId: string): Promise<number> {
+    const rows = await this.database.db
+      .select({ id: schema.agentRuns.id })
+      .from(schema.agentRuns)
+      .innerJoin(schema.tasks, eq(schema.tasks.id, schema.agentRuns.taskId))
+      .where(
+        and(
+          eq(schema.tasks.projectId, projectId),
+          eq(schema.agentRuns.organizationId, organizationId),
+          inArray(schema.agentRuns.status, ACTIVE_AGENT_RUN_STATUSES),
+        ),
+      );
+    return rows.length;
+  }
+
+  /**
+   * As FKs em cascata removem tarefas, repositório, ambientes, conhecimento
+   * etc. `approvals` aponta de forma polimórfica (sem FK) para execuções e
+   * deployments, então suas linhas são removidas explicitamente na mesma
+   * transação para não deixar aprovações órfãs na fila.
+   */
+  async deleteWithDependents(projectId: string, organizationId: string): Promise<boolean> {
+    return this.database.db.transaction(async (tx) => {
+      const runIds = tx
+        .select({ id: schema.agentRuns.id })
+        .from(schema.agentRuns)
+        .innerJoin(schema.tasks, eq(schema.tasks.id, schema.agentRuns.taskId))
+        .where(eq(schema.tasks.projectId, projectId));
+      const deploymentIds = tx
+        .select({ id: schema.deployments.id })
+        .from(schema.deployments)
+        .where(eq(schema.deployments.projectId, projectId));
+
+      await tx.delete(schema.approvals).where(
+        and(
+          eq(schema.approvals.organizationId, organizationId),
+          or(
+            and(eq(schema.approvals.subjectType, 'agent_run'), inArray(schema.approvals.subjectId, runIds)),
+            and(eq(schema.approvals.subjectType, 'deployment'), inArray(schema.approvals.subjectId, deploymentIds)),
+          ),
+        ),
+      );
+
+      const deleted = await tx
+        .delete(schema.projects)
+        .where(and(eq(schema.projects.id, projectId), eq(schema.projects.organizationId, organizationId)))
+        .returning();
+      return deleted.length > 0;
+    });
   }
 
   async findSlugsWithPrefix(organizationId: string, prefix: string): Promise<string[]> {

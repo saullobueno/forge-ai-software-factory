@@ -53,12 +53,12 @@ async function forwardToApi(request: NextRequest, path: string[]): Promise<Respo
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
 
-export async function GET(request: NextRequest, { params }: RouteContext<'/api/[...path]'>) {
+async function handle(request: NextRequest, { params }: RouteContext<'/api/[...path]'>) {
   const { path } = await params;
   return forwardToApi(request, path);
 }
 
-export async function POST(request: NextRequest, { params }: RouteContext<'/api/[...path]'>) {
-  const { path } = await params;
-  return forwardToApi(request, path);
-}
+// Todo método que a API expõe precisa de um export aqui: um método sem export
+// vira 405 sem corpo no navegador (foi o que quebraria PATCH/DELETE de
+// projetos e tarefas, que só funcionavam chamando a API diretamente).
+export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };

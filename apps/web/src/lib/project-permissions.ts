@@ -17,3 +17,7 @@ export function canCreateProject(role: MemberRole): boolean {
 export function canCreateTask(role: MemberRole): boolean {
   return ROLES_THAT_CAN_CREATE_TASKS.has(role);
 }
+
+/** Editar e excluir usam as mesmas permissões de criar (`project:write` / `task:manage`). */
+export const canManageProject = canCreateProject;
+export const canManageTask = canCreateTask;

@@ -4,13 +4,16 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
+import { ConfirmDeleteButton } from '@/components/confirm-delete-button';
+import { EditProjectForm } from '@/components/edit-project-form';
 import { NewTaskForm } from '@/components/new-task-form';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { canApproveDeployments } from '@/lib/deployment-approval-permission';
 import { canReindexKnowledge } from '@/lib/knowledge-reindex-permission';
-import { canCreateTask } from '@/lib/project-permissions';
+import { canCreateTask, canManageProject } from '@/lib/project-permissions';
 import {
   DEPLOYMENT_STATUS_LABELS,
   ENVIRONMENT_KIND_LABELS,
@@ -32,7 +35,9 @@ import type {
 
 export function ProjectDetailView({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [creatingTask, setCreatingTask] = useState(false);
+  const [editingProject, setEditingProject] = useState(false);
 
   const projectQuery = useQuery({
     queryKey: ['projects', projectId],
@@ -97,6 +102,7 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   }
 
   const project = projectQuery.data;
+  const mayManageProject = currentUserQuery.data !== undefined && canManageProject(currentUserQuery.data.role);
   const techParts = [...project.techProfile.languages, ...project.techProfile.frameworks];
   const canRequestDeployment =
     currentUserQuery.data?.role === 'admin' || currentUserQuery.data?.role === 'platform_engineer';
@@ -108,19 +114,45 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-6">
       <Breadcrumb items={[{ label: 'Projetos', href: '/projects' }, { label: project.name }]} />
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">{project.slug}</p>
           {project.description && <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>}
         </div>
-        <Link
-          href={`/projects/${projectId}/code`}
-          className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-        >
-          Ver código
-        </Link>
+        <div className="flex flex-wrap items-start gap-2">
+          <Link
+            href={`/projects/${projectId}/code`}
+            className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            Ver código
+          </Link>
+          {mayManageProject && !editingProject && (
+            <button
+              type="button"
+              onClick={() => setEditingProject(true)}
+              className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              Editar projeto
+            </button>
+          )}
+          {mayManageProject && (
+            <ConfirmDeleteButton
+              label="Excluir projeto"
+              testId="delete-project"
+              description="Exclui o projeto, suas tarefas, execuções de IA e conhecimento. Não dá para desfazer."
+              onDelete={async () => {
+                await apiFetch(`/projects/${projectId}`, { method: 'DELETE' });
+                queryClient.removeQueries({ queryKey: ['projects', projectId] });
+                await queryClient.invalidateQueries({ queryKey: ['projects'], exact: true });
+                router.push('/projects');
+              }}
+            />
+          )}
+        </div>
       </div>
+
+      {editingProject && <EditProjectForm project={project} onDone={() => setEditingProject(false)} />}
 
       <section className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-border p-4">

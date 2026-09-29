@@ -2,12 +2,17 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
+import { ConfirmDeleteButton } from '@/components/confirm-delete-button';
+import { EditTaskForm } from '@/components/edit-task-form';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { AGENT_RUN_STATUS_LABELS, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/labels';
 import { agentRunStatusTone, taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
-import type { ApiAgentRun, ApiProject, ApiTask } from '@/lib/types';
+import { canManageTask } from '@/lib/project-permissions';
+import type { ApiAgentRun, ApiCurrentUser, ApiProject, ApiTask } from '@/lib/types';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR');
@@ -15,6 +20,13 @@ function formatDateTime(iso: string): string {
 
 export function TaskDetailView({ projectId, taskId }: { projectId: string; taskId: string }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+
+  const currentUserQuery = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => apiFetch<ApiCurrentUser>('/auth/me'),
+  });
 
   const projectQuery = useQuery({
     queryKey: ['projects', projectId],
@@ -48,6 +60,7 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
   }
 
   const task = taskQuery.data;
+  const canManage = currentUserQuery.data !== undefined && canManageTask(currentUserQuery.data.role);
   const projectName = projectQuery.data?.name ?? '…';
 
   return (
@@ -60,16 +73,44 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
         ]}
       />
 
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Badge tone={taskStatusTone(task.status)}>{TASK_STATUS_LABELS[task.status]}</Badge>
-          <Badge tone={taskPriorityTone(task.priority)}>{TASK_PRIORITY_LABELS[task.priority]}</Badge>
-          {task.labels.map((label) => (
-            <Badge key={label}>{label}</Badge>
-          ))}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Badge tone={taskStatusTone(task.status)}>{TASK_STATUS_LABELS[task.status]}</Badge>
+            <Badge tone={taskPriorityTone(task.priority)}>{TASK_PRIORITY_LABELS[task.priority]}</Badge>
+            {task.labels.map((label) => (
+              <Badge key={label}>{label}</Badge>
+            ))}
+          </div>
         </div>
+        {canManage && (
+          <div className="flex flex-wrap items-start gap-2">
+            {!editing && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                Editar tarefa
+              </button>
+            )}
+            <ConfirmDeleteButton
+              label="Excluir tarefa"
+              testId="delete-task"
+              description="Exclui a tarefa e as execuções de IA dela. Não dá para desfazer."
+              onDelete={async () => {
+                await apiFetch(`/tasks/${taskId}`, { method: 'DELETE' });
+                queryClient.removeQueries({ queryKey: ['tasks', taskId] });
+                await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tasks'] });
+                router.push(`/projects/${projectId}`);
+              }}
+            />
+          </div>
+        )}
       </div>
+
+      {editing && <EditTaskForm task={task} onDone={() => setEditing(false)} />}
 
       <section className="rounded-lg border border-border p-4">
         <h2 className="text-sm font-medium">Descrição</h2>

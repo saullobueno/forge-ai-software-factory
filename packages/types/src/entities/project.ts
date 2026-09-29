@@ -35,6 +35,24 @@ export const createProjectRequestSchema = z.object({
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
+/**
+ * Corpo de `PATCH /projects/:id`. Campos ausentes não mudam; `null` limpa um
+ * campo opcional. O `slug` nunca muda (é estável para URLs/referências).
+ */
+export const updateProjectRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(4000).nullable(),
+    languages: z.array(z.string().trim().min(1).max(50)).max(20),
+    frameworks: z.array(z.string().trim().min(1).max(50)).max(20),
+    packageManager: z.string().trim().min(1).max(50).nullable(),
+    architectureNotes: z.string().trim().max(10_000).nullable(),
+    codeRules: z.string().trim().max(10_000).nullable(),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
+export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
+
 export const repositorySchema = z.object({
   id: idSchema,
   organizationId: idSchema,

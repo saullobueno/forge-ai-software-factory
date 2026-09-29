@@ -26,6 +26,21 @@ export const createTaskRequestSchema = z.object({
 });
 export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
 
+/**
+ * Corpo de `PATCH /tasks/:id`. O status não é editável aqui: ele avança pelas
+ * transições de `@forge/domain` conforme as execuções de IA acontecem.
+ */
+export const updateTaskRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(300),
+    description: z.string().trim().max(10_000).nullable(),
+    acceptanceCriteria: z.string().trim().max(10_000).nullable(),
+    priority: taskPrioritySchema,
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
+export type UpdateTaskRequest = z.infer<typeof updateTaskRequestSchema>;
+
 export const taskDependencySchema = z
   .object({
     id: idSchema,

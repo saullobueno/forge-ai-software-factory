@@ -1,5 +1,18 @@
-import { Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common';
-import { idSchema } from '@forge/types';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { idSchema, updateTaskRequestSchema, type UpdateTaskRequest } from '@forge/types';
+import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { PermissionsGuard } from '../auth/permissions.guard.js';
@@ -28,6 +41,39 @@ export class TasksController {
     }
 
     return task;
+  }
+
+  @Patch(':id')
+  @RequirePermission('task:manage')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateTaskRequestSchema)) body: UpdateTaskRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    const task = await this.tasksService.update(id, user.organizationId, user.userId, body);
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    return task;
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('task:manage')
+  async remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    const removed = await this.tasksService.remove(id, user.organizationId, user.userId);
+    if (!removed) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
   }
 
   /**
