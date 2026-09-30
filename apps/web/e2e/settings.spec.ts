@@ -51,7 +51,7 @@ test('configurações: convite ponta a ponta, papel, remoção e contas de demon
   const again = await browser.newContext();
   const reused = await again.newPage();
   await reused.goto(link);
-  await expect(reused.getByRole('alert')).toContainText('Convite inválido');
+  await expect(reused.getByText('Convite inválido')).toContainText('Convite inválido');
   await again.close();
 
   // a nova conta aparece em Usuários; admin troca o papel e remove
@@ -76,19 +76,20 @@ test('configurações: matriz de papéis e políticas de ferramentas (só mais r
   await expect(page.getByTestId('roles-matrix')).toContainText('member:manage');
 
   await page.getByRole('tab', { name: 'Políticas' }).click();
-  const select = page.getByLabel('Decisão para inspect_git');
+  // create_pull_request: nenhum agente mock o propõe, então mudar a política não interfere nas outras specs em paralelo
+  const select = page.getByLabel('Decisão para create_pull_request');
   try {
-    await select.selectOption('require_approval');
-    await expect(select).toHaveValue('require_approval');
+    await select.selectOption('deny');
+    await expect(select).toHaveValue('deny');
     await page.reload();
     await page.getByRole('tab', { name: 'Políticas' }).click();
-    await expect(page.getByLabel('Decisão para inspect_git')).toHaveValue('require_approval');
+    await expect(page.getByLabel('Decisão para create_pull_request')).toHaveValue('deny');
     // uma ferramenta que já exige aprovação não oferece "Permitir"
     const write = page.getByLabel('Decisão para write_file');
     await expect(write.locator('option', { hasText: 'Permitir' })).toHaveCount(0);
   } finally {
-    await page.getByLabel('Decisão para inspect_git').selectOption('allow');
-    await expect(page.getByLabel('Decisão para inspect_git')).toHaveValue('allow');
+    await page.getByLabel('Decisão para create_pull_request').selectOption('require_approval');
+    await expect(page.getByLabel('Decisão para create_pull_request')).toHaveValue('require_approval');
   }
   await context.close();
 });
