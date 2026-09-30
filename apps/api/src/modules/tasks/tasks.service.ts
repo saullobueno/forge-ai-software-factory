@@ -1,5 +1,6 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { CreateTaskRequest, MemberRole, UpdateTaskRequest } from '@forge/types';
+import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
@@ -59,6 +60,14 @@ export class TasksService {
     return task;
   }
 
+  /** Tarefas do projeto de demonstração protegido não podem ser editadas nem excluídas. */
+  private async assertProjectNotProtected(taskId: string, organizationId: string): Promise<void> {
+    const slug = await this.tasksRepository.findProjectSlug(taskId, organizationId);
+    if (slug !== undefined && readProtectedProjectSlugs().has(slug)) {
+      throw new ForbiddenException('Esta tarefa pertence ao projeto de demonstração e não pode ser editada nem excluída.');
+    }
+  }
+
   /** `undefined` quando a tarefa não existe no tenant (o controller responde 404 genérico). */
   async update(
     taskId: string,
@@ -66,6 +75,7 @@ export class TasksService {
     actorUserId: string,
     input: UpdateTaskRequest,
   ): Promise<TaskRow | undefined> {
+    await this.assertProjectNotProtected(taskId, organizationId);
     const updated = await this.tasksRepository.update(taskId, organizationId, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
@@ -94,6 +104,7 @@ export class TasksService {
   async remove(taskId: string, organizationId: string, actorUserId: string): Promise<boolean> {
     const current = await this.tasksRepository.findById(taskId, organizationId);
     if (!current) return false;
+    await this.assertProjectNotProtected(taskId, organizationId);
 
     if ((await this.tasksRepository.countActiveAgentRuns(taskId, organizationId)) > 0) {
       throw new ConflictException(

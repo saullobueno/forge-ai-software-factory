@@ -60,7 +60,10 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
   }
 
   const task = taskQuery.data;
-  const canManage = currentUserQuery.data !== undefined && canManageTask(currentUserQuery.data.role);
+  const canManage =
+    currentUserQuery.data !== undefined &&
+    canManageTask(currentUserQuery.data.role) &&
+    projectQuery.data?.isProtected === false;
   const projectName = projectQuery.data?.name ?? '…';
 
   return (

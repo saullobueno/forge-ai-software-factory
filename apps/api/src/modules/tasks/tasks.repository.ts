@@ -74,6 +74,15 @@ export class TasksRepository {
     return row;
   }
 
+  async findProjectSlug(taskId: string, organizationId: string): Promise<string | undefined> {
+    const [row] = await this.database.db
+      .select({ slug: schema.projects.slug })
+      .from(schema.tasks)
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.tasks.projectId))
+      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.organizationId, organizationId)));
+    return row?.slug;
+  }
+
   async countActiveAgentRuns(taskId: string, organizationId: string): Promise<number> {
     const rows = await this.database.db
       .select({ id: schema.agentRuns.id })

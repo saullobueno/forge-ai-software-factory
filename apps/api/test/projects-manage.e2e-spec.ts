@@ -1,4 +1,3 @@
-import { eq } from '@forge/database';
 import { hashPassword } from '@forge/domain';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -170,6 +169,9 @@ describe('DELETE /projects/:id', () => {
     expect(blocked.body.message).toContain('execuções de IA em andamento');
     await http().get(`/projects/${id}`).set(auth(techLeadAToken)).expect(200);
 
+    // Import dinâmico: `@forge/database` lê DATABASE_LOCAL_PATH no import, então
+    // um import estático no topo faria este arquivo usar o banco de DEV.
+    const { eq } = await import('@forge/database');
     await testApp.db
       .update(testApp.schema.agentRuns)
       .set({ status: 'completed' })
@@ -243,5 +245,46 @@ describe('DELETE /tasks/:id', () => {
     await http().delete(`/tasks/${taskId}`).set(auth(qaAToken)).expect(403);
     await http().delete(`/tasks/${taskId}`).set(auth(techLeadBToken)).expect(404);
     await http().get(`/tasks/${taskId}`).set(auth(developerAToken)).expect(200);
+  });
+});
+
+describe('projeto de demonstração protegido (slug forge-web-app)', () => {
+  let projectId: string;
+  let taskId: string;
+
+  beforeAll(async () => {
+    const response = await http().post('/projects').set(auth(techLeadAToken)).send({ name: 'Forge Web App' }).expect(201);
+    expect(response.body.slug).toBe('forge-web-app');
+    projectId = response.body.id as string;
+    taskId = await newTask(projectId, 'Tarefa da demonstração');
+  });
+
+  it('expõe isProtected: true no projeto protegido e false nos demais', async () => {
+    const protectedProject = await http().get(`/projects/${projectId}`).set(auth(techLeadAToken)).expect(200);
+    expect(protectedProject.body.isProtected).toBe(true);
+
+    const regularId = await newProject('Projeto Comum Desprotegido');
+    const regular = await http().get(`/projects/${regularId}`).set(auth(techLeadAToken)).expect(200);
+    expect(regular.body.isProtected).toBe(false);
+
+    const list = await http().get('/projects').set(auth(techLeadAToken)).expect(200);
+    const flags = new Map((list.body.items as { id: string; isProtected: boolean }[]).map((item) => [item.id, item.isProtected]));
+    expect(flags.get(projectId)).toBe(true);
+    expect(flags.get(regularId)).toBe(false);
+  });
+
+  it('403 ao editar ou excluir o projeto, mesmo para tech lead', async () => {
+    const patch = await http().patch(`/projects/${projectId}`).set(auth(techLeadAToken)).send({ name: 'Vandalizado' }).expect(403);
+    expect(patch.body.message).toContain('projeto de demonstração');
+    await http().delete(`/projects/${projectId}`).set(auth(techLeadAToken)).expect(403);
+    const still = await http().get(`/projects/${projectId}`).set(auth(techLeadAToken)).expect(200);
+    expect(still.body.name).toBe('Forge Web App');
+  });
+
+  it('403 ao editar ou excluir tarefas do projeto, mas ainda permite criar tarefas', async () => {
+    await http().patch(`/tasks/${taskId}`).set(auth(developerAToken)).send({ title: 'Vandalizada' }).expect(403);
+    await http().delete(`/tasks/${taskId}`).set(auth(developerAToken)).expect(403);
+    await http().get(`/tasks/${taskId}`).set(auth(developerAToken)).expect(200);
+    await http().post(`/projects/${projectId}/tasks`).set(auth(developerAToken)).send({ title: 'Nova tarefa é permitida' }).expect(201);
   });
 });

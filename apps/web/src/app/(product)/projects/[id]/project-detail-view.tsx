@@ -102,7 +102,8 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   }
 
   const project = projectQuery.data;
-  const mayManageProject = currentUserQuery.data !== undefined && canManageProject(currentUserQuery.data.role);
+  const mayManageProject =
+    currentUserQuery.data !== undefined && canManageProject(currentUserQuery.data.role) && !project.isProtected;
   const techParts = [...project.techProfile.languages, ...project.techProfile.frameworks];
   const canRequestDeployment =
     currentUserQuery.data?.role === 'admin' || currentUserQuery.data?.role === 'platform_engineer';
@@ -118,6 +119,12 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">{project.slug}</p>
+          {project.isProtected && (
+            <p className="mt-2 text-xs text-muted-foreground" data-testid="protected-project-note">
+              <Badge>Projeto de demonstração</Badge> protegido contra edição e exclusão (você pode criar tarefas e
+              execuções nele).
+            </p>
+          )}
           {project.description && <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>}
         </div>
         <div className="flex flex-wrap items-start gap-2">

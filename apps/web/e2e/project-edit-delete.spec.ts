@@ -61,15 +61,21 @@ test('tech lead edita e exclui tarefa e projeto pela interface', async ({ page }
   await expect(page.getByRole('link', { name: new RegExp(renamedProject) })).toHaveCount(0);
 });
 
-test('developer edita tarefas, mas não vê editar/excluir projeto', async ({ page }) => {
-  await login(page, 'dev@acme-platform.example');
-  await page.getByRole('link', { name: 'Forge Web App' }).first().click();
+test('projeto de demonstração é protegido: ninguém vê editar/excluir projeto nem tarefas dele', async ({ page }) => {
+  for (const email of ['dev@acme-platform.example', 'tech-lead@acme-platform.example']) {
+    await login(page, email);
+    await page.getByRole('link', { name: 'Forge Web App' }).first().click();
 
-  await expect(page.getByRole('heading', { name: 'Forge Web App', level: 1 })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Editar projeto' })).toHaveCount(0);
-  await expect(page.getByTestId('delete-project')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Forge Web App', level: 1 })).toBeVisible();
+    await expect(page.getByTestId('protected-project-note')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Editar projeto' })).toHaveCount(0);
+    await expect(page.getByTestId('delete-project')).toHaveCount(0);
 
-  await page.getByRole('link', { name: 'Estornos aparecem como cobrança positiva na fatura' }).click();
-  await expect(page.getByRole('button', { name: 'Editar tarefa' })).toBeVisible();
-  await expect(page.getByTestId('delete-task')).toBeVisible();
+    await page.getByRole('link', { name: 'Estornos aparecem como cobrança positiva na fatura' }).click();
+    await expect(page.getByRole('heading', { name: /Estornos aparecem/, level: 1 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Editar tarefa' })).toHaveCount(0);
+    await expect(page.getByTestId('delete-task')).toHaveCount(0);
+
+    await page.context().clearCookies();
+  }
 });

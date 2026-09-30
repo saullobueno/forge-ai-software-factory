@@ -65,6 +65,8 @@ export interface ApiProject {
   codeRules: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Projeto de demonstração: a API bloqueia editar/excluir (e as tarefas dele). */
+  isProtected: boolean;
 }
 
 export interface ApiTaskDependency {

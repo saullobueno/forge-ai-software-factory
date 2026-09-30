@@ -1,9 +1,15 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { CreateProjectRequest, PaginationRequest, UpdateProjectRequest } from '@forge/types';
+import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { ProjectsRepository, type Page, type ProjectRow } from './projects.repository.js';
 
 const MAX_SLUG_LENGTH = 60;
+
+export type ProjectView = ProjectRow & { isProtected: boolean };
+
+export const PROTECTED_PROJECT_MESSAGE =
+  'Este é o projeto de demonstração e não pode ser editado nem excluído.';
 
 export function slugify(name: string): string {
   const slug = name
@@ -30,15 +36,21 @@ export class ProjectsService {
    * genérico nos dois casos, para não vazar a existência de um recurso de
    * outro tenant.
    */
-  async findById(projectId: string, organizationId: string): Promise<ProjectRow | undefined> {
-    return this.projectsRepository.findById(projectId, organizationId);
+  async findById(projectId: string, organizationId: string): Promise<ProjectView | undefined> {
+    const project = await this.projectsRepository.findById(projectId, organizationId);
+    return project ? this.toView(project) : undefined;
   }
 
-  async listByOrganization(organizationId: string, pagination: PaginationRequest): Promise<Page<ProjectRow>> {
-    return this.projectsRepository.listByOrganization(organizationId, pagination);
+  async listByOrganization(organizationId: string, pagination: PaginationRequest): Promise<Page<ProjectView>> {
+    const page = await this.projectsRepository.listByOrganization(organizationId, pagination);
+    return { ...page, items: page.items.map((project) => this.toView(project)) };
   }
 
-  async create(organizationId: string, actorUserId: string, input: CreateProjectRequest): Promise<ProjectRow> {
+  private toView(project: ProjectRow): ProjectView {
+    return { ...project, isProtected: readProtectedProjectSlugs().has(project.slug) };
+  }
+
+  async create(organizationId: string, actorUserId: string, input: CreateProjectRequest): Promise<ProjectView> {
     const slug = await this.uniqueSlug(organizationId, slugify(input.name));
 
     const project = await this.projectsRepository.createWithDemoRepository({
@@ -63,7 +75,7 @@ export class ProjectsService {
       metadata: { name: project.name, slug: project.slug },
     });
 
-    return project;
+    return this.toView(project);
   }
 
   /** `undefined` quando o projeto não existe no tenant (o controller responde 404 genérico). */
@@ -72,9 +84,10 @@ export class ProjectsService {
     organizationId: string,
     actorUserId: string,
     input: UpdateProjectRequest,
-  ): Promise<ProjectRow | undefined> {
+  ): Promise<ProjectView | undefined> {
     const current = await this.projectsRepository.findById(projectId, organizationId);
     if (!current) return undefined;
+    if (this.toView(current).isProtected) throw new ForbiddenException(PROTECTED_PROJECT_MESSAGE);
 
     const techProfileChanged =
       input.languages !== undefined || input.frameworks !== undefined || input.packageManager !== undefined;
@@ -107,7 +120,7 @@ export class ProjectsService {
       metadata: { changedFields: Object.keys(input) },
     });
 
-    return updated;
+    return this.toView(updated);
   }
 
   /**
@@ -118,6 +131,7 @@ export class ProjectsService {
   async remove(projectId: string, organizationId: string, actorUserId: string): Promise<boolean> {
     const current = await this.projectsRepository.findById(projectId, organizationId);
     if (!current) return false;
+    if (this.toView(current).isProtected) throw new ForbiddenException(PROTECTED_PROJECT_MESSAGE);
 
     if ((await this.projectsRepository.countActiveAgentRuns(projectId, organizationId)) > 0) {
       throw new ConflictException(

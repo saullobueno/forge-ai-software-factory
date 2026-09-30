@@ -10,6 +10,7 @@ const envSchema = z.object({
   AI_PROVIDER: z.enum(['mock', 'gemini', 'groq', 'anthropic']).optional(),
   AI_MODEL: z.string().optional(),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  PROTECTED_PROJECT_SLUGS: z.string().optional(),
   AI_ORG_DAILY_TOKEN_LIMIT: z.coerce.number().int().positive().optional(),
   AI_ORG_DAILY_COST_LIMIT_USD: z.coerce.number().positive().optional(),
   AI_USER_DAILY_TOKEN_LIMIT: z.coerce.number().int().positive().optional(),
@@ -100,3 +101,23 @@ export function parseEnv(source: NodeJS.ProcessEnv = process.env): Env {
  * que configuração inválida se propague para dentro dos módulos.
  */
 export const env: Env = parseEnv();
+
+/**
+ * Slugs de projetos que não podem ser editados nem excluídos (nem as tarefas
+ * deles). Default: o projeto de demonstração do seed, para que visitantes da
+ * demo pública (contas com `project:write`) não o estraguem. Defina
+ * `PROTECTED_PROJECT_SLUGS=` (vazio) para desligar, ou uma lista separada
+ * por vírgula.
+ */
+export const DEFAULT_PROTECTED_PROJECT_SLUGS = ['forge-web-app'];
+
+export function readProtectedProjectSlugs(source: NodeJS.ProcessEnv = process.env): Set<string> {
+  const raw = source['PROTECTED_PROJECT_SLUGS'];
+  if (raw === undefined) return new Set(DEFAULT_PROTECTED_PROJECT_SLUGS);
+  return new Set(
+    raw
+      .split(',')
+      .map((slug) => slug.trim())
+      .filter((slug) => slug.length > 0),
+  );
+}

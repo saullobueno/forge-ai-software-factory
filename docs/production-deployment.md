@@ -86,7 +86,7 @@ GROQ_MODEL=llama-3.3-70b-versatile
 
 `AI_MODEL` também pode ser usado como fallback genérico para o modelo. `AI_REQUEST_TIMEOUT_MS` controla timeout por chamada (default: 30000). `AI_PROVIDER=mock` continua recomendado para demo local, testes e staging sem custo. Anthropic segue reservado como ponto futuro; `AI_PROVIDER=anthropic` falha cedo até existir adapter dedicado.
 
-As chamadas de agente já persistem uso básico em `ai_messages`/`ai_usages` (provider, modelo, tokens, custo estimado e resposta resumida). `GET /ai-usage/summary` e `/ai-usage` já dão uma leitura operacional inicial de tokens/custo/latência média por organização. Para tráfego real, configure `AI_ORG_DAILY_TOKEN_LIMIT` e/ou `AI_ORG_DAILY_COST_LIMIT_USD` como teto simples por organização nas últimas 24h. Ainda faltam limites por usuário e séries históricas de latência/custo.
+As chamadas de agente já persistem uso básico em `ai_messages`/`ai_usages` (provider, modelo, tokens, custo estimado e resposta resumida). `GET /ai-usage/summary` e `/ai-usage` já dão uma leitura operacional inicial de tokens/custo/latência média por organização. Limites diários por organização e por usuário estão descritos em "Demo pública: limites de IA e proteção" abaixo.
 
 ## Runner Real
 
@@ -115,3 +115,20 @@ Para executar comandos reais em produção, implemente um runner isolado fora do
 | 4 | Deploy Web Vercel com `API_INTERNAL_URL` correto | concluído (via Route Handler, não `rewrites()` — ver `PROGRESS.md`) |
 | 5 | Configurar `AI_PROVIDER=gemini` ou `groq` e validar uma execução real | concluído (Groq) |
 | 6 | Implementar runner real seguro para `run_command` e execuções arbitrárias | pendente, decisão deliberada de não avançar por enquanto (ver `PROGRESS.md`, "O que falta") |
+
+## Demo pública: limites de IA e proteção
+
+As contas de demonstração são públicas (o login já vem preenchido), então qualquer visitante age como `tech-lead`/`dev`. Duas proteções, ambas configuráveis no Render (Environment):
+
+**1. Teto de gasto de IA.** Com um provider real (ex. `AI_PROVIDER=groq`) e sem limites, um visitante ou robô consegue disparar execuções sem parar. Valores recomendados:
+
+| Variável | Valor | Efeito |
+|---|---|---|
+| `AI_ORG_DAILY_TOKEN_LIMIT` | `300000` | teto da organização inteira em 24h (≈ 30 a 140 execuções, conforme o tamanho do contexto) |
+| `AI_ORG_DAILY_COST_LIMIT_USD` | `1` | teto de custo estimado da organização em 24h (pior caso ≈ US$ 30/mês) |
+| `AI_USER_DAILY_TOKEN_LIMIT` | `100000` | por usuário: uma conta compartilhada não consome tudo sozinha |
+| `AI_USER_DAILY_COST_LIMIT_USD` | `0.30` | idem, em custo |
+
+Ao atingir qualquer teto, `POST /tasks/:id/agent-runs` responde 429 e a tela da tarefa mostra a mensagem. O uso consumido aparece em `/ai-usage` ("Meu uso" e totais). Uma execução com o provider `mock` gasta cerca de 2,1 mil tokens / US$ 0,017 (estimado); com provider real o consumo depende do modelo e do contexto — ajuste os tetos olhando `/ai-usage` depois de alguns dias.
+
+**2. Projeto de demonstração protegido.** Por padrão o projeto do seed (`forge-web-app`) e as tarefas dele não podem ser editados nem excluídos por ninguém (a API responde 403 e a UI esconde os botões); criar tarefas e disparar execuções continua permitido. Projetos criados pelos visitantes são livres. Para mudar a lista: `PROTECTED_PROJECT_SLUGS=forge-web-app,outro-slug`; valor vazio (`PROTECTED_PROJECT_SLUGS=`) desliga a proteção. A proteção existe porque o seed **não** recria projeto nem tarefas apagados quando a organização já existe (ele só garante usuários, ambientes e conhecimento): restaurar a demonstração exigiria recriar o banco (`db:migrate` + `db:seed` num banco novo).

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_DEVELOPMENT_JWT_SECRET, parseEnv, readAiUsageLimits, readAiUserUsageLimits } from './env.js';
+import {
+  DEFAULT_DEVELOPMENT_JWT_SECRET,
+  parseEnv,
+  readAiUsageLimits,
+  readAiUserUsageLimits,
+  readProtectedProjectSlugs,
+} from './env.js';
 
 describe('parseEnv', () => {
   it('mantém fallbacks locais fora de produção', () => {
@@ -69,5 +75,19 @@ describe('parseEnv', () => {
       dailyTokenLimit: null,
       dailyCostLimitUsd: null,
     });
+  });
+});
+
+describe('readProtectedProjectSlugs', () => {
+  it('protege o projeto de demonstração por padrão', () => {
+    expect([...readProtectedProjectSlugs({})]).toEqual(['forge-web-app']);
+  });
+
+  it('lê uma lista separada por vírgula, ignorando espaços e itens vazios', () => {
+    expect([...readProtectedProjectSlugs({ PROTECTED_PROJECT_SLUGS: ' a , b,, c ' })]).toEqual(['a', 'b', 'c']);
+  });
+
+  it('valor vazio desliga a proteção', () => {
+    expect(readProtectedProjectSlugs({ PROTECTED_PROJECT_SLUGS: '' }).size).toBe(0);
   });
 });
