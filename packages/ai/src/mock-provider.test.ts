@@ -245,3 +245,38 @@ describe('MockAiProvider', () => {
     });
   });
 });
+
+describe('MockAiProvider streaming', () => {
+  it('com onToken emite o resumo em pedaços que recompõem o texto exato', async () => {
+    const provider = new MockAiProvider({ streamDelayMs: 0 });
+    const tokens: string[] = [];
+    const result = await provider.generate({
+      role: 'planner',
+      objective: 'Corrigir estorno',
+      acceptanceCriteria: null,
+      availableTools: ALL_READ_TOOLS,
+      repositoryFiles: [],
+      knowledgeContext: [],
+      priorSteps: [],
+      onToken: (delta) => tokens.push(delta),
+    });
+
+    expect(tokens.length).toBeGreaterThan(1);
+    expect(tokens.join('')).toBe(result.summary);
+  });
+
+  it('sem onToken o resultado é idêntico (streaming não altera a decisão)', async () => {
+    const provider = new MockAiProvider();
+    const base = {
+      role: 'planner' as const,
+      objective: 'Corrigir estorno',
+      acceptanceCriteria: null,
+      availableTools: ALL_READ_TOOLS,
+      repositoryFiles: [],
+      knowledgeContext: [],
+      priorSteps: [],
+    };
+    expect(await provider.generate({ ...base, onToken: () => undefined })).toEqual(await provider.generate(base));
+  });
+});
+

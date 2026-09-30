@@ -73,7 +73,7 @@ export class ProjectsRepository {
   async update(
     projectId: string,
     organizationId: string,
-    patch: Partial<Pick<ProjectRow, 'name' | 'description' | 'techProfile' | 'architectureNotes' | 'codeRules'>>,
+    patch: Partial<Pick<ProjectRow, 'name' | 'description' | 'techProfile' | 'architectureNotes' | 'codeRules' | 'aiProvider'>>,
   ): Promise<ProjectRow | undefined> {
     const [row] = await this.database.db
       .update(schema.projects)

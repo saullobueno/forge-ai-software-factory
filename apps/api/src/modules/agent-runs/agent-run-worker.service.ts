@@ -8,6 +8,7 @@ import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunGovernanceAuditService } from './agent-run-governance-audit.service.js';
 import { AgentRunTestResultsService } from './agent-run-test-results.service.js';
 import { AgentRunTraceLoggerService } from './agent-run-trace-logger.service.js';
+import { AiProviderRegistry } from '../ai-providers/ai-provider.registry.js';
 import { AI_PROVIDER } from './ai-provider.token.js';
 
 export interface AgentRunJobPayload {
@@ -48,10 +49,12 @@ export class AgentRunWorkerService implements OnModuleInit {
     private readonly governance: AgentRunGovernanceAuditService,
     private readonly testResults: AgentRunTestResultsService,
     @Inject(AI_PROVIDER) private readonly ai: AiProvider,
+    private readonly aiProviders: AiProviderRegistry,
   ) {
     this.orchestrator = new AgentRunOrchestrator({
       store: this.store,
       ai: this.ai,
+      resolveAi: (name) => this.aiProviders.resolve(name),
       repositoryReader: this.repositoryFs,
       events: this.events,
       traces: this.traces,

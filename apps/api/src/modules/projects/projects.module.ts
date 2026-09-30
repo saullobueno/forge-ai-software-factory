@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AiProvidersModule } from '../ai-providers/ai-providers.module.js';
 import { AuditLogWriterModule } from '../audit-logs/audit-log-writer.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { TasksModule } from '../tasks/tasks.module.js';
@@ -7,7 +8,7 @@ import { ProjectsRepository } from './projects.repository.js';
 import { ProjectsService } from './projects.service.js';
 
 @Module({
-  imports: [AuthModule, TasksModule, AuditLogWriterModule],
+  imports: [AuthModule, TasksModule, AuditLogWriterModule, AiProvidersModule],
   controllers: [ProjectsController],
   providers: [ProjectsRepository, ProjectsService],
   // Exportado para que `CodeModule` (Fase 5) reutilize a mesma checagem de

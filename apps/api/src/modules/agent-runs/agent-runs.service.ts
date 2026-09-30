@@ -466,7 +466,9 @@ export class AgentRunsService {
     const initial$ = of<MessageEvent>({ data: { status: run.status } });
     const updates$ = this.agentRunEvents
       .stream(id)
-      .pipe(map((event): MessageEvent => ({ data: { status: event.status } })));
+      .pipe(
+        map((event): MessageEvent => ({ data: event.token ? { status: event.status, token: event.token } : { status: event.status } })),
+      );
 
     return concat(initial$, updates$);
   }

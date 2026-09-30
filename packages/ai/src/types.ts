@@ -71,6 +71,14 @@ export interface AiGenerateRequest {
   knowledgeContext: readonly AiKnowledgeContext[];
   /** Steps anteriores desta execução, na ordem em que rodaram. */
   priorSteps: readonly AiPriorStepContext[];
+  /**
+   * Instruções extras configuradas para este agente na organização. São
+   * dado de configuração, não de sistema: nunca alteram políticas,
+   * ferramentas permitidas nem o escopo de tenant.
+   */
+  instructions?: string | null;
+  /** Recebe o texto do modelo conforme é gerado (provedores que suportam streaming). */
+  onToken?: (delta: string) => void;
 }
 
 export interface AiProposedToolCall {

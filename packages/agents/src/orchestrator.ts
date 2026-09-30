@@ -20,6 +20,8 @@ import { executeRealTool, type SimulatedPatch } from './real-tool-runner.ts';
 export interface AgentRunOrchestratorDeps {
   store: AgentRunStore;
   ai: AiProvider;
+  /** Escolhe o provedor de um projeto pelo nome; `undefined` = usa `ai` (padrão do servidor). */
+  resolveAi?: (providerName: string | null | undefined) => AiProvider | undefined;
   repositoryReader: RepositoryReader;
   events: AgentRunEventPublisher;
   traces?: AgentRunTraceSink;
@@ -106,6 +108,7 @@ export class AgentRunOrchestrator {
 
       const { root, repositoryFiles } = await this.loadRepository(repository, this.deps.repositoryReader);
 
+      const ai = this.deps.resolveAi?.(run.aiProvider) ?? this.deps.ai;
       const policyOverrides = (await store.getToolPolicyOverrides?.(run.organizationId)) ?? {};
       const priorSteps: AiPriorStepContext[] = [];
       let hasPendingApproval = false;
@@ -188,7 +191,7 @@ export class AgentRunOrchestrator {
         });
 
         try {
-          const generation = await this.deps.ai.generate({
+          const generation = await ai.generate({
             role: stage.role,
             objective: run.objective,
             acceptanceCriteria: task.acceptanceCriteria,
@@ -196,6 +199,8 @@ export class AgentRunOrchestrator {
             repositoryFiles,
             knowledgeContext,
             priorSteps,
+            instructions: agent.instructions ?? null,
+            onToken: (delta) => events.publish({ agentRunId, status: stage.runStatus, token: { role: stage.role, delta } }),
           });
 
           for (const proposal of generation.toolCalls) {
@@ -354,8 +359,8 @@ export class AgentRunOrchestrator {
             organizationId: run.organizationId,
             agentRunId,
             agentStepId: stepRecord.id,
-            provider: this.deps.ai.name,
-            model: this.deps.ai.model ?? this.deps.ai.name,
+            provider: ai.name,
+            model: ai.model ?? ai.name,
             content: JSON.stringify({ summary: generation.summary, output: generation.output }),
             promptTokens: generation.usage.promptTokens,
             completionTokens: generation.usage.completionTokens,

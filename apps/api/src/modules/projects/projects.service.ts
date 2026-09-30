@@ -1,6 +1,7 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { CreateProjectRequest, PaginationRequest, UpdateProjectRequest } from '@forge/types';
 import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
+import { AiProviderRegistry } from '../ai-providers/ai-provider.registry.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { ProjectsRepository, type Page, type ProjectRow } from './projects.repository.js';
 
@@ -28,6 +29,7 @@ export class ProjectsService {
   constructor(
     private readonly projectsRepository: ProjectsRepository,
     private readonly auditLogsService: AuditLogsService,
+    private readonly aiProviders: AiProviderRegistry,
   ) {}
 
   /**
@@ -88,6 +90,9 @@ export class ProjectsService {
     const current = await this.projectsRepository.findById(projectId, organizationId);
     if (!current) return undefined;
     if (this.toView(current).isProtected) throw new ForbiddenException(PROTECTED_PROJECT_MESSAGE);
+    if (input.aiProvider && !this.aiProviders.isAvailable(input.aiProvider)) {
+      throw new BadRequestException(`O provedor "${input.aiProvider}" não está configurado neste servidor.`);
+    }
 
     const techProfileChanged =
       input.languages !== undefined || input.frameworks !== undefined || input.packageManager !== undefined;
@@ -97,6 +102,7 @@ export class ProjectsService {
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.architectureNotes !== undefined ? { architectureNotes: input.architectureNotes } : {}),
       ...(input.codeRules !== undefined ? { codeRules: input.codeRules } : {}),
+      ...(input.aiProvider !== undefined ? { aiProvider: input.aiProvider } : {}),
       ...(techProfileChanged
         ? {
             techProfile: {

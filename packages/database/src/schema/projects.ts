@@ -17,6 +17,8 @@ export const projects = pgTable('projects', {
     .default({ languages: [], frameworks: [], packageManager: null }),
   architectureNotes: text('architecture_notes'),
   codeRules: text('code_rules'),
+  /** Provedor de IA escolhido para este projeto (`null` = padrão do servidor). */
+  aiProvider: text('ai_provider'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index('projects_organization_id_idx').on(table.organizationId)]);

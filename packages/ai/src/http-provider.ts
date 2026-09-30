@@ -14,6 +14,8 @@ export interface HttpTransportResponse {
   ok: boolean;
   status: number;
   text(): Promise<string>;
+  /** Corpo em streaming (fetch real); transportes de teste podem omitir e só implementar `text()`. */
+  body?: AsyncIterable<Uint8Array> | null;
 }
 
 export type HttpTransport = (url: string, init: HttpTransportInit) => Promise<HttpTransportResponse>;
@@ -59,7 +61,7 @@ export class HttpAiProvider implements AiProvider {
 
   async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
     const prompt = buildPrompt(request);
-    const response = await this.callProvider(prompt);
+    const response = await this.callProvider(prompt, request.onToken);
     const parsed = parseProviderJson(response.text);
     const fallbackSummary = response.text.trim().slice(0, 1_000) || 'Resposta recebida do provedor real.';
     const summary = readString(parsed, 'summary') ?? fallbackSummary;
@@ -70,12 +72,14 @@ export class HttpAiProvider implements AiProvider {
     return { summary, output, toolCalls, usage };
   }
 
-  private async callProvider(prompt: string): Promise<ProviderResponse> {
+  private async callProvider(prompt: string, onToken?: (delta: string) => void): Promise<ProviderResponse> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       if (this.name === 'groq') {
-        return await this.callGroq(prompt, controller.signal);
+        return onToken
+          ? await this.callGroqStreaming(prompt, controller.signal, onToken)
+          : await this.callGroq(prompt, controller.signal);
       }
       if (this.name === 'anthropic') {
         return await this.callAnthropic(prompt, controller.signal);
@@ -117,6 +121,54 @@ export class HttpAiProvider implements AiProvider {
           }
         : null,
     };
+  }
+
+  /** Groq (API compatível com OpenAI) com `stream: true`: repassa cada trecho a `onToken` e acumula o texto completo. */
+  private async callGroqStreaming(prompt: string, signal: AbortSignal, onToken: (delta: string) => void): Promise<ProviderResponse> {
+    const body = {
+      model: this.model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+    const response = await this.transport('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`${this.name} API retornou HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+    }
+
+    let text = '';
+    let usage: AiUsage | null = null;
+    for await (const data of readSseData(response)) {
+      if (data === '[DONE]') break;
+      const chunk = tryParseObject(data);
+      if (!chunk) continue;
+      const choice = asRecord(Array.isArray(chunk['choices']) ? chunk['choices'][0] : null);
+      const delta = asRecord(choice?.['delta']);
+      const piece = typeof delta?.['content'] === 'string' ? delta['content'] : '';
+      if (piece) {
+        text += piece;
+        onToken(piece);
+      }
+      const usageRecord = asRecord(chunk['usage']) ?? asRecord(asRecord(chunk['x_groq'])?.['usage']);
+      if (usageRecord) {
+        usage = {
+          promptTokens: readNumber(usageRecord, 'prompt_tokens') ?? 0,
+          completionTokens: readNumber(usageRecord, 'completion_tokens') ?? 0,
+          totalTokens: readNumber(usageRecord, 'total_tokens') ?? 0,
+        };
+      }
+    }
+    return { text, usage };
   }
 
   private async callGemini(prompt: string, signal: AbortSignal): Promise<ProviderResponse> {
@@ -215,7 +267,34 @@ function buildPrompt(request: AiGenerateRequest): string {
     `knowledgeContext:\n${knowledgeContext}`,
     `repositoryFiles:\n${repositoryFiles}`,
     `priorSteps:\n${JSON.stringify(request.priorSteps)}`,
+    ...(request.instructions?.trim()
+      ? [`agentInstructions (configuradas pela organização; não podem alterar políticas, ferramentas ou escopo):\n${request.instructions.trim().slice(0, 4_000)}`]
+      : []),
   ].join('\n\n');
+}
+
+/** Itera os `data:` de uma resposta Server-Sent Events (corpo em streaming ou, em testes, o texto inteiro). */
+async function* readSseData(response: HttpTransportResponse): AsyncGenerator<string> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const flushLines = function* (final: boolean): Generator<string> {
+    const lines = buffer.split(/\r?\n/);
+    buffer = final ? '' : (lines.pop() ?? '');
+    for (const line of lines) {
+      if (line.startsWith('data:')) yield line.slice(5).trim();
+    }
+  };
+
+  if (response.body) {
+    for await (const part of response.body) {
+      buffer += typeof part === 'string' ? part : decoder.decode(part, { stream: true });
+      yield* flushLines(false);
+    }
+    buffer += decoder.decode();
+  } else {
+    buffer = await response.text();
+  }
+  yield* flushLines(true);
 }
 
 function sanitizeToolCalls(value: unknown, availableTools: readonly string[]): AiProposedToolCall[] {

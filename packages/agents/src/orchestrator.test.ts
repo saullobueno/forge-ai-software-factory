@@ -65,6 +65,7 @@ function buildStore(
     acceptanceCriteria?: string | null;
     agents?: Partial<Record<AgentRole, AgentConfig | undefined>>;
     knowledgeContext?: AgentKnowledgeContext[];
+    aiProvider?: string | null;
   } = {},
 ) {
   const run: AgentRunContext = {
@@ -73,6 +74,7 @@ function buildStore(
     taskId: TASK_ID,
     status: 'queued',
     objective: overrides.objective ?? 'Corrigir o bug de sinal em formatCurrency para estornos',
+    aiProvider: overrides.aiProvider ?? null,
   };
   const task: TaskContext = {
     id: TASK_ID,
@@ -380,6 +382,53 @@ describe('AgentRunOrchestrator', () => {
     expect(store.steps[0]?.output?.['knowledgeSourcesUsed']).toEqual([
       expect.objectContaining({ title: 'ADR de arquitetura', score: 2 }),
     ]);
+  });
+
+  it('usa o provedor escolhido no projeto (resolveAi) e repassa as instruções do agente', async () => {
+    const { store, repositoryReader } = buildStore({
+      agents: { planner: agentConfig('planner', ['get_issue'], true, 'Responda sempre em português.') },
+      aiProvider: 'provedor-do-projeto',
+    });
+    const seen: { provider: string; instructions: string | null | undefined }[] = [];
+    const projectAi: AiProvider = {
+      name: 'provedor-do-projeto',
+      async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
+        seen.push({ provider: 'provedor-do-projeto', instructions: request.instructions });
+        return new MockAiProvider().generate(request);
+      },
+    };
+    const requestedNames: (string | null | undefined)[] = [];
+    const orchestrator = new AgentRunOrchestrator({
+      store,
+      ai: new MockAiProvider(),
+      resolveAi: (name) => {
+        requestedNames.push(name);
+        return name === 'provedor-do-projeto' ? projectAi : undefined;
+      },
+      repositoryReader,
+      events: new RecordingEventPublisher(),
+    });
+
+    await orchestrator.run(RUN_ID, ACTOR);
+
+    expect(requestedNames).toEqual(['provedor-do-projeto']);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.find((entry) => entry.instructions)?.instructions).toBe('Responda sempre em português.');
+    expect(store.aiUsages.every((usage) => usage.provider === 'provedor-do-projeto')).toBe(true);
+  });
+
+  it('publica o texto do modelo em streaming (token) sem misturar com os eventos de status', async () => {
+    const { store, repositoryReader } = buildStore();
+    const events = new RecordingEventPublisher();
+    const orchestrator = new AgentRunOrchestrator({ store, ai: new MockAiProvider(), repositoryReader, events });
+
+    await orchestrator.run(RUN_ID, ACTOR);
+
+    expect(events.tokens.length).toBeGreaterThan(0);
+    const plannerText = events.tokens.filter((token) => token.role === 'planner').map((token) => token.delta).join('');
+    expect(plannerText.length).toBeGreaterThan(0);
+    expect(events.events.every((event) => !('token' in event))).toBe(true);
+    expect(events.events.at(-1)).toEqual({ agentRunId: RUN_ID, status: 'approval_required' });
   });
 
   it('não avança quando a execução já não está mais em "queued" ao ser processada', async () => {

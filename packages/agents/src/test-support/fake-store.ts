@@ -189,9 +189,16 @@ export class FakeRepositoryReader implements RepositoryReader {
 }
 
 export class RecordingEventPublisher implements AgentRunEventPublisher {
+  /** Só eventos de status (o que os testes de sequência sempre asseguraram). */
   readonly events: { agentRunId: string; status: AgentRunStatus }[] = [];
+  /** Trechos de texto em streaming, separados para não poluir `events`. */
+  readonly tokens: { agentRunId: string; role: AgentRole; delta: string }[] = [];
 
-  publish(event: { agentRunId: string; status: AgentRunStatus }): void {
+  publish(event: { agentRunId: string; status: AgentRunStatus; token?: { role: AgentRole; delta: string } }): void {
+    if (event.token) {
+      this.tokens.push({ agentRunId: event.agentRunId, ...event.token });
+      return;
+    }
     this.events.push(event);
   }
 }
@@ -220,6 +227,6 @@ export class RecordingTestResultSink implements AgentRunTestResultSink {
   }
 }
 
-export function agentConfig(role: AgentRole, allowedTools: AgentToolName[], isEnabled = true): AgentConfig {
-  return { id: `agent-${role}`, role, isEnabled, allowedTools };
+export function agentConfig(role: AgentRole, allowedTools: AgentToolName[], isEnabled = true, instructions: string | null = null): AgentConfig {
+  return { id: `agent-${role}`, role, isEnabled, allowedTools, instructions };
 }

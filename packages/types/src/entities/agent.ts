@@ -24,6 +24,30 @@ export const agentSchema = z.object({
 });
 export type Agent = z.infer<typeof agentSchema>;
 
+/** Visão de um agente em Configurações → Agentes. */
+export interface AgentView {
+  id: string;
+  role: z.infer<typeof agentRoleSchema>;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  allowedTools: z.infer<typeof agentToolNameSchema>[];
+  isEnabled: boolean;
+}
+
+/** `PATCH /agents/:id`: campos ausentes não mudam; `null` limpa descrição/instruções. */
+export const updateAgentRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(2000).nullable(),
+    instructions: z.string().trim().max(4000).nullable(),
+    allowedTools: z.array(agentToolNameSchema).max(20),
+    isEnabled: z.boolean(),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
+export type UpdateAgentRequest = z.infer<typeof updateAgentRequestSchema>;
+
 const terminalAgentRunStatuses: ReadonlySet<z.infer<typeof agentRunStatusSchema>> = new Set([
   'completed',
   'failed',

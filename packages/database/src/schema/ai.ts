@@ -1,6 +1,6 @@
-import { index, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { aiMessageRoleEnum } from './enums.ts';
-import { organizations } from './organizations.ts';
+import { organizations, users } from './organizations.ts';
 import { agentRuns, agentSteps, toolCalls } from './agents.ts';
 
 export const aiMessages = pgTable('ai_messages', {
@@ -40,4 +40,35 @@ export const aiUsages = pgTable('ai_usages', {
 }, (table) => [
   index('ai_usages_organization_id_idx').on(table.organizationId),
   index('ai_usages_agent_run_id_idx').on(table.agentRunId),
+]);
+
+/** Conjunto de casos do AI Playground, com histórico: cada edição cria uma nova versão imutável. */
+export const playgroundDatasets = pgTable('playground_datasets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index('playground_datasets_organization_id_idx').on(table.organizationId)]);
+
+export const playgroundDatasetVersions = pgTable('playground_dataset_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  datasetId: uuid('dataset_id')
+    .notNull()
+    .references(() => playgroundDatasets.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  items: jsonb('items').notNull().$type<{ id: string; title: string; input: string; expectedKeywords: string[] }[]>(),
+  note: text('note'),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('playground_dataset_versions_organization_id_idx').on(table.organizationId),
+  uniqueIndex('playground_dataset_versions_dataset_version_idx').on(table.datasetId, table.version),
 ]);

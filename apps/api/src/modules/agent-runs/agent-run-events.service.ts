@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import type { AgentRunStatus } from '@forge/types';
+import type { AgentRole, AgentRunStatus } from '@forge/types';
 import { Subject } from 'rxjs';
 
 export interface AgentRunStatusEvent {
   agentRunId: string;
   status: AgentRunStatus;
+  /** Trecho de texto do modelo em geração; os demais consumidores ignoram quando ausente. */
+  token?: { role: AgentRole; delta: string };
 }
 
 /**

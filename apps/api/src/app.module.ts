@@ -14,6 +14,7 @@ import { CodeModule } from './modules/code/code.module.js';
 import { EnvironmentsModule } from './modules/environments/environments.module.js';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
+import { AiProvidersModule } from './modules/ai-providers/ai-providers.module.js';
 import { MembersModule } from './modules/members/members.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PoliciesModule } from './modules/policies/policies.module.js';
@@ -42,6 +43,7 @@ import { UsersModule } from './modules/users/users.module.js';
     NotificationsModule,
     PoliciesModule,
     MembersModule,
+    AiProvidersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

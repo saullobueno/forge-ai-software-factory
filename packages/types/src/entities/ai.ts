@@ -55,12 +55,19 @@ export const aiPlaygroundDatasetItemSchema = z.object({
 });
 export type AIPlaygroundDatasetItem = z.infer<typeof aiPlaygroundDatasetItemSchema>;
 
-export const aiPlaygroundEvaluationRequestSchema = z.object({
-  prompt: z.string().min(1).max(4_000),
-  models: z.array(aiPlaygroundModelIdSchema).min(1).max(3).default(['forge-mock-fast', 'forge-mock-balanced']),
-  dataset: z.array(aiPlaygroundDatasetItemSchema).min(1).max(5),
-  requireStructuredOutput: z.boolean().default(true),
-});
+export const aiPlaygroundEvaluationRequestSchema = z
+  .object({
+    prompt: z.string().min(1).max(4_000),
+    models: z.array(aiPlaygroundModelIdSchema).min(1).max(3).default(['forge-mock-fast', 'forge-mock-balanced']),
+    /** Casos avulsos OU `datasetVersionId` (uma versão salva); exatamente um dos dois. */
+    dataset: z.array(aiPlaygroundDatasetItemSchema).min(1).max(5).optional(),
+    datasetVersionId: idSchema.optional(),
+    requireStructuredOutput: z.boolean().default(true),
+  })
+  .refine((value) => (value.dataset === undefined) !== (value.datasetVersionId === undefined), {
+    message: 'Informe `dataset` ou `datasetVersionId` (exatamente um).',
+    path: ['dataset'],
+  });
 export type AIPlaygroundEvaluationRequest = z.infer<typeof aiPlaygroundEvaluationRequestSchema>;
 
 export interface AIPlaygroundModel {
@@ -99,4 +106,48 @@ export interface AIPlaygroundEvaluationModelResult {
 export interface AIPlaygroundEvaluationResponse {
   results: AIPlaygroundEvaluationModelResult[];
   winner: AIPlaygroundModelId;
+}
+
+
+/** Itens de uma versão de dataset do Playground (até 5 casos, como na avaliação). */
+export const playgroundDatasetItemsSchema = z.array(aiPlaygroundDatasetItemSchema).min(1).max(5);
+
+export const createPlaygroundDatasetRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).nullable().optional(),
+  items: playgroundDatasetItemsSchema,
+});
+export type CreatePlaygroundDatasetRequest = z.infer<typeof createPlaygroundDatasetRequestSchema>;
+
+export const createPlaygroundDatasetVersionRequestSchema = z.object({
+  items: playgroundDatasetItemsSchema,
+  note: z.string().trim().max(300).nullable().optional(),
+});
+export type CreatePlaygroundDatasetVersionRequest = z.infer<typeof createPlaygroundDatasetVersionRequestSchema>;
+
+export interface PlaygroundDatasetVersionSummary {
+  id: string;
+  version: number;
+  note: string | null;
+  itemsCount: number;
+  createdAt: string;
+  createdByName: string | null;
+}
+
+export interface PlaygroundDatasetSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  latestVersion: PlaygroundDatasetVersionSummary;
+  createdByName: string | null;
+  updatedAt: string;
+}
+
+export interface PlaygroundDatasetDetail extends Omit<PlaygroundDatasetSummary, 'latestVersion'> {
+  versions: PlaygroundDatasetVersionSummary[];
+}
+
+export interface PlaygroundDatasetVersionDetail extends PlaygroundDatasetVersionSummary {
+  datasetId: string;
+  items: AIPlaygroundDatasetItem[];
 }

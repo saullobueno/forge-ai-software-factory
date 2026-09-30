@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, schema } from '@forge/database';
+import { and, asc, eq, schema } from '@forge/database';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type AgentRow = typeof schema.agents.$inferSelect;
@@ -35,5 +35,26 @@ export class AgentsRepository {
     return this.database.db.query.agents.findFirst({
       where: and(eq(schema.agents.organizationId, organizationId), eq(schema.agents.isEnabled, true)),
     });
+  }
+
+  async listByOrganization(organizationId: string): Promise<AgentRow[]> {
+    return this.database.db
+      .select()
+      .from(schema.agents)
+      .where(eq(schema.agents.organizationId, organizationId))
+      .orderBy(asc(schema.agents.createdAt), asc(schema.agents.role));
+  }
+
+  async update(
+    id: string,
+    organizationId: string,
+    patch: Partial<Pick<AgentRow, 'name' | 'description' | 'instructions' | 'allowedTools' | 'isEnabled'>>,
+  ): Promise<AgentRow | undefined> {
+    const [row] = await this.database.db
+      .update(schema.agents)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(schema.agents.id, id), eq(schema.agents.organizationId, organizationId)))
+      .returning();
+    return row;
   }
 }

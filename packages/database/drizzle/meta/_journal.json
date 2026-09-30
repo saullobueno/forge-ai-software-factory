@@ -57,6 +57,13 @@
       "when": 1790800664333,
       "tag": "0007_melted_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790803765168,
+      "tag": "0008_young_cammi",
+      "breakpoints": true
     }
   ]
 }

@@ -148,3 +148,31 @@ function parseTimeoutMs(value: string | undefined): number | undefined {
   }
   return parsed;
 }
+
+export interface AvailableAiProvider {
+  name: AiProviderName;
+  model: string | null;
+  isDefault: boolean;
+}
+
+/**
+ * Provedores que o servidor consegue instanciar agora: `mock` sempre; os
+ * reais só com chave E modelo configurados. Usado para o projeto escolher
+ * o provedor sem nunca expor segredos.
+ */
+export function listAvailableAiProviders(env: AiProviderEnv = process.env): AvailableAiProvider[] {
+  const defaultName = describeAiProviderConfig(env).provider;
+  const candidates: AiProviderName[] = ['mock', 'groq', 'gemini', 'anthropic'];
+  const available: AvailableAiProvider[] = [];
+  for (const name of candidates) {
+    const summary = describeAiProviderConfig({ ...env, AI_PROVIDER: name });
+    if (name !== 'mock' && (!summary.apiKeyConfigured || summary.model === null)) continue;
+    available.push({ name, model: summary.model, isDefault: name === defaultName });
+  }
+  return available;
+}
+
+/** Instancia um provedor específico (ignora `AI_PROVIDER`); lança se faltar chave/modelo. */
+export function createAiProviderByName(name: AiProviderName, env: AiProviderEnv = process.env, options: CreateAiProviderOptions = {}): AiProvider {
+  return createAiProvider({ ...env, AI_PROVIDER: name }, options);
+}

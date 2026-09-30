@@ -48,7 +48,20 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
       where: eq(schema.agentRuns.id, agentRunId),
     });
     if (!row) return undefined;
-    return { id: row.id, organizationId: row.organizationId, taskId: row.taskId, status: row.status, objective: row.objective };
+    const [project] = await this.database.db
+      .select({ aiProvider: schema.projects.aiProvider })
+      .from(schema.tasks)
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.tasks.projectId))
+      .where(and(eq(schema.tasks.id, row.taskId), eq(schema.tasks.organizationId, row.organizationId)))
+      .limit(1);
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      taskId: row.taskId,
+      status: row.status,
+      objective: row.objective,
+      aiProvider: project?.aiProvider ?? null,
+    };
   }
 
   async getStatus(agentRunId: string): Promise<AgentRunStatus | undefined> {
@@ -143,7 +156,13 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
       where: and(eq(schema.agents.organizationId, organizationId), eq(schema.agents.role, role)),
     });
     if (!row) return undefined;
-    return { id: row.id, role: row.role, isEnabled: row.isEnabled, allowedTools: row.allowedTools as AgentToolName[] };
+    return {
+      id: row.id,
+      role: row.role,
+      isEnabled: row.isEnabled,
+      allowedTools: row.allowedTools as AgentToolName[],
+      instructions: row.instructions,
+    };
   }
 
   /**

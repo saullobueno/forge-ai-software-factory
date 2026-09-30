@@ -17,6 +17,8 @@ export interface AgentRunContext {
   taskId: string;
   status: AgentRunStatus;
   objective: string;
+  /** Provedor de IA escolhido no projeto (`null`/ausente = padrão do servidor). */
+  aiProvider?: string | null;
 }
 
 export interface TaskContext {
@@ -55,6 +57,8 @@ export interface AgentConfig {
   role: AgentRole;
   isEnabled: boolean;
   allowedTools: readonly AgentToolName[];
+  /** Instruções extras configuradas para o agente (repassadas ao provedor como dado, nunca como política). */
+  instructions?: string | null;
 }
 
 export interface CreateStepInput {
@@ -310,7 +314,8 @@ export interface RepositoryReader {
  * já existente em vez de criar um segundo.
  */
 export interface AgentRunEventPublisher {
-  publish(event: { agentRunId: string; status: AgentRunStatus }): void;
+  /** `token` (opcional): trecho de texto do modelo em geração (streaming), sem mudança de status. */
+  publish(event: { agentRunId: string; status: AgentRunStatus; token?: { role: AgentRole; delta: string } }): void;
 }
 
 /**

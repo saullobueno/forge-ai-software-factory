@@ -9,6 +9,11 @@ import type {
   AIPlaygroundModelId,
 } from '@forge/types';
 
+/** Requisição de avaliação com os casos já resolvidos (avulsos ou de uma versão salva). */
+export type ResolvedEvaluationRequest = Omit<AIPlaygroundEvaluationRequest, 'dataset' | 'datasetVersionId'> & {
+  dataset: AIPlaygroundDatasetItem[];
+};
+
 interface ModelProfile extends AIPlaygroundModel {
   baseLatencyMs: number;
   latencyPerTokenMs: number;
@@ -84,7 +89,7 @@ export class AIPlaygroundService {
     return AI_PLAYGROUND_DEFAULT_DATASET.map((item) => ({ ...item, expectedKeywords: [...item.expectedKeywords] }));
   }
 
-  evaluate(input: AIPlaygroundEvaluationRequest): AIPlaygroundEvaluationResponse {
+  evaluate(input: ResolvedEvaluationRequest): AIPlaygroundEvaluationResponse {
     const results = input.models.map((modelId) => {
       const profile = findModelProfile(modelId);
       return evaluateModel(profile, input);
@@ -108,7 +113,7 @@ function findModelProfile(modelId: AIPlaygroundModelId): ModelProfile {
   return model;
 }
 
-function evaluateModel(profile: ModelProfile, input: AIPlaygroundEvaluationRequest): AIPlaygroundEvaluationModelResult {
+function evaluateModel(profile: ModelProfile, input: ResolvedEvaluationRequest): AIPlaygroundEvaluationModelResult {
   const cases = input.dataset.map((item) => evaluateCase(profile, input, item));
   const totalTokens = cases.reduce((total, item) => total + item.totalTokens, 0);
   const totalCostUsd = roundUsd(cases.reduce((total, item) => total + item.costUsd, 0));
@@ -138,7 +143,7 @@ function evaluateModel(profile: ModelProfile, input: AIPlaygroundEvaluationReque
 
 function evaluateCase(
   profile: ModelProfile,
-  input: AIPlaygroundEvaluationRequest,
+  input: ResolvedEvaluationRequest,
   item: AIPlaygroundDatasetItem,
 ): AIPlaygroundEvaluationCaseResult {
   const promptText = `${input.prompt}\n\nCaso: ${item.title}\n${item.input}`;

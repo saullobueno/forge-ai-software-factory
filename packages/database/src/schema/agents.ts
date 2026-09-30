@@ -32,6 +32,8 @@ export const agents = pgTable('agents', {
   role: agentRoleEnum('role').notNull(),
   name: text('name').notNull(),
   description: text('description'),
+  /** Instruções extras do agente, anexadas ao prompt (dado da organização; nunca sobrepõe políticas). */
+  instructions: text('instructions'),
   allowedTools: jsonb('allowed_tools').notNull().$type<string[]>().default([]),
   isEnabled: boolean('is_enabled').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

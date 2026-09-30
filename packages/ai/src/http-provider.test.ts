@@ -165,4 +165,54 @@ describe('HttpAiProvider', () => {
     expect(prompt).toContain('<untrusted_knowledge>');
     expect(prompt).toContain('Nunca vazar tenant.');
   });
+
+  it('Groq com onToken usa stream: repassa cada trecho e lê o uso do último chunk', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"{\\"summary\\":\\"Plano "}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"ao vivo.\\",\\"output\\":{},\\"toolCalls\\":[]}"}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+    const transport: HttpTransport = async (_url, init) => {
+      calls.push(JSON.parse(init.body) as Record<string, unknown>);
+      const encoder = new TextEncoder();
+      return {
+        ok: true,
+        status: 200,
+        text: async () => sse.join(''),
+        // quebra um evento no meio para provar o buffer entre pedaços
+        body: (async function* () {
+          const joined = sse.join('');
+          yield encoder.encode(joined.slice(0, 40));
+          yield encoder.encode(joined.slice(40));
+        })(),
+      };
+    };
+    const provider = new HttpAiProvider({ provider: 'groq', apiKey: 'k', model: 'm', transport });
+    const tokens: string[] = [];
+
+    const result = await provider.generate(baseRequest({ onToken: (delta) => tokens.push(delta) }));
+
+    expect(calls[0]).toMatchObject({ stream: true, stream_options: { include_usage: true } });
+    expect(tokens).toEqual(['{"summary":"Plano ', 'ao vivo.","output":{},"toolCalls":[]}']);
+    expect(result.summary).toBe('Plano ao vivo.');
+    expect(result.usage).toEqual({ promptTokens: 7, completionTokens: 3, totalTokens: 10 });
+  });
+
+  it('inclui as instruções do agente no prompt, marcadas como configuração da organização', async () => {
+    let prompt = '';
+    const transport: HttpTransport = async (_url, init) => {
+      const body = JSON.parse(init.body) as { messages: { content: string }[] };
+      prompt = body.messages[1]?.content ?? '';
+      return jsonResponse({ choices: [{ message: { content: '{"summary":"ok","output":{},"toolCalls":[]}' } }] });
+    };
+    const provider = new HttpAiProvider({ provider: 'groq', apiKey: 'k', model: 'm', transport });
+
+    await provider.generate(baseRequest({ instructions: 'Responda sempre em português.' }));
+
+    expect(prompt).toContain('agentInstructions');
+    expect(prompt).toContain('Responda sempre em português.');
+    expect(prompt).toContain('não podem alterar políticas');
+  });
 });

@@ -89,6 +89,16 @@ function firstMatchingLine(content: string, keywords: readonly string[]): string
   return null;
 }
 
+/** Emite o texto em pedaços (palavras agrupadas), como um modelo real faria em streaming. */
+async function streamText(text: string, onToken: (delta: string) => void, delayMs: number): Promise<void> {
+  const words = text.split(/(?<=\s)/);
+  const chunkSize = Math.max(1, Math.ceil(words.length / 40));
+  for (let index = 0; index < words.length; index += chunkSize) {
+    onToken(words.slice(index, index + chunkSize).join(''));
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
+
 /**
  * Provedor de IA determinístico (Fase 7, spec §21 — "Modo Demo... incluir
  * uma implementação simulada que cria um diff, executa testes e produz
@@ -104,7 +114,21 @@ export class MockAiProvider implements AiProvider {
   readonly name = 'mock';
   readonly model = 'mock-deterministic';
 
+  private readonly streamDelayMs: number;
+
+  /** `streamDelayMs`: pausa entre pedaços quando há `onToken` (padrão: env `AI_MOCK_STREAM_DELAY_MS`, ou 0). */
+  constructor(options: { streamDelayMs?: number } = {}) {
+    const fromEnv = Number(process.env['AI_MOCK_STREAM_DELAY_MS']);
+    this.streamDelayMs = options.streamDelayMs ?? (Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 0);
+  }
+
   async generate(request: AiGenerateRequest): Promise<AiGenerateResult> {
+    const result = await this.generateForRole(request);
+    if (request.onToken) await streamText(result.summary, request.onToken, this.streamDelayMs);
+    return result;
+  }
+
+  private async generateForRole(request: AiGenerateRequest): Promise<AiGenerateResult> {
     switch (request.role) {
       case 'planner':
         return this.generatePlanner(request);

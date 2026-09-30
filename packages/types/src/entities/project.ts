@@ -39,6 +39,9 @@ export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
  * Corpo de `PATCH /projects/:id`. Campos ausentes não mudam; `null` limpa um
  * campo opcional. O `slug` nunca muda (é estável para URLs/referências).
  */
+export const aiProviderNameSchema = z.enum(['mock', 'groq', 'gemini', 'anthropic']);
+export type AiProviderName = z.infer<typeof aiProviderNameSchema>;
+
 export const updateProjectRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -48,6 +51,8 @@ export const updateProjectRequestSchema = z
     packageManager: z.string().trim().min(1).max(50).nullable(),
     architectureNotes: z.string().trim().max(10_000).nullable(),
     codeRules: z.string().trim().max(10_000).nullable(),
+    /** `null` volta ao provedor padrão do servidor. */
+    aiProvider: aiProviderNameSchema.nullable(),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
