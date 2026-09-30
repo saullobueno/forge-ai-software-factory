@@ -1,10 +1,11 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { nextTaskStatuses, transitionTaskStatus } from '@forge/domain';
 import type { CreateTaskRequest, ListTasksQuery, MemberRole, TaskStatus, UpdateTaskRequest } from '@forge/types';
 import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
+import { UsersRepository } from '../users/users.repository.js';
 import type { Page } from '../projects/projects.repository.js';
 import { TasksRepository, type TaskListRow, type TaskRow, type TaskWithDependencies } from './tasks.repository.js';
 
@@ -19,6 +20,7 @@ export class TasksService {
     private readonly tasksRepository: TasksRepository,
     private readonly agentRunsService: AgentRunsService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   /**
@@ -45,6 +47,7 @@ export class TasksService {
     actorUserId: string,
     input: CreateTaskRequest,
   ): Promise<TaskRow> {
+    await this.assertAssigneeInOrganization(input.assigneeId, organizationId);
     const task = await this.tasksRepository.create({
       organizationId,
       projectId,
@@ -52,6 +55,8 @@ export class TasksService {
       description: input.description ?? null,
       acceptanceCriteria: input.acceptanceCriteria ?? null,
       priority: input.priority,
+      assigneeId: input.assigneeId ?? null,
+      labels: input.labels,
     });
 
     await this.auditLogsService.record({
@@ -114,6 +119,13 @@ export class TasksService {
     return updated;
   }
 
+  private async assertAssigneeInOrganization(assigneeId: string | null | undefined, organizationId: string): Promise<void> {
+    if (assigneeId === null || assigneeId === undefined) return;
+    if (!(await this.usersRepository.existsInOrganization(assigneeId, organizationId))) {
+      throw new BadRequestException('Responsável inválido para esta organização.');
+    }
+  }
+
   /** Tarefas do projeto de demonstração protegido não podem ser editadas nem excluídas. */
   private async assertProjectNotProtected(taskId: string, organizationId: string): Promise<void> {
     const slug = await this.tasksRepository.findProjectSlug(taskId, organizationId);
@@ -130,11 +142,14 @@ export class TasksService {
     input: UpdateTaskRequest,
   ): Promise<TaskRow | undefined> {
     await this.assertProjectNotProtected(taskId, organizationId);
+    await this.assertAssigneeInOrganization(input.assigneeId, organizationId);
     const updated = await this.tasksRepository.update(taskId, organizationId, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.acceptanceCriteria !== undefined ? { acceptanceCriteria: input.acceptanceCriteria } : {}),
       ...(input.priority !== undefined ? { priority: input.priority } : {}),
+      ...(input.assigneeId !== undefined ? { assigneeId: input.assigneeId } : {}),
+      ...(input.labels !== undefined ? { labels: input.labels } : {}),
     });
     if (!updated) return undefined;
 

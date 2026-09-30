@@ -35,7 +35,7 @@ beforeAll(async () => {
     .send({ email: 'tech-lead@acme-platform.example', password: DEMO_PASSWORD })
     .expect(200);
   techLeadToken = login.body.token as string;
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

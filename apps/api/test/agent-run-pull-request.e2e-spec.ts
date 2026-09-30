@@ -161,7 +161,7 @@ beforeAll(async () => {
     .send({ email: techLead.email, password })
     .expect(200);
   techLeadToken = login.body.token as string;
-}, 60_000);
+});
 
 afterAll(async () => {
   for (const repositoryId of createdRepositoryIds) {

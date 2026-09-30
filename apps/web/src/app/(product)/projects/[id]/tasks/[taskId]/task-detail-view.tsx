@@ -12,6 +12,7 @@ import { apiFetch, ApiError } from '@/lib/api-client';
 import { AGENT_RUN_STATUS_LABELS, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/labels';
 import { agentRunStatusTone, taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
 import { canManageTask } from '@/lib/project-permissions';
+import { useUsers } from '@/lib/use-users';
 import type { ApiAgentRun, ApiCurrentUser, ApiProject, ApiTask } from '@/lib/types';
 
 function formatDateTime(iso: string): string {
@@ -22,6 +23,7 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
   const queryClient = useQueryClient();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const { nameById } = useUsers();
 
   const currentUserQuery = useQuery({
     queryKey: ['auth', 'me'],
@@ -86,6 +88,12 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
               <Badge key={label}>{label}</Badge>
             ))}
           </div>
+          <p className="mt-2 text-sm text-muted-foreground" data-testid="task-assignee">
+            Responsável:{' '}
+            <span className="text-foreground">
+              {task.assigneeId ? (nameById.get(task.assigneeId) ?? '…') : 'ninguém'}
+            </span>
+          </p>
         </div>
         {canManage && (
           <div className="flex flex-wrap items-start gap-2">

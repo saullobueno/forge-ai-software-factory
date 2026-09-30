@@ -57,7 +57,7 @@ beforeAll(async () => {
   developerAToken = await login('dev@a-projects-create.example');
   qaAToken = await login('qa@a-projects-create.example');
   techLeadBToken = await login('lead@b-projects-create.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

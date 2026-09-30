@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TaskPriority } from '@forge/types';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { TASK_PRIORITY_LABELS } from '@/lib/labels';
+import { splitLabels, useUsers } from '@/lib/use-users';
 import type { ApiTask } from '@/lib/types';
 
 const INPUT_CLASS = 'w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary';
@@ -16,6 +17,9 @@ export function EditTaskForm({ task, onDone }: { task: ApiTask; onDone: () => vo
   const [description, setDescription] = useState(task.description ?? '');
   const [acceptanceCriteria, setAcceptanceCriteria] = useState(task.acceptanceCriteria ?? '');
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
+  const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? '');
+  const [labels, setLabels] = useState(task.labels.join(', '));
+  const { users } = useUsers();
 
   const updateTask = useMutation({
     mutationFn: () =>
@@ -24,6 +28,8 @@ export function EditTaskForm({ task, onDone }: { task: ApiTask; onDone: () => vo
         body: JSON.stringify({
           title,
           priority,
+          assigneeId: assigneeId || null,
+          labels: splitLabels(labels),
           description: description.trim() ? description : null,
           acceptanceCriteria: acceptanceCriteria.trim() ? acceptanceCriteria : null,
         }),
@@ -105,6 +111,39 @@ export function EditTaskForm({ task, onDone }: { task: ApiTask; onDone: () => vo
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="edit-task-assignee" className="text-sm font-medium">
+            Responsável
+          </label>
+          <select
+            id="edit-task-assignee"
+            value={assigneeId}
+            onChange={(event) => setAssigneeId(event.target.value)}
+            className={INPUT_CLASS}
+          >
+            <option value="">Sem responsável</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="edit-task-labels" className="text-sm font-medium">
+            Etiquetas
+          </label>
+          <input
+            id="edit-task-labels"
+            placeholder="backend, urgente"
+            value={labels}
+            onChange={(event) => setLabels(event.target.value)}
+            className={INPUT_CLASS}
+          />
+        </div>
       </div>
 
       {updateTask.isError && (

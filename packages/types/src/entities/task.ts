@@ -18,11 +18,15 @@ export const taskSchema = z.object({
 export type Task = z.infer<typeof taskSchema>;
 
 /** Corpo de `POST /projects/:id/tasks`. */
+const taskLabelsSchema = z.array(z.string().trim().min(1).max(50)).max(20);
+
 export const createTaskRequestSchema = z.object({
   title: z.string().trim().min(1).max(300),
   description: z.string().trim().max(10_000).optional(),
   acceptanceCriteria: z.string().trim().max(10_000).optional(),
   priority: taskPrioritySchema.default('medium'),
+  assigneeId: idSchema.nullable().optional(),
+  labels: taskLabelsSchema.default([]),
 });
 export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
 
@@ -36,6 +40,8 @@ export const updateTaskRequestSchema = z
     description: z.string().trim().max(10_000).nullable(),
     acceptanceCriteria: z.string().trim().max(10_000).nullable(),
     priority: taskPrioritySchema,
+    assigneeId: idSchema.nullable(),
+    labels: taskLabelsSchema,
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
@@ -61,6 +67,8 @@ export const listTasksQuerySchema = z.object({
   projectId: idSchema.optional(),
   status: taskStatusSchema.optional(),
   priority: taskPrioritySchema.optional(),
+  /** id do responsável, ou "none" para tarefas sem responsável */
+  assigneeId: z.union([idSchema, z.literal('none')]).optional(),
   q: z.string().trim().max(100).optional(),
 });
 export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;

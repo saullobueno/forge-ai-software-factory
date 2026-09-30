@@ -9,6 +9,7 @@ import { Breadcrumb } from '@/components/breadcrumb';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/labels';
 import { canManageTask } from '@/lib/project-permissions';
+import { useUsers } from '@/lib/use-users';
 import { taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
 import type { ApiCurrentUser, ApiProject, ApiTaskListItem, Paginated } from '@/lib/types';
 
@@ -20,6 +21,7 @@ type View = 'list' | 'kanban';
 
 interface Filters {
   projectId: string;
+  assigneeId: string;
   status: string;
   priority: string;
   q: string;
@@ -28,6 +30,7 @@ interface Filters {
 function queryString(filters: Filters): string {
   const params = new URLSearchParams({ limit: '200' });
   if (filters.projectId) params.set('projectId', filters.projectId);
+  if (filters.assigneeId) params.set('assigneeId', filters.assigneeId);
   if (filters.status) params.set('status', filters.status);
   if (filters.priority) params.set('priority', filters.priority);
   if (filters.q) params.set('q', filters.q);
@@ -36,8 +39,9 @@ function queryString(filters: Filters): string {
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
+  const { users, nameById } = useUsers();
   const [view, setView] = useState<View>('kanban');
-  const [filters, setFilters] = useState<Filters>({ projectId: '', status: '', priority: '', q: '' });
+  const [filters, setFilters] = useState<Filters>({ projectId: '', assigneeId: '', status: '', priority: '', q: '' });
   const [searchInput, setSearchInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -160,6 +164,25 @@ export default function TasksPage() {
           </select>
         </div>
         <div className="flex flex-col gap-1">
+          <label htmlFor="filter-assignee" className="text-xs font-medium text-muted-foreground">
+            Responsável
+          </label>
+          <select
+            id="filter-assignee"
+            value={filters.assigneeId}
+            onChange={(event) => setFilters((current) => ({ ...current, assigneeId: event.target.value }))}
+            className={FIELD_CLASS}
+          >
+            <option value="">Todos</option>
+            <option value="none">Sem responsável</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
           <label htmlFor="filter-priority" className="text-xs font-medium text-muted-foreground">
             Prioridade
           </label>
@@ -226,6 +249,7 @@ export default function TasksPage() {
                 <th className="px-4 py-2 font-medium">Projeto</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Prioridade</th>
+                <th className="px-4 py-2 font-medium">Responsável</th>
                 <th className="px-4 py-2 font-medium">Atualizada em</th>
               </tr>
             </thead>
@@ -247,6 +271,9 @@ export default function TasksPage() {
                   </td>
                   <td className="px-4 py-2">
                     <Badge tone={taskPriorityTone(task.priority)}>{TASK_PRIORITY_LABELS[task.priority]}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-muted-foreground">
+                    {task.assigneeId ? (nameById.get(task.assigneeId) ?? '…') : '—'}
                   </td>
                   <td className="px-4 py-2 text-muted-foreground">{new Date(task.updatedAt).toLocaleString('pt-BR')}</td>
                 </tr>
@@ -290,6 +317,18 @@ export default function TasksPage() {
                       {task.title}
                     </Link>
                     <span className="text-xs text-muted-foreground">{task.projectName}</span>
+                    {task.assigneeId && (
+                      <span className="text-xs text-muted-foreground">
+                        Resp.: <span className="text-foreground">{nameById.get(task.assigneeId) ?? '…'}</span>
+                      </span>
+                    )}
+                    {task.labels.length > 0 && (
+                      <span className="flex flex-wrap gap-1">
+                        {task.labels.map((label) => (
+                          <Badge key={label}>{label}</Badge>
+                        ))}
+                      </span>
+                    )}
                     <span className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={taskPriorityTone(task.priority)}>{TASK_PRIORITY_LABELS[task.priority]}</Badge>
                       {task.projectIsProtected && <Badge>Demo</Badge>}

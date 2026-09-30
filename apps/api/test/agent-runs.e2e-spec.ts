@@ -513,7 +513,7 @@ beforeAll(async () => {
   productManagerAToken = await login('pm@org-a-agent-runs-e2e-test.example');
   techLeadAToken = await login('tech-lead@org-a-agent-runs-e2e-test.example');
   developerBToken = await login('dev@org-b-agent-runs-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await rm(join(ARTIFACTS_ROOT, 'agent-runs-e2e-test'), { recursive: true, force: true });

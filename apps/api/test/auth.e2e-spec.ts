@@ -52,7 +52,7 @@ beforeAll(async () => {
     .returning();
   if (!userWithoutPassword) throw new Error('user sem senha não inserido');
   userWithoutPasswordId = userWithoutPassword.id;
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

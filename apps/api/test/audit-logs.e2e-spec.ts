@@ -75,7 +75,7 @@ beforeAll(async () => {
 
   techLeadToken = await login('tech-lead@org-a-audit-e2e-test.example');
   developerToken = await login('dev@org-a-audit-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

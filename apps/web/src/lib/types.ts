@@ -189,6 +189,15 @@ export interface ApiAgentRunListItem {
   createdAt: string;
 }
 
+/** Membro da organização (`GET /users`). */
+export interface ApiUser {
+  id: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+  avatarUrl: string | null;
+}
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;

@@ -64,7 +64,7 @@ beforeAll(async () => {
   devToken = await login('dev@a-global.example');
   qaToken = await login('qa@a-global.example');
   leadBToken = await login('lead@b-global.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

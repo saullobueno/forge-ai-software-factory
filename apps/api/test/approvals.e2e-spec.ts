@@ -183,7 +183,7 @@ beforeAll(async () => {
   techLeadAToken = await login('tech-lead@org-a-approvals-e2e-test.example');
   adminAToken = await login('admin@org-a-approvals-e2e-test.example');
   techLeadBToken = await login('tech-lead@org-b-approvals-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

@@ -15,6 +15,7 @@ import { EnvironmentsModule } from './modules/environments/environments.module.j
 import { KnowledgeModule } from './modules/knowledge/knowledge.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { TasksModule } from './modules/tasks/tasks.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { TasksModule } from './modules/tasks/tasks.module.js';
     AuditLogsModule,
     EnvironmentsModule,
     KnowledgeModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

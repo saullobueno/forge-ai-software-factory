@@ -93,7 +93,7 @@ beforeAll(async () => {
 
   techLeadAToken = await login('tech-lead@org-a-knowledge-reindex-e2e-test.example');
   developerAToken = await login('dev@org-a-knowledge-reindex-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

@@ -81,7 +81,7 @@ beforeAll(async () => {
     .send({ email: developer.email, password })
     .expect(200);
   developerToken = login.body.token as string;
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

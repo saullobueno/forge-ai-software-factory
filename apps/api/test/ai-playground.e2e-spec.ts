@@ -53,7 +53,7 @@ beforeAll(async () => {
 
   techLeadToken = await login('tech-lead@org-ai-playground-e2e-test.example');
   developerToken = await login('dev@org-ai-playground-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

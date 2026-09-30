@@ -139,7 +139,7 @@ beforeAll(async () => {
   developerAToken = await login('dev@org-a-code-e2e-test.example');
   qaEngineerAToken = await login('qa@org-a-code-e2e-test.example');
   developerBToken = await login('dev@org-b-code-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

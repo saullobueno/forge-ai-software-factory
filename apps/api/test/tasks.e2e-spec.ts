@@ -157,7 +157,7 @@ beforeAll(async () => {
   qaEngineerAToken = await login('qa@org-a-tasks-e2e-test.example');
   productManagerAToken = await login('pm@org-a-tasks-e2e-test.example');
   developerBToken = await login('dev@org-b-tasks-e2e-test.example');
-}, 60_000);
+});
 
 afterAll(async () => {
   await testApp.cleanup();

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, inArray, lt, or, schema } from '@forge/database';
+import { and, asc, desc, eq, ilike, inArray, isNull, lt, or, schema } from '@forge/database';
 import type { ListTasksQuery, TaskStatus } from '@forge/types';
 import { decodeCursor, encodeCursor } from '../../infrastructure/pagination/cursor.js';
 import { ACTIVE_AGENT_RUN_STATUSES, type Page } from '../projects/projects.repository.js';
@@ -68,6 +68,11 @@ export class TasksRepository {
           query.projectId ? eq(schema.tasks.projectId, query.projectId) : undefined,
           query.status ? eq(schema.tasks.status, query.status) : undefined,
           query.priority ? eq(schema.tasks.priority, query.priority) : undefined,
+          query.assigneeId === 'none'
+            ? isNull(schema.tasks.assigneeId)
+            : query.assigneeId
+              ? eq(schema.tasks.assigneeId, query.assigneeId)
+              : undefined,
           escaped ? ilike(schema.tasks.title, `%${escaped}%`) : undefined,
           cursor
             ? or(
@@ -105,6 +110,8 @@ export class TasksRepository {
     description: string | null;
     acceptanceCriteria: string | null;
     priority: TaskRow['priority'];
+    assigneeId: string | null;
+    labels: string[];
   }): Promise<TaskRow> {
     const [task] = await this.database.db
       .insert(schema.tasks)
@@ -117,7 +124,7 @@ export class TasksRepository {
   async update(
     taskId: string,
     organizationId: string,
-    patch: Partial<Pick<TaskRow, 'title' | 'description' | 'acceptanceCriteria' | 'priority'>>,
+    patch: Partial<Pick<TaskRow, 'title' | 'description' | 'acceptanceCriteria' | 'priority' | 'assigneeId' | 'labels'>>,
   ): Promise<TaskRow | undefined> {
     const [row] = await this.database.db
       .update(schema.tasks)
