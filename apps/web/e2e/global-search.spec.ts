@@ -13,6 +13,9 @@ test('busca global: Ctrl+K, resultados agrupados, teclado e navegação', async 
   await login(page);
   await expect(page.getByRole('heading', { name: 'Projetos', level: 1 })).toBeVisible();
 
+  // O ponteiro fica onde o login clicou; a paleta destaca a opção sob o mouse, então o
+  // teste de teclado o tira do caminho para o Enter abrir o primeiro resultado.
+  await page.mouse.move(2, 2);
   await page.keyboard.press('Control+k');
   const palette = page.getByTestId('command-palette');
   await expect(palette).toBeVisible();

@@ -45,11 +45,11 @@ test('Kanban: mover por seletor e por arrastar, com transição inválida bloque
   await expect(page.getByTestId('kanban-feedback')).toContainText('Planejamento');
 
   // mover arrastando (planning -> in_progress é permitido)
-  await page.locator('article', { hasText: taskTitle }).dragTo(page.getByTestId('column-in_progress'));
+  await page.locator('article', { hasText: taskTitle }).dragTo(page.getByTestId('column-in_progress'), { targetPosition: { x: 60, y: 24 } });
   await expect(page.getByTestId('column-in_progress')).toContainText(taskTitle);
 
   // in_progress -> done não é permitido pela máquina de estados
-  await page.locator('article', { hasText: taskTitle }).dragTo(page.getByTestId('column-done'));
+  await page.locator('article', { hasText: taskTitle }).dragTo(page.getByTestId('column-done'), { targetPosition: { x: 60, y: 24 } });
   await expect(page.getByTestId('kanban-feedback')).toContainText('Não dá para ir');
   await expect(page.getByTestId('column-in_progress')).toContainText(taskTitle);
 });
