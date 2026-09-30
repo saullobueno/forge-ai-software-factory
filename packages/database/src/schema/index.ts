@@ -15,5 +15,6 @@ export * from './approvals.ts';
 export * from './secrets.ts';
 export * from './notifications.ts';
 export * from './invitations.ts';
+export * from './sessions.ts';
 export * from './audit.ts';
 export * from './relations.ts';

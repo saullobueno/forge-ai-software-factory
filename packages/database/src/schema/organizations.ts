@@ -1,4 +1,4 @@
-import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { memberRoleEnum } from './enums.ts';
 
 export const organizations = pgTable('organizations', {
@@ -32,6 +32,17 @@ export const users = pgTable('users', {
    * em `@forge/types` não declara esse campo.
    */
   passwordHash: text('password_hash'),
+  /**
+   * 2FA TOTP: segredo cifrado (AES-256-GCM, `iv:tag:dados` em base64url).
+   * Com `totpEnabledAt` nulo o segredo está apenas PENDENTE (setup iniciado,
+   * ainda não confirmado com um código) e não exige 2FA no login.
+   */
+  totpSecretEnc: text('totp_secret_enc'),
+  totpEnabledAt: timestamp('totp_enabled_at', { withTimezone: true }),
+  /** Último passo TOTP aceito — um mesmo código nunca vale duas vezes. */
+  totpLastCounter: bigint('totp_last_counter', { mode: 'number' }),
+  /** Hashes SHA-256 dos códigos de recuperação ainda não usados. */
+  recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().$type<string[]>().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

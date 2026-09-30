@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { Logo } from '@/components/logo';
+import { NavIcon, type NavIconName } from '@/components/nav-icons';
 import { UserMenu } from '@/components/user-menu';
 import { apiFetch } from '@/lib/api-client';
 import { canApproveAgentRuns } from '@/lib/agent-run-approval-permission';
@@ -16,14 +17,14 @@ import type { ApiCurrentUser, ApiPendingApproval } from '@/lib/types';
  * nesta fase; o resto aparece esmaecido/não clicável para dar contexto de
  * para onde o produto vai.
  */
-const NAV_ITEMS: { label: string; href: string | null }[] = [
-  { label: 'Projetos', href: '/projects' },
-  { label: 'Tarefas', href: '/tasks' },
-  { label: 'Execuções de IA', href: '/agent-runs' },
-  { label: 'Playground IA', href: '/ai-playground' },
-  { label: 'Uso IA', href: '/ai-usage' },
-  { label: 'Auditoria', href: '/audit-logs' },
-  { label: 'Configurações', href: null },
+const NAV_ITEMS: { label: string; href: string | null; icon: NavIconName }[] = [
+  { label: 'Projetos', icon: 'projects', href: '/projects' },
+  { label: 'Tarefas', icon: 'tasks', href: '/tasks' },
+  { label: 'Execuções de IA', icon: 'runs', href: '/agent-runs' },
+  { label: 'Playground IA', icon: 'playground', href: '/ai-playground' },
+  { label: 'Uso IA', icon: 'usage', href: '/ai-usage' },
+  { label: 'Auditoria', icon: 'audit', href: '/audit-logs' },
+  { label: 'Configurações', icon: 'settings', href: null },
 ];
 
 /**
@@ -69,7 +70,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const pendingApprovalsCount = pendingApprovalsQuery.data?.length ?? 0;
 
   const navItems = canSeeApprovals
-    ? [...NAV_ITEMS.slice(0, 1), { label: 'Aprovações', href: '/approvals' }, ...NAV_ITEMS.slice(1)]
+    ? [...NAV_ITEMS.slice(0, 1), { label: 'Aprovações', icon: 'approvals' as const, href: '/approvals' }, ...NAV_ITEMS.slice(1)]
     : NAV_ITEMS;
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
   }, [mobileNavOpen]);
 
   return (
-    <div className="flex min-h-screen flex-1 bg-background text-foreground">
+    <div className="flex min-h-screen flex-1 flex-col bg-background text-foreground">
       <a
         href="#conteudo"
         className="sr-only fixed left-3 top-3 z-50 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only"
@@ -97,55 +98,8 @@ export function ProductShell({ children }: { children: ReactNode }) {
         Ir para conteúdo
       </a>
 
-      {mobileNavOpen && (
-        <div
-          aria-hidden
-          onClick={() => setMobileNavOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
-        />
-      )}
-
-      <aside
-        id="navegacao-mobile"
-        className={`${mobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex w-64' : 'hidden'} flex-col border-r border-border bg-background px-4 py-4 md:static md:z-auto md:flex md:w-56 md:shrink-0`}
-      >
-        <span className="px-2 font-mono text-sm font-semibold tracking-tight">forge</span>
-        <nav aria-label="navegação principal" className="mt-6 flex flex-col gap-1">
-          {navItems.map((item, index) =>
-            item.href ? (
-              <Link
-                key={item.label}
-                ref={index === 0 ? firstNavLinkRef : undefined}
-                href={item.href}
-                onClick={() => setMobileNavOpen(false)}
-                className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                {item.label}
-                {item.label === 'Aprovações' && pendingApprovalsCount > 0 && (
-                  <span
-                    aria-label={`${pendingApprovalsCount} aprovações pendentes`}
-                    className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground"
-                  >
-                    {pendingApprovalsCount}
-                  </span>
-                )}
-              </Link>
-            ) : (
-              <span
-                key={item.label}
-                aria-disabled
-                className="cursor-default rounded-md px-2 py-1.5 text-sm text-muted-foreground/60"
-                title="Ainda não implementado"
-              >
-                {item.label}
-              </span>
-            ),
-          )}
-        </nav>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3 md:justify-end md:px-6">
+      <header className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-3 md:px-6">
+        <div className="flex items-center gap-3">
           <button
             ref={toggleButtonRef}
             type="button"
@@ -167,14 +121,66 @@ export function ProductShell({ children }: { children: ReactNode }) {
               />
             </span>
           </button>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <UserMenu user={meQuery.data} />
-          </div>
-        </header>
-        <main id="conteudo" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none md:px-6">
-          {children}
-        </main>
+          <Link href="/projects" aria-label="forge — início">
+            <Logo />
+          </Link>
+        </div>
+        <UserMenu user={meQuery.data} />
+      </header>
+      <div className="flex min-h-0 flex-1">
+        {mobileNavOpen && (
+          <div
+            aria-hidden
+            onClick={() => setMobileNavOpen(false)}
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          />
+        )}
+
+        <aside
+          id="navegacao-mobile"
+          className={`${mobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex w-64 pt-16' : 'hidden'} flex-col border-r border-border bg-background px-4 py-4 md:static md:z-auto md:flex md:w-56 md:shrink-0 md:pt-4`}
+        >
+          <nav aria-label="navegação principal" className="flex flex-col gap-1">
+            {navItems.map((item, index) =>
+              item.href ? (
+                <Link
+                  key={item.label}
+                  ref={index === 0 ? firstNavLinkRef : undefined}
+                  href={item.href}
+                  onClick={() => setMobileNavOpen(false)}
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <NavIcon name={item.icon} />
+                  <span className="flex-1">{item.label}</span>
+                  {item.label === 'Aprovações' && pendingApprovalsCount > 0 && (
+                    <span
+                      aria-label={`${pendingApprovalsCount} aprovações pendentes`}
+                      className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground"
+                    >
+                      {pendingApprovalsCount}
+                    </span>
+                  )}
+                </Link>
+              ) : (
+                <span
+                  key={item.label}
+                  aria-disabled
+                  className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/60"
+                  title="Ainda não implementado"
+                >
+                  <NavIcon name={item.icon} />
+                  {item.label}
+                </span>
+              ),
+            )}
+          </nav>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main id="conteudo" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none md:px-6">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

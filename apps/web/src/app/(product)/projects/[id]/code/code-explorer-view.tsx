@@ -26,7 +26,7 @@ import { FileTree } from './file-tree';
 // (spec §10) — não existe (e não deveria existir aqui) nenhum caminho de
 // gravação; isso é Fase 7/8, quando agentes aplicam patches de verdade via
 // runner.
-// Fundo do editor igual ao `--background` do tema escuro (#27272A), em vez do
+// Fundo do editor igual ao `--background` do tema escuro (#2E2E2E), em vez do
 // #1e1e1e padrão do `vs-dark`.
 const defineForgeTheme: BeforeMount = (monaco) => {
   monaco.editor.defineTheme('forge-dark', {
@@ -34,10 +34,10 @@ const defineForgeTheme: BeforeMount = (monaco) => {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#27272a',
-      'editorGutter.background': '#27272a',
-      'editor.lineHighlightBackground': '#38383b',
-      'editorLineNumber.foreground': '#8b8b93',
+      'editor.background': '#2e2e2e',
+      'editorGutter.background': '#2e2e2e',
+      'editor.lineHighlightBackground': '#3f3f3f',
+      'editorLineNumber.foreground': '#929292',
     },
   });
 };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ThemeMenuItem } from '@/components/theme-toggle';
 import { apiFetch } from '@/lib/api-client';
 import type { ApiCurrentUser } from '@/lib/types';
 
@@ -107,6 +108,7 @@ export function UserMenu({ user }: { user: ApiCurrentUser | undefined }) {
             </p>
           </div>
           <div role="separator" className="my-1 h-px bg-border" />
+          <ThemeMenuItem />
           <button
             type="button"
             role="menuitem"

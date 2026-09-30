@@ -46,3 +46,26 @@ export function ThemeToggle() {
     </button>
   );
 }
+
+/** Versão para dentro de menus: item de texto com o mesmo comportamento do `ThemeToggle`. */
+export function ThemeMenuItem() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const mounted = useHasMounted();
+
+  if (!mounted) return null;
+
+  const isDark = resolvedTheme === 'dark';
+
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      data-testid="theme-menu-item"
+      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+    >
+      <span aria-hidden>{isDark ? '☀️' : '🌙'}</span>
+      {isDark ? 'Tema claro' : 'Tema escuro'}
+    </button>
+  );
+}

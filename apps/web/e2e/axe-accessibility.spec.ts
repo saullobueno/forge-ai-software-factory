@@ -86,7 +86,7 @@ test.describe('auditoria automatizada de acessibilidade', () => {
     await expectNoAxeViolations(page);
   });
 
-  test('não encontra violações axe (contraste) no tema escuro derivado de #27272A', async ({ page }) => {
+  test('não encontra violações axe (contraste) no tema escuro derivado de #2E2E2E', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/login');
     await expect(page.locator('html')).toHaveClass(/dark/);

@@ -4,3 +4,4 @@ export * from './tool-policy.ts';
 export * from './password.ts';
 export * from './permissions.ts';
 export * from './authorize-tool-call.ts';
+export * from './totp.ts';
