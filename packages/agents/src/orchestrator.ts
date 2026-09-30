@@ -106,6 +106,7 @@ export class AgentRunOrchestrator {
 
       const { root, repositoryFiles } = await this.loadRepository(repository, this.deps.repositoryReader);
 
+      const policyOverrides = (await store.getToolPolicyOverrides?.(run.organizationId)) ?? {};
       const priorSteps: AiPriorStepContext[] = [];
       let hasPendingApproval = false;
       let implementerPatch: SimulatedPatch | null = null;
@@ -225,6 +226,7 @@ export class AgentRunOrchestrator {
               resourceOrganizationId: run.organizationId,
               toolName: proposal.toolName,
               args: proposal.arguments,
+              policyOverrides,
             });
 
             if (authorization.decision === 'deny') {

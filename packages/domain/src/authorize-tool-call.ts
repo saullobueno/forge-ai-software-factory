@@ -1,6 +1,6 @@
 import type { AgentToolName, MemberRole, Permission, PolicyDecisionKind } from '@forge/types';
 import { hasPermission } from './permissions.ts';
-import { decideToolPolicy } from './tool-policy.ts';
+import { decideToolPolicy, type ToolPolicyOverrides } from './tool-policy.ts';
 
 /**
  * Permissão mínima exigida para invocar cada ferramenta tipada (spec §8).
@@ -34,6 +34,8 @@ export interface AuthorizeToolCallInput {
   resourceOrganizationId: string;
   toolName: AgentToolName;
   args?: Record<string, unknown>;
+  /** Ajustes de política da organização (só tornam a decisão padrão mais restritiva). */
+  policyOverrides?: ToolPolicyOverrides;
 }
 
 export interface AuthorizeToolCallDecision {
@@ -57,7 +59,7 @@ export interface AuthorizeToolCallDecision {
  *    ferramenta). Esta função nunca reimplementa essas regras.
  */
 export function authorizeToolCall(input: AuthorizeToolCallInput): AuthorizeToolCallDecision {
-  const { actor, resourceOrganizationId, toolName, args } = input;
+  const { actor, resourceOrganizationId, toolName, args, policyOverrides } = input;
 
   if (actor.organizationId !== resourceOrganizationId) {
     return {
@@ -74,5 +76,5 @@ export function authorizeToolCall(input: AuthorizeToolCallInput): AuthorizeToolC
     };
   }
 
-  return decideToolPolicy(args === undefined ? { toolName } : { toolName, args });
+  return decideToolPolicy(args === undefined ? { toolName } : { toolName, args }, policyOverrides);
 }

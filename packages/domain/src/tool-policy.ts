@@ -81,11 +81,11 @@ function isDestructiveCommand(args: Record<string, unknown> | undefined): boolea
 }
 
 /**
- * Decide a política para uma única tool call com base em regras estáticas
+ * Política PADRÃO para uma única tool call, com base em regras estáticas
  * e explícitas. Nunca aprova automaticamente uma ação destrutiva — na
  * dúvida (ferramenta não classificada), nega por padrão (fail-closed).
  */
-export function decideToolPolicy(input: ToolPolicyInput): ToolPolicyDecision {
+function baseToolPolicyDecision(input: ToolPolicyInput): ToolPolicyDecision {
   const { toolName, args } = input;
 
   if (toolName === 'run_command' && isDestructiveCommand(args)) {
@@ -112,5 +112,42 @@ export function decideToolPolicy(input: ToolPolicyInput): ToolPolicyDecision {
   return {
     decision: 'deny',
     reason: `Ferramenta "${toolName}" não possui regra de política definida.`,
+  };
+}
+
+/**
+ * Ajustes de política por organização: só é possível TORNAR MAIS RESTRITIVA
+ * a decisão padrão de uma ferramenta (allow < require_approval < deny).
+ * Afrouxar (ex.: aprovar `write_file` sem humano) nunca é aceito, e a
+ * heurística de comando destrutivo continua valendo sempre.
+ */
+export type ToolPolicyOverrides = Partial<Record<AgentToolName, PolicyDecisionKind>>;
+
+const STRICTNESS: Readonly<Record<PolicyDecisionKind, number>> = { allow: 0, require_approval: 1, deny: 2 };
+
+/** `candidate` é pelo menos tão restritiva quanto `baseline`? */
+export function isAtLeastAsStrict(candidate: PolicyDecisionKind, baseline: PolicyDecisionKind): boolean {
+  return STRICTNESS[candidate] >= STRICTNESS[baseline];
+}
+
+/** Decisão padrão de uma ferramenta (sem argumentos, sem ajustes da organização). */
+export function defaultToolDecision(toolName: AgentToolName): PolicyDecisionKind {
+  return baseToolPolicyDecision({ toolName }).decision;
+}
+
+/**
+ * Decide a política de uma tool call: padrão do sistema + ajuste opcional da
+ * organização (tighten-only). Um ajuste mais frouxo que o padrão é ignorado.
+ */
+export function decideToolPolicy(input: ToolPolicyInput, overrides?: ToolPolicyOverrides): ToolPolicyDecision {
+  const base = baseToolPolicyDecision(input);
+  const override = overrides?.[input.toolName];
+  if (override === undefined || override === base.decision || !isAtLeastAsStrict(override, base.decision)) return base;
+
+  return {
+    decision: override,
+    reason: `Política da organização torna "${input.toolName}" mais restritiva: ${
+      override === 'deny' ? 'bloqueada.' : 'exige aprovação humana.'
+    }`,
   };
 }

@@ -31,3 +31,14 @@ export const policyDecisionSchema = z.object({
   ...timestampsSchema.shape,
 });
 export type PolicyDecision = z.infer<typeof policyDecisionSchema>;
+
+/** Visão de uma ferramenta na tela de políticas: padrão do sistema x decisão efetiva da organização. */
+export const toolPolicyViewSchema = z.object({
+  toolName: agentToolNameSchema,
+  defaultDecision: policyDecisionKindSchema,
+  decision: policyDecisionKindSchema,
+});
+export type ToolPolicyView = z.infer<typeof toolPolicyViewSchema>;
+
+export const updateToolPolicyRequestSchema = z.object({ decision: policyDecisionKindSchema });
+export type UpdateToolPolicyRequest = z.infer<typeof updateToolPolicyRequestSchema>;

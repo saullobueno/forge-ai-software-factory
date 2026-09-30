@@ -13,6 +13,7 @@ import { AgentRunGitRepository } from './agent-run-git.repository.js';
 import { AgentRunGitService } from './agent-run-git.service.js';
 import { AgentRunGovernanceAuditService } from './agent-run-governance-audit.service.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { PoliciesModule } from '../policies/policies.module.js';
 import { AgentRunOrchestrationStore } from './agent-run-orchestration.store.js';
 import { AgentRunOtelSpanRecorder } from './agent-run-otel-span-recorder.js';
 import { AgentRunTestResultsRepository } from './agent-run-test-results.repository.js';
@@ -39,7 +40,7 @@ import { AI_PROVIDER } from './ai-provider.token.js';
  * usa — registrá-lo direto aqui é mais simples e igualmente seguro.
  */
 @Module({
-  imports: [AgentsModule, AuthModule, ArtifactsModule, AuditLogWriterModule, AiUsageModule, NotificationsModule],
+  imports: [AgentsModule, AuthModule, ArtifactsModule, AuditLogWriterModule, AiUsageModule, NotificationsModule, PoliciesModule],
   controllers: [AgentRunsController],
   providers: [
     AgentRunsRepository,

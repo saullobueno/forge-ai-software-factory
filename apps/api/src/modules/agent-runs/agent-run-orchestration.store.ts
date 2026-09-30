@@ -18,6 +18,7 @@ import type {
 import type { AgentRole, AgentRunStatus, AgentToolName } from '@forge/types';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { PoliciesService } from '../policies/policies.service.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 
 const TERMINAL_STATUSES: readonly AgentRunStatus[] = ['completed', 'failed', 'cancelled'];
@@ -35,7 +36,12 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
     private readonly database: DatabaseService,
     private readonly agentRunApprovals: AgentRunApprovalsRepository,
     private readonly notifications: NotificationsService,
+    private readonly policies: PoliciesService,
   ) {}
+
+  getToolPolicyOverrides(organizationId: string) {
+    return this.policies.getOverrides(organizationId);
+  }
 
   async getAgentRun(agentRunId: string): Promise<AgentRunContext | undefined> {
     const row = await this.database.db.query.agentRuns.findFirst({

@@ -9,6 +9,7 @@ import type {
   TestRunStatus,
   ToolCallStatus,
 } from '@forge/types';
+import type { ToolPolicyOverrides } from '@forge/domain';
 
 export interface AgentRunContext {
   id: string;
@@ -247,6 +248,8 @@ export interface AgentRunStore {
   getRepositoryForProject(projectId: string, organizationId: string): Promise<RepositoryContext | undefined>;
   getKnowledgeContext(projectId: string, organizationId: string, query: string, limit: number): Promise<AgentKnowledgeContext[]>;
   getAgentByRole(organizationId: string, role: AgentRole): Promise<AgentConfig | undefined>;
+  /** Ajustes de política de ferramentas da organização (opcional: sem ele vale só o padrão do sistema). */
+  getToolPolicyOverrides?(organizationId: string): Promise<ToolPolicyOverrides>;
   /** Persiste a transição — quem chama (`AgentRunOrchestrator`) já validou via `@forge/domain` antes de chamar isto. */
   setStatus(agentRunId: string, status: AgentRunStatus): Promise<void>;
   createStep(input: CreateStepInput): Promise<{ id: string }>;
