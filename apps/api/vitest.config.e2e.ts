@@ -12,7 +12,9 @@ export default defineConfig({
     // specs que sobem um Nest app real ligado ao banco. Mesma ordem de
     // grandeza usada pelos testes de integração de @forge/database.
     testTimeout: 60_000,
-    hookTimeout: 60_000,
+    // 120s (igual a @forge/database): 60s ainda estourava, raramente, no
+    // `beforeAll` que sobe PGlite + Nest quando a máquina está carregada.
+    hookTimeout: 120_000,
     // PGlite (WASM) não tolera múltiplas instâncias inicializando ao mesmo
     // tempo no mesmo processo — mesmo com diretórios de dados distintos por
     // arquivo de teste, rodar specs e2e em paralelo produz erros

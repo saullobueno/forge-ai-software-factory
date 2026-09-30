@@ -9,5 +9,9 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    // Sob a carga do `turbo run` (build/lint/testes de todos os pacotes em
+    // paralelo) o Nest levava >10s (default) para compilar o módulo de teste.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
   },
 });

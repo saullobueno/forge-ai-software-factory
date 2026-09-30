@@ -90,9 +90,16 @@ test('Execuções de IA: lista global com filtro por status e link para o detalh
   await expect(table).toBeVisible();
   await expect(table).toContainText('Estornos aparecem como cobrança positiva na fatura');
 
-  await page.getByLabel('Status').selectOption('failed');
+  // Um projeto recém-criado não tem execuções: resultado vazio determinístico,
+  // mesmo com outras specs criando execuções (inclusive "Falhou") em paralelo.
+  const emptyProject = `Projeto Sem Execuções ${Date.now()}`;
+  const created = await page.request.post('/api/projects', { data: { name: emptyProject } });
+  expect(created.ok()).toBe(true);
+  await page.reload();
+  await page.getByLabel('Projeto').selectOption({ label: emptyProject });
   await expect(page.getByText('Nenhuma execução encontrada com esses filtros.')).toBeVisible();
 
+  await page.getByLabel('Projeto').selectOption('');
   await page.getByLabel('Status').selectOption('completed');
   await expect(table).toBeVisible();
   await table.getByRole('link', { name: /Implementar|Estornos|Corrigir/ }).first().click();
