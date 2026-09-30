@@ -14,6 +14,7 @@ const PROTECTED_PREFIXES = [
   '/audit-logs',
   '/approvals',
   '/notifications',
+  '/settings',
 ];
 const API_PROXY_PREFIX = '/api/';
 
@@ -87,6 +88,7 @@ export const config = {
     '/audit-logs',
     '/approvals',
     '/notifications',
+    '/settings',
     '/login',
   ],
 };

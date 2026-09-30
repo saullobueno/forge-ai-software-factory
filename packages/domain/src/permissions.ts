@@ -83,3 +83,8 @@ const ROLE_PERMISSIONS: Readonly<Record<MemberRole, readonly Permission[]>> = {
 export function hasPermission(role: MemberRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].includes(permission);
 }
+
+/** Permissões de um papel (somente leitura) — alimenta a matriz de Configurações → Papéis. */
+export function getRolePermissions(role: MemberRole): readonly Permission[] {
+  return ROLE_PERMISSIONS[role];
+}

@@ -11,10 +11,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { getRolePermissions } from '@forge/domain';
 import {
   acceptInvitationRequestSchema,
   createInvitationRequestSchema,
   idSchema,
+  memberRoleSchema,
   updateMemberRoleRequestSchema,
   type AcceptInvitationRequest,
   type CreateInvitationRequest,
@@ -43,6 +45,14 @@ export class MembersController {
   @RequirePermission('member:manage')
   async listMembers(@CurrentUser() user: AuthenticatedUser) {
     return this.membersService.listMembers(user.organizationId);
+  }
+
+  /** Matriz papel x permissões (somente leitura; vem do RBAC de `@forge/domain`). */
+  @Get('members/roles')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission('member:manage')
+  roles() {
+    return memberRoleSchema.options.map((role) => ({ role, permissions: [...getRolePermissions(role)] }));
   }
 
   @Patch('members/:id')

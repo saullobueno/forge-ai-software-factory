@@ -6,6 +6,8 @@ import type {
   EnvironmentKind,
   FindingSeverity,
   KnowledgeSourceKind,
+  MemberRole,
+  PolicyDecisionKind,
   PullRequestStatus,
   TaskPriority,
   TaskStatus,
@@ -136,4 +138,19 @@ export const KNOWLEDGE_SOURCE_KIND_LABELS: Record<KnowledgeSourceKind, string> =
   readme: 'README',
   issue: 'Issue',
   pull_request: 'Pull request',
+};
+
+export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
+  admin: 'Administrador',
+  platform_engineer: 'Engenheiro de plataforma',
+  tech_lead: 'Tech lead',
+  developer: 'Desenvolvedor',
+  qa_engineer: 'QA',
+  product_manager: 'Product manager',
+};
+
+export const POLICY_DECISION_LABELS: Record<PolicyDecisionKind, string> = {
+  allow: 'Permitir',
+  require_approval: 'Exigir aprovação',
+  deny: 'Bloquear',
 };

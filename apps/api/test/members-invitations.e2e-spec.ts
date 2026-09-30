@@ -87,6 +87,15 @@ describe('membros', () => {
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
   });
 
+  it('expõe a matriz de papéis e permissões (somente leitura)', async () => {
+    const response = await http().get('/members/roles').set(auth(adminAToken)).expect(200);
+    const developer = response.body.find((item: { role: string }) => item.role === 'developer');
+    expect(developer.permissions).toContain('task:manage');
+    expect(developer.permissions).not.toContain('member:manage');
+    expect(response.body.find((item: { role: string }) => item.role === 'admin').permissions).toContain('member:manage');
+    await http().get('/members/roles').set(auth(leadAToken)).expect(403);
+  });
+
   it('403 sem member:manage e 401 sem token', async () => {
     await http().get('/members').set(auth(leadAToken)).expect(403);
     await http().patch(`/members/${devAId}`).set(auth(leadAToken)).send({ role: 'admin' }).expect(403);

@@ -21,3 +21,12 @@ export function canCreateTask(role: MemberRole): boolean {
 /** Editar e excluir usam as mesmas permissões de criar (`project:write` / `task:manage`). */
 export const canManageProject = canCreateProject;
 export const canManageTask = canCreateTask;
+
+/** Espelham `member:manage` (só admin) e `policy:manage` (admin e platform_engineer). */
+export function canManageMembers(role: MemberRole): boolean {
+  return role === 'admin';
+}
+
+export function canManagePolicies(role: MemberRole): boolean {
+  return role === 'admin' || role === 'platform_engineer';
+}
