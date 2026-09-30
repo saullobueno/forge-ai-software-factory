@@ -1,9 +1,27 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, schema } from '@forge/database';
-import type { AgentRunStatus, AgentToolName, RepositoryProvider, ToolCallStatus } from '@forge/types';
+import { and, asc, desc, eq, inArray, lt, or, schema } from '@forge/database';
+import type { AgentRunStatus, AgentToolName, ListAgentRunsQuery, RepositoryProvider, ToolCallStatus } from '@forge/types';
+import { decodeCursor, encodeCursor } from '../../infrastructure/pagination/cursor.js';
+import type { Page } from '../projects/projects.repository.js';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
 
 export type AgentRunRow = typeof schema.agentRuns.$inferSelect;
+
+export interface AgentRunListItem {
+  id: string;
+  status: AgentRunStatus;
+  objective: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string;
+  projectName: string;
+  requestedByName: string | null;
+  totalTokens: number;
+  totalCostUsd: string;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+}
 export type AgentStepRow = typeof schema.agentSteps.$inferSelect;
 export type ToolCallRow = typeof schema.toolCalls.$inferSelect;
 export type AiUsageRow = typeof schema.aiUsages.$inferSelect;
@@ -113,6 +131,61 @@ export class AgentRunsRepository {
         },
       },
     });
+  }
+
+  /** Lista global de execuções da organização (mais recentes primeiro), com filtros e cursor. */
+  async listByOrganization(organizationId: string, query: ListAgentRunsQuery): Promise<Page<AgentRunListItem>> {
+    const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+
+    const rows = await this.database.db
+      .select({
+        run: schema.agentRuns,
+        taskTitle: schema.tasks.title,
+        projectId: schema.projects.id,
+        projectName: schema.projects.name,
+        requestedByName: schema.users.name,
+      })
+      .from(schema.agentRuns)
+      .innerJoin(schema.tasks, eq(schema.tasks.id, schema.agentRuns.taskId))
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.tasks.projectId))
+      .leftJoin(schema.users, eq(schema.users.id, schema.agentRuns.requestedByUserId))
+      .where(
+        and(
+          eq(schema.agentRuns.organizationId, organizationId),
+          query.projectId ? eq(schema.tasks.projectId, query.projectId) : undefined,
+          query.status ? eq(schema.agentRuns.status, query.status) : undefined,
+          cursor
+            ? or(
+                lt(schema.agentRuns.createdAt, cursor.createdAt),
+                and(eq(schema.agentRuns.createdAt, cursor.createdAt), lt(schema.agentRuns.id, cursor.id)),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(schema.agentRuns.createdAt), desc(schema.agentRuns.id))
+      .limit(query.limit + 1);
+
+    const hasNextPage = rows.length > query.limit;
+    const pageRows = hasNextPage ? rows.slice(0, query.limit) : rows;
+    const items: AgentRunListItem[] = pageRows.map((row) => ({
+      id: row.run.id,
+      status: row.run.status,
+      objective: row.run.objective,
+      taskId: row.run.taskId,
+      taskTitle: row.taskTitle,
+      projectId: row.projectId,
+      projectName: row.projectName,
+      requestedByName: row.requestedByName,
+      totalTokens: row.run.totalTokens,
+      totalCostUsd: row.run.totalCostUsd,
+      startedAt: row.run.startedAt,
+      completedAt: row.run.completedAt,
+      createdAt: row.run.createdAt,
+    }));
+    const last = pageRows.at(-1)?.run;
+    const nextCursor = hasNextPage && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
+
+    return { items, nextCursor };
   }
 
   async listByTask(taskId: string, organizationId: string): Promise<AgentRunRow[]> {

@@ -3,7 +3,7 @@ import type { AgentRunFileChangeOutcome, OrchestratorActor } from '@forge/agents
 import { buildFeatureBranchName } from '@forge/agents';
 import { transitionAgentRunStatus } from '@forge/domain';
 import type { MessageEvent } from '@nestjs/common';
-import type { AgentRunStatus } from '@forge/types';
+import type { AgentRunStatus, ListAgentRunsQuery } from '@forge/types';
 import { concat, map, type Observable, of } from 'rxjs';
 import { AgentsRepository } from '../agents/agents.repository.js';
 import { AiUsageService } from '../ai-usage/ai-usage.service.js';
@@ -13,7 +13,14 @@ import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunGitService } from './agent-run-git.service.js';
 import { AgentRunWorkerService } from './agent-run-worker.service.js';
 import { AgentRunWorkspaceService } from './agent-run-workspace.service.js';
-import { AgentRunsRepository, type AgentRunRow, type AgentRunWithSteps, type ToolCallRow } from './agent-runs.repository.js';
+import {
+  AgentRunsRepository,
+  type AgentRunListItem,
+  type AgentRunRow,
+  type AgentRunWithSteps,
+  type ToolCallRow,
+} from './agent-runs.repository.js';
+import type { Page } from '../projects/projects.repository.js';
 import { countPatchStats } from './patch-stats.js';
 import type { TaskRow } from '../tasks/tasks.repository.js';
 
@@ -30,6 +37,10 @@ export class AgentRunsService {
     private readonly agentRunGit: AgentRunGitService,
     private readonly aiUsageService: AiUsageService,
   ) {}
+
+  async listByOrganization(organizationId: string, query: ListAgentRunsQuery): Promise<Page<AgentRunListItem>> {
+    return this.agentRunsRepository.listByOrganization(organizationId, query);
+  }
 
   /**
    * Dispara uma execução de IA para uma tarefa (spec §7: "Uma tarefa pode

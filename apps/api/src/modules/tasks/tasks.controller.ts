@@ -9,9 +9,18 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { idSchema, updateTaskRequestSchema, type UpdateTaskRequest } from '@forge/types';
+import {
+  changeTaskStatusRequestSchema,
+  idSchema,
+  listTasksQuerySchema,
+  updateTaskRequestSchema,
+  type ChangeTaskStatusRequest,
+  type ListTasksQuery,
+  type UpdateTaskRequest,
+} from '@forge/types';
 import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -24,6 +33,36 @@ import { TasksService } from './tasks.service.js';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
+
+  /** Lista global de tarefas da organização (lista/Kanban), com filtros e cursor. */
+  @Get()
+  @RequirePermission('task:read')
+  async list(
+    @Query(new ZodValidationPipe(listTasksQuerySchema)) query: ListTasksQuery,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.tasksService.listByOrganization(user.organizationId, query);
+  }
+
+  @Post(':id/status')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('task:manage')
+  async changeStatus(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(changeTaskStatusRequestSchema)) body: ChangeTaskStatusRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    const task = await this.tasksService.changeStatus(id, user.organizationId, user.userId, body.status);
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    return task;
+  }
 
   @Get(':id')
   @RequirePermission('task:read')

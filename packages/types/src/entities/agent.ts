@@ -100,3 +100,12 @@ export const toolCallSchema = z.object({
   ...timestampsSchema.shape,
 });
 export type ToolCall = z.infer<typeof toolCallSchema>;
+
+/** Query de `GET /agent-runs` (lista global, filtros e paginação por cursor). */
+export const listAgentRunsQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  projectId: idSchema.optional(),
+  status: agentRunStatusSchema.optional(),
+});
+export type ListAgentRunsQuery = z.infer<typeof listAgentRunsQuerySchema>;

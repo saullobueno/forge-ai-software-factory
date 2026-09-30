@@ -5,7 +5,15 @@ import { buildProxyTraceHeaders } from './tracing';
 // Next.js 16 renomeou `middleware.ts` para `proxy.ts` (mesma funcionalidade,
 // ver node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md).
 const SESSION_COOKIE_NAME = 'forge_session';
-const PROTECTED_PREFIXES = ['/projects', '/ai-playground', '/ai-usage', '/audit-logs', '/approvals'];
+const PROTECTED_PREFIXES = [
+  '/projects',
+  '/tasks',
+  '/agent-runs',
+  '/ai-playground',
+  '/ai-usage',
+  '/audit-logs',
+  '/approvals',
+];
 const API_PROXY_PREFIX = '/api/';
 
 /**
@@ -68,5 +76,15 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/projects/:path*', '/ai-playground', '/ai-usage', '/audit-logs', '/approvals', '/login'],
+  matcher: [
+    '/api/:path*',
+    '/projects/:path*',
+    '/tasks',
+    '/agent-runs',
+    '/ai-playground',
+    '/ai-usage',
+    '/audit-logs',
+    '/approvals',
+    '/login',
+  ],
 };

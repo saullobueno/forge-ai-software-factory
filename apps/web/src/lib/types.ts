@@ -152,6 +152,43 @@ export interface ApiAgentRun {
   updatedAt: string;
 }
 
+/** Item de `GET /tasks` (lista global/Kanban). */
+export interface ApiTaskListItem {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  acceptanceCriteria: string | null;
+  priority: TaskPriority;
+  labels: string[];
+  assigneeId: string | null;
+  status: TaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  projectName: string;
+  projectSlug: string;
+  projectIsProtected: boolean;
+  allowedNextStatuses: TaskStatus[];
+}
+
+/** Item de `GET /agent-runs` (lista global de execuções). */
+export interface ApiAgentRunListItem {
+  id: string;
+  status: AgentRunStatus;
+  objective: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string;
+  projectName: string;
+  requestedByName: string | null;
+  totalTokens: number;
+  totalCostUsd: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;

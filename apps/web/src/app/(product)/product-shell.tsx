@@ -18,8 +18,8 @@ import type { ApiCurrentUser, ApiPendingApproval } from '@/lib/types';
  */
 const NAV_ITEMS: { label: string; href: string | null }[] = [
   { label: 'Projetos', href: '/projects' },
-  { label: 'Tarefas', href: null },
-  { label: 'Execuções de IA', href: null },
+  { label: 'Tarefas', href: '/tasks' },
+  { label: 'Execuções de IA', href: '/agent-runs' },
   { label: 'Playground IA', href: '/ai-playground' },
   { label: 'Uso IA', href: '/ai-usage' },
   { label: 'Auditoria', href: '/audit-logs' },

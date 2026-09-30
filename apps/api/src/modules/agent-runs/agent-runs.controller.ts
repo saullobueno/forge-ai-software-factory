@@ -6,11 +6,18 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Sse,
   UseGuards,
 } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
-import { agentRunDecisionRequestSchema, idSchema, type AgentRunDecisionRequest } from '@forge/types';
+import {
+  agentRunDecisionRequestSchema,
+  idSchema,
+  listAgentRunsQuerySchema,
+  type AgentRunDecisionRequest,
+  type ListAgentRunsQuery,
+} from '@forge/types';
 import type { Observable } from 'rxjs';
 import { ZodValidationPipe } from '../../infrastructure/validation/zod-validation.pipe.js';
 import { ArtifactsService } from '../artifacts/artifacts.service.js';
@@ -38,6 +45,16 @@ export class AgentRunsController {
     private readonly agentRunsService: AgentRunsService,
     private readonly artifactsService: ArtifactsService,
   ) {}
+
+  /** Lista global de execuções de IA da organização (menu "Execuções de IA"). */
+  @Get()
+  @RequirePermission('task:read')
+  async list(
+    @Query(new ZodValidationPipe(listAgentRunsQuerySchema)) query: ListAgentRunsQuery,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.agentRunsService.listByOrganization(user.organizationId, query);
+  }
 
   @Get(':id')
   @RequirePermission('task:read')

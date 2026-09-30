@@ -102,7 +102,7 @@ test.describe('auditoria automatizada de acessibilidade', () => {
     await expectNoAxeViolations(page);
     await page.keyboard.press('Escape');
 
-    for (const name of ['Uso IA', 'Auditoria', 'Playground IA']) {
+    for (const name of ['Tarefas', 'Execuções de IA', 'Uso IA', 'Auditoria', 'Playground IA']) {
       await page.getByRole('link', { name, exact: true }).click();
       await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
       await expectNoAxeViolations(page);

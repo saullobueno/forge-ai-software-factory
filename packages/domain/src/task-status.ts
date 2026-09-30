@@ -20,6 +20,11 @@ const TASK_STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]
   done: [],
 };
 
+/** Próximos status permitidos a partir de `from` (usado pela API para o Kanban). */
+export function nextTaskStatuses(from: TaskStatus): readonly TaskStatus[] {
+  return TASK_STATUS_TRANSITIONS[from];
+}
+
 export function canTransitionTaskStatus(from: TaskStatus, to: TaskStatus): boolean {
   if (from === to) return false;
   return TASK_STATUS_TRANSITIONS[from].includes(to);

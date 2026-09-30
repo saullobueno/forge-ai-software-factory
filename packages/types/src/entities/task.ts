@@ -53,3 +53,18 @@ export const taskDependencySchema = z
     path: ['dependsOnTaskId'],
   });
 export type TaskDependency = z.infer<typeof taskDependencySchema>;
+
+/** Query de `GET /tasks` (lista global, filtros e paginação por cursor). */
+export const listTasksQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  projectId: idSchema.optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  q: z.string().trim().max(100).optional(),
+});
+export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
+
+/** Corpo de `POST /tasks/:id/status` (movimento no Kanban, validado pela máquina de estados). */
+export const changeTaskStatusRequestSchema = z.object({ status: taskStatusSchema });
+export type ChangeTaskStatusRequest = z.infer<typeof changeTaskStatusRequestSchema>;

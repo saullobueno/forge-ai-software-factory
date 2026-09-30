@@ -1,10 +1,17 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
-import type { CreateTaskRequest, MemberRole, UpdateTaskRequest } from '@forge/types';
+import { nextTaskStatuses, transitionTaskStatus } from '@forge/domain';
+import type { CreateTaskRequest, ListTasksQuery, MemberRole, TaskStatus, UpdateTaskRequest } from '@forge/types';
 import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
-import { TasksRepository, type TaskRow, type TaskWithDependencies } from './tasks.repository.js';
+import type { Page } from '../projects/projects.repository.js';
+import { TasksRepository, type TaskListRow, type TaskRow, type TaskWithDependencies } from './tasks.repository.js';
+
+export type TaskListItem = TaskListRow & {
+  projectIsProtected: boolean;
+  allowedNextStatuses: TaskStatus[];
+};
 
 @Injectable()
 export class TasksService {
@@ -58,6 +65,53 @@ export class TasksService {
     });
 
     return task;
+  }
+
+  async listByOrganization(organizationId: string, query: ListTasksQuery): Promise<Page<TaskListItem>> {
+    const page = await this.tasksRepository.listByOrganization(organizationId, query);
+    const protectedSlugs = readProtectedProjectSlugs();
+    return {
+      ...page,
+      items: page.items.map((task) => ({
+        ...task,
+        projectIsProtected: protectedSlugs.has(task.projectSlug),
+        allowedNextStatuses: [...nextTaskStatuses(task.status)],
+      })),
+    };
+  }
+
+  /**
+   * Move a tarefa pela máquina de estados de `@forge/domain` (Kanban):
+   * 409 para transição inválida, 403 no projeto de demonstração protegido.
+   * `undefined` quando a tarefa não existe no tenant.
+   */
+  async changeStatus(
+    taskId: string,
+    organizationId: string,
+    actorUserId: string,
+    status: TaskStatus,
+  ): Promise<TaskRow | undefined> {
+    const current = await this.tasksRepository.findById(taskId, organizationId);
+    if (!current) return undefined;
+    await this.assertProjectNotProtected(taskId, organizationId);
+
+    const transition = transitionTaskStatus(current.status, status);
+    if (!transition.success) throw new ConflictException(transition.error);
+
+    const updated = await this.tasksRepository.setStatus(taskId, organizationId, status);
+    if (!updated) return undefined;
+
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.status_changed',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { projectId: updated.projectId, from: current.status, to: status },
+    });
+
+    return updated;
   }
 
   /** Tarefas do projeto de demonstração protegido não podem ser editadas nem excluídas. */
