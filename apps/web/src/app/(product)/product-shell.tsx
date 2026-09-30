@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Logo } from '@/components/logo';
+import { NotificationBell } from '@/components/notification-bell';
 import { NavIcon, type NavIconName } from '@/components/nav-icons';
 import { UserMenu } from '@/components/user-menu';
 import { apiFetch } from '@/lib/api-client';
@@ -24,7 +25,7 @@ const NAV_ITEMS: { label: string; href: string | null; icon: NavIconName }[] = [
   { label: 'Playground IA', icon: 'playground', href: '/ai-playground' },
   { label: 'Uso IA', icon: 'usage', href: '/ai-usage' },
   { label: 'Auditoria', icon: 'audit', href: '/audit-logs' },
-  { label: 'Configurações', icon: 'settings', href: null },
+  { label: 'Configurações', icon: 'settings', href: '/settings' },
 ];
 
 /**
@@ -125,7 +126,24 @@ export function ProductShell({ children }: { children: ReactNode }) {
             <Logo />
           </Link>
         </div>
-        <UserMenu user={meQuery.data} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('forge:open-search'))}
+            aria-label="Buscar (Ctrl+K)"
+            data-testid="open-search"
+            className="flex h-9 items-center gap-2 rounded-md border border-border px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <svg aria-hidden viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <span className="hidden sm:inline">Buscar</span>
+            <kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">Ctrl K</kbd>
+          </button>
+          <NotificationBell />
+          <UserMenu user={meQuery.data} />
+        </div>
       </header>
       <div className="flex min-h-0 flex-1">
         {mobileNavOpen && (
