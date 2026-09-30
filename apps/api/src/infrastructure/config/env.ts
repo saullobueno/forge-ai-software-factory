@@ -121,3 +121,24 @@ export function readProtectedProjectSlugs(source: NodeJS.ProcessEnv = process.en
       .filter((slug) => slug.length > 0),
   );
 }
+
+/**
+ * Sufixos de e-mail das contas de demonstração do seed: não podem ser
+ * removidas nem ter o papel alterado em Configurações → Usuários.
+ * `PROTECTED_USER_EMAIL_SUFFIXES=` (vazio) desliga; lista separada por vírgula.
+ */
+export const DEFAULT_PROTECTED_USER_EMAIL_SUFFIXES = ['@acme-platform.example'];
+
+export function readProtectedUserEmailSuffixes(source: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = source['PROTECTED_USER_EMAIL_SUFFIXES'];
+  if (raw === undefined) return [...DEFAULT_PROTECTED_USER_EMAIL_SUFFIXES];
+  return raw
+    .split(',')
+    .map((suffix) => suffix.trim().toLowerCase())
+    .filter((suffix) => suffix.length > 0);
+}
+
+export function isProtectedUserEmail(email: string, source: NodeJS.ProcessEnv = process.env): boolean {
+  const normalized = email.toLowerCase();
+  return readProtectedUserEmailSuffixes(source).some((suffix) => normalized.endsWith(suffix));
+}

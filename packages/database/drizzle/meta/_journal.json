@@ -50,6 +50,13 @@
       "when": 1790779522731,
       "tag": "0006_strange_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790800664333,
+      "tag": "0007_melted_patch",
+      "breakpoints": true
     }
   ]
 }

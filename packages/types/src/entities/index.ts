@@ -12,4 +12,5 @@ export * from './ai.ts';
 export * from './approval.ts';
 export * from './secret.ts';
 export * from './notification.ts';
+export * from './member.ts';
 export * from './audit.ts';

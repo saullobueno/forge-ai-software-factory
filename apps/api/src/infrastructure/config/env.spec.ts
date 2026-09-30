@@ -5,6 +5,7 @@ import {
   parseEnv,
   readAiUsageLimits,
   readAiUserUsageLimits,
+  isProtectedUserEmail,
   readProtectedProjectSlugs,
 } from './env.js';
 
@@ -89,5 +90,17 @@ describe('readProtectedProjectSlugs', () => {
 
   it('valor vazio desliga a proteção', () => {
     expect(readProtectedProjectSlugs({ PROTECTED_PROJECT_SLUGS: '' }).size).toBe(0);
+  });
+});
+
+describe('isProtectedUserEmail', () => {
+  it('protege as contas de demonstração do seed por padrão, sem diferenciar maiúsculas', () => {
+    expect(isProtectedUserEmail('Dev@ACME-platform.example', {})).toBe(true);
+    expect(isProtectedUserEmail('alguem@outra-empresa.example', {})).toBe(false);
+  });
+
+  it('aceita lista própria e valor vazio desliga a proteção', () => {
+    expect(isProtectedUserEmail('a@demo.test', { PROTECTED_USER_EMAIL_SUFFIXES: '@demo.test, @x.test' })).toBe(true);
+    expect(isProtectedUserEmail('dev@acme-platform.example', { PROTECTED_USER_EMAIL_SUFFIXES: '' })).toBe(false);
   });
 });
