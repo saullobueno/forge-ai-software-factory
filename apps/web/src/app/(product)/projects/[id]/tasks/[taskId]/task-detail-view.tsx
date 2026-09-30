@@ -24,6 +24,36 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const { nameById } = useUsers();
+  const [newDependencyId, setNewDependencyId] = useState('');
+
+  const projectTasksQuery = useQuery({
+    queryKey: ['projects', projectId, 'tasks'],
+    queryFn: () => apiFetch<ApiTask[]>(`/projects/${projectId}/tasks`),
+  });
+
+  const refreshDependencies = () => {
+    void queryClient.invalidateQueries({ queryKey: ['tasks', taskId] });
+    void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tasks'] });
+  };
+
+  const addDependency = useMutation({
+    mutationFn: (dependsOnTaskId: string) =>
+      apiFetch<ApiTask>(`/tasks/${taskId}/dependencies`, { method: 'POST', body: JSON.stringify({ dependsOnTaskId }) }),
+    onSuccess: () => {
+      setNewDependencyId('');
+      refreshDependencies();
+    },
+  });
+
+  const removeDependency = useMutation({
+    mutationFn: (dependsOnTaskId: string) => apiFetch<null>(`/tasks/${taskId}/dependencies/${dependsOnTaskId}`, { method: 'DELETE' }),
+    onSuccess: refreshDependencies,
+  });
+
+  const dependencyError =
+    (addDependency.error ?? removeDependency.error) instanceof ApiError
+      ? (addDependency.error ?? removeDependency.error)?.message
+      : 'Não foi possível atualizar as dependências.';
 
   const currentUserQuery = useQuery({
     queryKey: ['auth', 'me'],
@@ -62,6 +92,10 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
   }
 
   const task = taskQuery.data;
+  const dependencyIds = new Set(task.dependencies.map((dependency) => dependency.dependsOnTaskId));
+  const candidates = (projectTasksQuery.data ?? []).filter(
+    (candidate) => candidate.id !== taskId && !dependencyIds.has(candidate.id),
+  );
   const canManage =
     currentUserQuery.data !== undefined &&
     canManageTask(currentUserQuery.data.role) &&
@@ -137,14 +171,14 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
         </p>
       </section>
 
-      <section className="rounded-lg border border-border p-4">
+      <section className="rounded-lg border border-border p-4" data-testid="task-dependencies">
         <h2 className="text-sm font-medium">Dependências</h2>
         {task.dependencies.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">Esta tarefa não depende de nenhuma outra.</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1.5">
             {task.dependencies.map((dependency) => (
-              <li key={dependency.id} className="flex items-center gap-2 text-sm">
+              <li key={dependency.id} className="flex flex-wrap items-center gap-2 text-sm">
                 <Link
                   href={`/projects/${projectId}/tasks/${dependency.dependsOnTask.id}`}
                   className="text-foreground hover:underline"
@@ -154,9 +188,55 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
                 <Badge tone={taskStatusTone(dependency.dependsOnTask.status)}>
                   {TASK_STATUS_LABELS[dependency.dependsOnTask.status]}
                 </Badge>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => removeDependency.mutate(dependency.dependsOnTask.id)}
+                    disabled={removeDependency.isPending}
+                    aria-label={`Remover dependência de "${dependency.dependsOnTask.title}"`}
+                    className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-60"
+                  >
+                    Remover
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+        )}
+        {canManage && candidates.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="dependency-select" className="text-xs font-medium text-muted-foreground">
+                Depende de
+              </label>
+              <select
+                id="dependency-select"
+                value={newDependencyId}
+                onChange={(event) => setNewDependencyId(event.target.value)}
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              >
+                <option value="">Selecione uma tarefa…</option>
+                {candidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              disabled={!newDependencyId || addDependency.isPending}
+              onClick={() => addDependency.mutate(newDependencyId)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-60"
+            >
+              Adicionar dependência
+            </button>
+          </div>
+        )}
+        {(addDependency.isError || removeDependency.isError) && (
+          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {dependencyError}
+          </p>
         )}
       </section>
 

@@ -126,6 +126,95 @@ export class TasksService {
     }
   }
 
+  /**
+   * Adiciona "esta tarefa depende de outra": mesma organização e mesmo
+   * projeto, sem auto-dependência, sem duplicata e sem ciclo (percorre o
+   * grafo a partir da tarefa alvo procurando de volta a tarefa atual).
+   * `undefined` quando a tarefa não existe no tenant.
+   */
+  async addDependency(
+    taskId: string,
+    organizationId: string,
+    actorUserId: string,
+    dependsOnTaskId: string,
+  ): Promise<TaskWithDependencies | undefined> {
+    const task = await this.tasksRepository.findById(taskId, organizationId);
+    if (!task) return undefined;
+    await this.assertProjectNotProtected(taskId, organizationId);
+
+    if (dependsOnTaskId === taskId) throw new BadRequestException('Uma tarefa não pode depender dela mesma.');
+    const target = await this.tasksRepository.findById(dependsOnTaskId, organizationId);
+    if (!target) throw new BadRequestException('Tarefa de dependência inválida.');
+    if (target.projectId !== task.projectId) {
+      throw new BadRequestException('A dependência precisa ser uma tarefa do mesmo projeto.');
+    }
+    if (task.dependencies.some((dependency) => dependency.dependsOnTaskId === dependsOnTaskId)) {
+      throw new ConflictException('Esta dependência já existe.');
+    }
+    if (await this.reaches(dependsOnTaskId, taskId)) {
+      throw new ConflictException('Essa dependência criaria um ciclo entre as tarefas.');
+    }
+
+    await this.tasksRepository.addDependency(taskId, dependsOnTaskId);
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.dependency_added',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { projectId: task.projectId, dependsOnTaskId },
+    });
+
+    return this.tasksRepository.findById(taskId, organizationId);
+  }
+
+  /** `false` quando a tarefa ou a dependência não existem no tenant. */
+  async removeDependency(
+    taskId: string,
+    organizationId: string,
+    actorUserId: string,
+    dependsOnTaskId: string,
+  ): Promise<boolean> {
+    const task = await this.tasksRepository.findById(taskId, organizationId);
+    if (!task) return false;
+    await this.assertProjectNotProtected(taskId, organizationId);
+
+    const removed = await this.tasksRepository.removeDependency(taskId, dependsOnTaskId);
+    if (!removed) return false;
+
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.dependency_removed',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { projectId: task.projectId, dependsOnTaskId },
+    });
+    return true;
+  }
+
+  /** `from` alcança `to` seguindo arestas "depende de"? (busca em largura) */
+  private async reaches(from: string, to: string): Promise<boolean> {
+    const visited = new Set<string>([from]);
+    let frontier = [from];
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const target of await this.tasksRepository.findDependencyTargets(id)) {
+          if (target === to) return true;
+          if (!visited.has(target)) {
+            visited.add(target);
+            next.push(target);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return false;
+  }
+
   /** Tarefas do projeto de demonstração protegido não podem ser editadas nem excluídas. */
   private async assertProjectNotProtected(taskId: string, organizationId: string): Promise<void> {
     const slug = await this.tasksRepository.findProjectSlug(taskId, organizationId);

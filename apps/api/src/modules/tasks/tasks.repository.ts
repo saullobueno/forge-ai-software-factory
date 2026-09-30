@@ -94,6 +94,27 @@ export class TasksRepository {
     return { items, nextCursor };
   }
 
+  /** Ids das tarefas de que `taskId` depende (arestas de saída do grafo de dependências). */
+  async findDependencyTargets(taskId: string): Promise<string[]> {
+    const rows = await this.database.db
+      .select({ id: schema.taskDependencies.dependsOnTaskId })
+      .from(schema.taskDependencies)
+      .where(eq(schema.taskDependencies.taskId, taskId));
+    return rows.map((row) => row.id);
+  }
+
+  async addDependency(taskId: string, dependsOnTaskId: string): Promise<void> {
+    await this.database.db.insert(schema.taskDependencies).values({ taskId, dependsOnTaskId });
+  }
+
+  async removeDependency(taskId: string, dependsOnTaskId: string): Promise<boolean> {
+    const removed = await this.database.db
+      .delete(schema.taskDependencies)
+      .where(and(eq(schema.taskDependencies.taskId, taskId), eq(schema.taskDependencies.dependsOnTaskId, dependsOnTaskId)))
+      .returning();
+    return removed.length > 0;
+  }
+
   async setStatus(taskId: string, organizationId: string, status: TaskStatus): Promise<TaskRow | undefined> {
     const [row] = await this.database.db
       .update(schema.tasks)

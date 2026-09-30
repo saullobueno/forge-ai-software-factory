@@ -76,3 +76,7 @@ export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
 /** Corpo de `POST /tasks/:id/status` (movimento no Kanban, validado pela máquina de estados). */
 export const changeTaskStatusRequestSchema = z.object({ status: taskStatusSchema });
 export type ChangeTaskStatusRequest = z.infer<typeof changeTaskStatusRequestSchema>;
+
+/** Corpo de `POST /tasks/:id/dependencies`. */
+export const addTaskDependencyRequestSchema = z.object({ dependsOnTaskId: idSchema });
+export type AddTaskDependencyRequest = z.infer<typeof addTaskDependencyRequestSchema>;

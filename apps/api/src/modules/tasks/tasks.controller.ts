@@ -13,10 +13,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  addTaskDependencyRequestSchema,
   changeTaskStatusRequestSchema,
   idSchema,
   listTasksQuerySchema,
   updateTaskRequestSchema,
+  type AddTaskDependencyRequest,
   type ChangeTaskStatusRequest,
   type ListTasksQuery,
   type UpdateTaskRequest,
@@ -62,6 +64,43 @@ export class TasksController {
     }
 
     return task;
+  }
+
+  @Post(':id/dependencies')
+  @RequirePermission('task:manage')
+  async addDependency(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(addTaskDependencyRequestSchema)) body: AddTaskDependencyRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    const task = await this.tasksService.addDependency(id, user.organizationId, user.userId, body.dependsOnTaskId);
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+
+    return task;
+  }
+
+  @Delete(':id/dependencies/:dependsOnTaskId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('task:manage')
+  async removeDependency(
+    @Param('id') id: string,
+    @Param('dependsOnTaskId') dependsOnTaskId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    if (!idSchema.safeParse(id).success || !idSchema.safeParse(dependsOnTaskId).success) {
+      throw new NotFoundException('Dependência não encontrada.');
+    }
+
+    const removed = await this.tasksService.removeDependency(id, user.organizationId, user.userId, dependsOnTaskId);
+    if (!removed) {
+      throw new NotFoundException('Dependência não encontrada.');
+    }
   }
 
   @Get(':id')
