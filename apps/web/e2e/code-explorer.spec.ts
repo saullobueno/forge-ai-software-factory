@@ -57,9 +57,28 @@ test.describe('projeto -> código: árvore, arquivo, busca e diff', () => {
     // sinal negativo em estornos, corrigido removendo o `Math.abs()`).
     await page.getByRole('button', { name: /^Diff/ }).click();
     const diffEditor = page.getByTestId('diff-editor');
+
+    // Rodando a suíte inteira, outras specs (aprovação de execuções) criam mais
+    // diffs no mesmo projeto e o primeiro da lista pode ser um deles — então o
+    // diff seedado é localizado pelo conteúdo (`Math.abs`), não pela posição.
+    const diffButtons = page.getByRole('button', { name: 'src/lib/format-currency.ts', exact: true });
+    await expect(page.getByText('src/lib/format-currency.ts').first()).toBeVisible({ timeout: 30_000 });
+    const candidates = Math.max(await diffButtons.count(), 1);
+    let found = false;
+    for (let index = 0; index < candidates && !found; index += 1) {
+      if ((await diffButtons.count()) > 0) await diffButtons.nth(index).click();
+      try {
+        // O DiffEditor do Monaco é um chunk carregado sob demanda.
+        await expect(diffEditor).toContainText('Math.abs', { timeout: 20_000 });
+        found = true;
+      } catch {
+        // este diff não é o seedado (ou não reconstruiu os dois lados); tenta o próximo
+      }
+    }
+
     await expect(diffEditor).toBeVisible();
-    await expect(page.getByText('src/lib/format-currency.ts')).toBeVisible();
+    await expect(page.getByText('src/lib/format-currency.ts').first()).toBeVisible();
     await expect(page.getByText('Modificado')).toBeVisible();
-    await expect(diffEditor).toContainText('Math.abs', { timeout: 15_000 });
+    await expect(diffEditor).toContainText('Math.abs');
   });
 });
