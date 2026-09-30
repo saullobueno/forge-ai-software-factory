@@ -84,3 +84,7 @@ export type AddTaskDependencyRequest = z.infer<typeof addTaskDependencyRequestSc
 /** Corpo de `POST /tasks/:id/comments`. */
 export const createTaskCommentRequestSchema = z.object({ body: z.string().trim().min(1).max(4000) });
 export type CreateTaskCommentRequest = z.infer<typeof createTaskCommentRequestSchema>;
+
+/** Query de `GET /search`. */
+export const searchQuerySchema = z.object({ q: z.string().trim().min(1).max(100) });
+export type SearchQuery = z.infer<typeof searchQuerySchema>;

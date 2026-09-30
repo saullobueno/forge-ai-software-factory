@@ -216,6 +216,20 @@ export interface ApiTaskActivity {
   actorName: string | null;
 }
 
+/** Resultado de `GET /search`. */
+export interface ApiSearchResults {
+  projects: { id: string; name: string; slug: string }[];
+  tasks: { id: string; title: string; status: TaskStatus; projectId: string; projectName: string }[];
+  agentRuns: {
+    id: string;
+    objective: string;
+    status: AgentRunStatus;
+    taskId: string;
+    projectId: string;
+    projectName: string;
+  }[];
+}
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;
