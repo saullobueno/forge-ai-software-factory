@@ -5,6 +5,7 @@ import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
 import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { UsersRepository } from '../users/users.repository.js';
 import type { Page } from '../projects/projects.repository.js';
 import {
@@ -28,6 +29,7 @@ export class TasksService {
     private readonly agentRunsService: AgentRunsService,
     private readonly auditLogsService: AuditLogsService,
     private readonly usersRepository: UsersRepository,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -75,6 +77,17 @@ export class TasksService {
       targetId: task.id,
       metadata: { projectId, title: task.title, priority: task.priority },
     });
+
+    if (task.assigneeId) {
+      await this.notificationsService.notifyTaskAssigned({
+        organizationId,
+        taskId: task.id,
+        taskTitle: task.title,
+        projectId,
+        assigneeId: task.assigneeId,
+        actorUserId,
+      });
+    }
 
     return task;
   }
@@ -305,6 +318,7 @@ export class TasksService {
   ): Promise<TaskRow | undefined> {
     await this.assertProjectNotProtected(taskId, organizationId);
     await this.assertAssigneeInOrganization(input.assigneeId, organizationId);
+    const previousAssigneeId = input.assigneeId !== undefined ? (await this.tasksRepository.findById(taskId, organizationId))?.assigneeId : undefined;
     const updated = await this.tasksRepository.update(taskId, organizationId, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
@@ -324,6 +338,17 @@ export class TasksService {
       targetId: taskId,
       metadata: { projectId: updated.projectId, changedFields: Object.keys(input) },
     });
+
+    if (input.assigneeId && input.assigneeId !== previousAssigneeId) {
+      await this.notificationsService.notifyTaskAssigned({
+        organizationId,
+        taskId,
+        taskTitle: updated.title,
+        projectId: updated.projectId,
+        assigneeId: input.assigneeId,
+        actorUserId,
+      });
+    }
 
     return updated;
   }

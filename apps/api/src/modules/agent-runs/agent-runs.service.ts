@@ -8,6 +8,7 @@ import { concat, map, type Observable, of } from 'rxjs';
 import { AgentsRepository } from '../agents/agents.repository.js';
 import { AiUsageService } from '../ai-usage/ai-usage.service.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 import { AgentRunEventsService } from './agent-run-events.service.js';
 import { AgentRunGitService } from './agent-run-git.service.js';
@@ -36,6 +37,7 @@ export class AgentRunsService {
     private readonly agentRunWorkspace: AgentRunWorkspaceService,
     private readonly agentRunGit: AgentRunGitService,
     private readonly aiUsageService: AiUsageService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async listByOrganization(organizationId: string, query: ListAgentRunsQuery): Promise<Page<AgentRunListItem>> {
@@ -237,6 +239,8 @@ export class AgentRunsService {
     await this.agentRunsRepository.resolvePendingToolCalls(id, decision === 'approved' ? 'succeeded' : 'rejected');
     const updated = await this.agentRunsRepository.updateStatus(id, targetStatus);
     this.agentRunEvents.publish({ agentRunId: id, status: updated.status });
+    // Quem disparou a execução fica sabendo do desfecho (não avisa quem acabou de decidir).
+    await this.notificationsService.notifyAgentRunFinished(id, updated.status, actorUserId);
 
     // A `approval` já nasceu `pending` quando esta execução ENTROU em
     // `approval_required` (`AgentRunOrchestrator.finishPipeline` ->

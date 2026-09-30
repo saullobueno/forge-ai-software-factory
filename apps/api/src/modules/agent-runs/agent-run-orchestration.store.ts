@@ -17,6 +17,7 @@ import type {
 } from '@forge/agents';
 import type { AgentRole, AgentRunStatus, AgentToolName } from '@forge/types';
 import { DatabaseService } from '../../infrastructure/database/database.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { AgentRunApprovalsRepository } from './agent-run-approvals.repository.js';
 
 const TERMINAL_STATUSES: readonly AgentRunStatus[] = ['completed', 'failed', 'cancelled'];
@@ -33,6 +34,7 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
   constructor(
     private readonly database: DatabaseService,
     private readonly agentRunApprovals: AgentRunApprovalsRepository,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getAgentRun(agentRunId: string): Promise<AgentRunContext | undefined> {
@@ -160,6 +162,8 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
         ...(TERMINAL_STATUSES.includes(status) ? { completedAt: new Date() } : {}),
       })
       .where(eq(schema.agentRuns.id, agentRunId));
+
+    await this.notifications.notifyAgentRunFinished(agentRunId, status);
   }
 
   async createStep(input: CreateStepInput): Promise<{ id: string }> {
@@ -300,5 +304,7 @@ export class AgentRunOrchestrationStore implements AgentRunStore {
       agentRunId: input.agentRunId,
       requestedByUserId: input.requestedByUserId,
     });
+
+    await this.notifications.notifyApprovalRequested(input.agentRunId);
   }
 }

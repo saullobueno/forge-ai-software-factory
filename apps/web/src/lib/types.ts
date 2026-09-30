@@ -230,6 +230,22 @@ export interface ApiSearchResults {
   }[];
 }
 
+/** Notificação do usuário (`GET /notifications`); `link` é o caminho da UI para abrir o item. */
+export interface ApiNotification {
+  id: string;
+  kind: 'task_assigned' | 'approval_requested' | 'agent_run_completed' | 'agent_run_failed' | string;
+  title: string;
+  body: string | null;
+  isRead: boolean;
+  createdAt: string;
+  link: string | null;
+}
+
+export interface ApiNotifications {
+  items: ApiNotification[];
+  unreadCount: number;
+}
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;
