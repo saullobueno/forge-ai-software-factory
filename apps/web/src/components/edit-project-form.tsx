@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import type { ApiProject } from '@/lib/types';
 
@@ -27,6 +27,12 @@ export function EditProjectForm({ project, onDone }: { project: ApiProject; onDo
   const [packageManager, setPackageManager] = useState(project.techProfile.packageManager ?? '');
   const [architectureNotes, setArchitectureNotes] = useState(project.architectureNotes ?? '');
   const [codeRules, setCodeRules] = useState(project.codeRules ?? '');
+  const [aiProvider, setAiProvider] = useState(project.aiProvider ?? '');
+  const providers = useQuery({
+    queryKey: ['ai-providers'],
+    queryFn: () => apiFetch<{ name: string; model: string | null; isDefault: boolean }[]>('/ai/providers'),
+    staleTime: 5 * 60_000,
+  });
 
   const updateProject = useMutation({
     mutationFn: () =>
@@ -40,6 +46,7 @@ export function EditProjectForm({ project, onDone }: { project: ApiProject; onDo
           packageManager: nullIfBlank(packageManager),
           architectureNotes: nullIfBlank(architectureNotes),
           codeRules: nullIfBlank(codeRules),
+          aiProvider: aiProvider === '' ? null : aiProvider,
         }),
       }),
     onSuccess: () => {
@@ -150,6 +157,27 @@ export function EditProjectForm({ project, onDone }: { project: ApiProject; onDo
           onChange={(event) => setCodeRules(event.target.value)}
           className={INPUT_CLASS}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="edit-project-ai-provider" className="text-sm font-medium">
+          Provedor de IA
+        </label>
+        <select
+          id="edit-project-ai-provider"
+          value={aiProvider}
+          onChange={(event) => setAiProvider(event.target.value as typeof aiProvider)}
+          className={INPUT_CLASS}
+        >
+          <option value="">Padrão do servidor</option>
+          {(providers.data ?? []).map((provider) => (
+            <option key={provider.name} value={provider.name}>
+              {provider.name}
+              {provider.model ? ` (${provider.model})` : ''}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">Usado nas execuções de IA deste projeto. Só aparecem os provedores configurados no servidor.</p>
       </div>
 
       {updateProject.isError && (

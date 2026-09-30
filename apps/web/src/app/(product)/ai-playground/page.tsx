@@ -5,6 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import type { AIPlaygroundDatasetItem, AIPlaygroundModelId } from '@forge/types';
 import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
+import { PlaygroundDatasets, type LoadedDatasetVersion } from '@/components/playground-datasets';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import type { ApiAIPlaygroundConfig, ApiAIPlaygroundEvaluation } from '@/lib/types';
 
@@ -86,6 +87,7 @@ export default function AIPlaygroundPage() {
     'forge-mock-balanced',
   ]);
   const [formError, setFormError] = useState<string | null>(null);
+  const [loadedDataset, setLoadedDataset] = useState<LoadedDatasetVersion | null>(null);
 
   const configQuery = useQuery({
     queryKey: ['ai-playground', 'config'],
@@ -95,13 +97,13 @@ export default function AIPlaygroundPage() {
   const models = configQuery.data?.models ?? FALLBACK_MODELS;
 
   const evaluation = useMutation({
-    mutationFn: (dataset: AIPlaygroundDatasetItem[]) =>
+    mutationFn: ({ dataset, datasetVersionId }: { dataset: AIPlaygroundDatasetItem[]; datasetVersionId?: string }) =>
       apiFetch<ApiAIPlaygroundEvaluation>('/ai-playground/evaluations', {
         method: 'POST',
         body: JSON.stringify({
           prompt,
           models: selectedModels,
-          dataset,
+          ...(datasetVersionId ? { datasetVersionId } : { dataset }),
           requireStructuredOutput: true,
         }),
       }),
@@ -120,7 +122,9 @@ export default function AIPlaygroundPage() {
     }
 
     try {
-      evaluation.mutate(parseDataset(datasetText));
+      const dataset = parseDataset(datasetText);
+      const useSavedVersion = loadedDataset !== null && datasetText === loadedDataset.text;
+      evaluation.mutate({ dataset, ...(useSavedVersion ? { datasetVersionId: loadedDataset.versionId } : {}) });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Dataset inválido.');
     }
@@ -181,6 +185,16 @@ export default function AIPlaygroundPage() {
         </div>
 
         <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+          <PlaygroundDatasets
+            editorText={datasetText}
+            parseEditor={parseDataset}
+            loaded={loadedDataset}
+            onLoad={(items, meta) => {
+              const text = formatDataset(items);
+              setDatasetText(text);
+              setLoadedDataset({ ...meta, text });
+            }}
+          />
           <label className="flex flex-1 flex-col gap-2">
             <span className="text-sm font-medium">Dataset</span>
             <textarea

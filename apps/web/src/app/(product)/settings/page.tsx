@@ -3,7 +3,9 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  agentToolNameSchema,
   memberRoleSchema,
+  type AgentView,
   type CreatedInvitation,
   type InvitationView,
   type MemberRole,
@@ -15,14 +17,14 @@ import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { ConfirmDeleteButton } from '@/components/confirm-delete-button';
 import { ApiError, apiFetch } from '@/lib/api-client';
-import { MEMBER_ROLE_LABELS, POLICY_DECISION_LABELS } from '@/lib/labels';
+import { AGENT_ROLE_LABELS, MEMBER_ROLE_LABELS, POLICY_DECISION_LABELS } from '@/lib/labels';
 import { canManageMembers, canManagePolicies } from '@/lib/project-permissions';
 import type { ApiCurrentUser } from '@/lib/types';
 
 const INPUT_CLASS = 'rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary';
 const BUTTON_CLASS = 'rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60';
 
-type TabKey = 'members' | 'invitations' | 'roles' | 'policies';
+type TabKey = 'members' | 'invitations' | 'roles' | 'policies' | 'agents';
 
 const errorMessage = (error: unknown): string => (error instanceof ApiError ? error.message : 'Não foi possível concluir a ação.');
 
@@ -353,6 +355,121 @@ function PoliciesTab() {
   );
 }
 
+function AgentCard({ agent }: { agent: AgentView }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(agent.name);
+  const [instructions, setInstructions] = useState(agent.instructions ?? '');
+  const [tools, setTools] = useState<string[]>(agent.allowedTools);
+  const [enabled, setEnabled] = useState(agent.isEnabled);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
+  const save = useMutation({
+    mutationFn: () =>
+      apiFetch<AgentView>(`/agents/${agent.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name,
+          instructions: instructions.trim() === '' ? null : instructions,
+          allowedTools: tools,
+          isEnabled: enabled,
+        }),
+      }),
+    onSuccess: () => {
+      setMessage({ tone: 'ok', text: 'Agente salvo.' });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+    onError: (caught) => setMessage({ tone: 'error', text: errorMessage(caught) }),
+  });
+
+  const toggleTool = (tool: string) =>
+    setTools((current) => (current.includes(tool) ? current.filter((item) => item !== tool) : [...current, tool]));
+  const id = `agent-${agent.id}`;
+
+  return (
+    <form
+      aria-label={`Agente ${AGENT_ROLE_LABELS[agent.role]}`}
+      data-testid="agent-card"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save.mutate();
+      }}
+      className="flex flex-col gap-3 rounded-lg border border-border p-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2">
+          <Badge>{AGENT_ROLE_LABELS[agent.role]}</Badge>
+          {!enabled && <Badge tone="attention">Desabilitado</Badge>}
+        </span>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="size-4 accent-foreground" />
+          Habilitado
+        </label>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={`${id}-name`} className="text-sm font-medium">
+          Nome
+        </label>
+        <input id={`${id}-name`} required maxLength={200} value={name} onChange={(event) => setName(event.target.value)} className={`${INPUT_CLASS} w-full`} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={`${id}-instructions`} className="text-sm font-medium">
+          Instruções extras
+        </label>
+        <textarea
+          id={`${id}-instructions`}
+          rows={3}
+          maxLength={4000}
+          value={instructions}
+          onChange={(event) => setInstructions(event.target.value)}
+          placeholder="Ex.: responda sempre em português e cite os arquivos analisados."
+          className={`${INPUT_CLASS} w-full`}
+        />
+        <p className="text-xs text-muted-foreground">Enviadas ao modelo como configuração da organização; nunca alteram políticas, ferramentas permitidas ou isolamento de tenant.</p>
+      </div>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-medium">Ferramentas permitidas</legend>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {agentToolNameSchema.options.map((tool) => (
+            <label key={tool} className="flex items-center gap-1.5 font-mono text-xs">
+              <input type="checkbox" checked={tools.includes(tool)} onChange={() => toggleTool(tool)} className="size-3.5 accent-foreground" />
+              {tool}
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Escrita, comandos e Git continuam passando pela política de ferramentas e pela aprovação humana.</p>
+      </fieldset>
+
+      <div className="flex items-center gap-3">
+        <button type="submit" disabled={save.isPending} className={BUTTON_CLASS}>
+          {save.isPending ? 'Salvando…' : 'Salvar agente'}
+        </button>
+        {message && (
+          <span role={message.tone === 'error' ? 'alert' : 'status'} className={`text-xs ${message.tone === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+            {message.text}
+          </span>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function AgentsTab() {
+  const { data, isLoading } = useQuery({ queryKey: ['agents'], queryFn: () => apiFetch<AgentView[]>('/agents') });
+  return (
+    <section aria-labelledby="agents-heading" className="flex flex-col gap-3">
+      <h2 id="agents-heading" className="text-lg font-medium">
+        Agentes
+      </h2>
+      <p className="text-sm text-muted-foreground">Um agente por papel do pipeline: ajuste nome, instruções, ferramentas permitidas e se participa das execuções.</p>
+      {isLoading && <p className="text-sm text-muted-foreground">Carregando agentes…</p>}
+      <div className="grid gap-4 lg:grid-cols-2">{data?.map((agent) => <AgentCard key={`${agent.id}-${agent.name}-${agent.instructions}-${agent.isEnabled}`} agent={agent} />)}</div>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const { data: user } = useQuery({ queryKey: ['me'], queryFn: () => apiFetch<ApiCurrentUser>('/auth/me') });
   const [chosen, setChosen] = useState<TabKey | null>(null);
@@ -361,7 +478,7 @@ export default function SettingsPage() {
   if (user && canManageMembers(user.role)) {
     tabs.push({ key: 'members', label: 'Usuários' }, { key: 'invitations', label: 'Convites' }, { key: 'roles', label: 'Papéis' });
   }
-  if (user && canManagePolicies(user.role)) tabs.push({ key: 'policies', label: 'Políticas' });
+  if (user && canManagePolicies(user.role)) tabs.push({ key: 'policies', label: 'Políticas' }, { key: 'agents', label: 'Agentes' });
   const active = tabs.find((tab) => tab.key === chosen)?.key ?? tabs[0]?.key;
 
   return (
@@ -404,6 +521,7 @@ export default function SettingsPage() {
         {active === 'invitations' && <InvitationsTab />}
         {active === 'roles' && <RolesTab />}
         {active === 'policies' && <PoliciesTab />}
+        {active === 'agents' && <AgentsTab />}
       </div>
     </div>
   );

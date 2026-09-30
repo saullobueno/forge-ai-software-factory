@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentRunStatus } from '@forge/types';
+import type { AgentRole, AgentRunStatus } from '@forge/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/badge';
@@ -430,6 +430,8 @@ export function AgentRunDetailView({
 }) {
   const queryClient = useQueryClient();
   const [liveStatus, setLiveStatus] = useState<AgentRunStatus | null>(null);
+  // Texto do modelo chegando em streaming (evento SSE com `token`); zera a cada evento de status.
+  const [liveOutput, setLiveOutput] = useState<{ role: AgentRole; text: string } | null>(null);
 
   const projectQuery = useQuery({
     queryKey: ['projects', projectId],
@@ -470,7 +472,13 @@ export function AgentRunDetailView({
 
     source.onmessage = (event: MessageEvent<string>) => {
       try {
-        const payload = JSON.parse(event.data) as { status: AgentRunStatus };
+        const payload = JSON.parse(event.data) as { status: AgentRunStatus; token?: { role: AgentRole; delta: string } };
+        if (payload.token) {
+          const { role, delta } = payload.token;
+          setLiveOutput((current) => ({ role, text: current?.role === role ? current.text + delta : delta }));
+          return;
+        }
+        setLiveOutput(null);
         setLiveStatus(payload.status);
         void queryClient.invalidateQueries({ queryKey: ['agent-runs', runId] });
       } catch {
@@ -537,6 +545,15 @@ export function AgentRunDetailView({
           )}
         </div>
       </div>
+
+      {liveOutput && !['completed', 'failed', 'cancelled'].includes(currentStatus) && (
+        <section aria-label="Saída do modelo ao vivo" className="rounded-lg border border-border p-3">
+          <h2 className="text-xs font-medium text-muted-foreground">Saída do modelo ao vivo — {AGENT_ROLE_LABELS[liveOutput.role]}</h2>
+          <pre data-testid="live-output" className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+            {liveOutput.text}
+          </pre>
+        </section>
+      )}
 
       {cancelRun.isError && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

@@ -63,6 +63,8 @@ export interface ApiProject {
   techProfile: ApiTechProfile;
   architectureNotes: string | null;
   codeRules: string | null;
+  /** Provedor de IA do projeto (`null` = padrão do servidor). */
+  aiProvider: 'mock' | 'groq' | 'gemini' | 'anthropic' | null;
   createdAt: string;
   updatedAt: string;
   /** Projeto de demonstração: a API bloqueia editar/excluir (e as tarefas dele). */
