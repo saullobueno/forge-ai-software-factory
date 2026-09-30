@@ -80,3 +80,7 @@ export type ChangeTaskStatusRequest = z.infer<typeof changeTaskStatusRequestSche
 /** Corpo de `POST /tasks/:id/dependencies`. */
 export const addTaskDependencyRequestSchema = z.object({ dependsOnTaskId: idSchema });
 export type AddTaskDependencyRequest = z.infer<typeof addTaskDependencyRequestSchema>;
+
+/** Corpo de `POST /tasks/:id/comments`. */
+export const createTaskCommentRequestSchema = z.object({ body: z.string().trim().min(1).max(4000) });
+export type CreateTaskCommentRequest = z.infer<typeof createTaskCommentRequestSchema>;

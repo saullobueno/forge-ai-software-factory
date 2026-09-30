@@ -15,11 +15,13 @@ import {
 import {
   addTaskDependencyRequestSchema,
   changeTaskStatusRequestSchema,
+  createTaskCommentRequestSchema,
   idSchema,
   listTasksQuerySchema,
   updateTaskRequestSchema,
   type AddTaskDependencyRequest,
   type ChangeTaskStatusRequest,
+  type CreateTaskCommentRequest,
   type ListTasksQuery,
   type UpdateTaskRequest,
 } from '@forge/types';
@@ -101,6 +103,70 @@ export class TasksController {
     if (!removed) {
       throw new NotFoundException('Dependência não encontrada.');
     }
+  }
+
+  @Get(':id/comments')
+  @RequirePermission('task:read')
+  async listComments(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+    const comments = await this.tasksService.listComments(id, user.organizationId);
+    if (!comments) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+    return comments;
+  }
+
+  @Post(':id/comments')
+  @RequirePermission('task:read')
+  async addComment(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createTaskCommentRequestSchema)) body: CreateTaskCommentRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+    const comments = await this.tasksService.addComment(id, user.organizationId, user.userId, body.body);
+    if (!comments) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+    return comments;
+  }
+
+  @Delete(':id/comments/:commentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('task:read')
+  async deleteComment(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    if (!idSchema.safeParse(id).success || !idSchema.safeParse(commentId).success) {
+      throw new NotFoundException('Comentário não encontrado.');
+    }
+    const removed = await this.tasksService.deleteComment(id, commentId, user.organizationId, {
+      userId: user.userId,
+      role: user.role,
+    });
+    if (!removed) {
+      throw new NotFoundException('Comentário não encontrado.');
+    }
+  }
+
+  /** Histórico de atividade da tarefa (eventos de auditoria dela). */
+  @Get(':id/activity')
+  @RequirePermission('task:read')
+  async activity(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    if (!idSchema.safeParse(id).success) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+    const activity = await this.tasksService.listActivity(id, user.organizationId);
+    if (!activity) {
+      throw new NotFoundException('Tarefa não encontrada.');
+    }
+    return activity;
   }
 
   @Get(':id')

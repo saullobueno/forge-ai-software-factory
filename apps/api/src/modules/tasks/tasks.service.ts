@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
-import { nextTaskStatuses, transitionTaskStatus } from '@forge/domain';
+import { hasPermission, nextTaskStatuses, transitionTaskStatus } from '@forge/domain';
 import type { CreateTaskRequest, ListTasksQuery, MemberRole, TaskStatus, UpdateTaskRequest } from '@forge/types';
 import { readProtectedProjectSlugs } from '../../infrastructure/config/env.js';
 import { AgentRunsService } from '../agent-runs/agent-runs.service.js';
@@ -7,7 +7,14 @@ import type { AgentRunRow } from '../agent-runs/agent-runs.repository.js';
 import { AuditLogsService } from '../audit-logs/audit-logs.service.js';
 import { UsersRepository } from '../users/users.repository.js';
 import type { Page } from '../projects/projects.repository.js';
-import { TasksRepository, type TaskListRow, type TaskRow, type TaskWithDependencies } from './tasks.repository.js';
+import {
+  TasksRepository,
+  type TaskActivityItem,
+  type TaskCommentItem,
+  type TaskListRow,
+  type TaskRow,
+  type TaskWithDependencies,
+} from './tasks.repository.js';
 
 export type TaskListItem = TaskListRow & {
   projectIsProtected: boolean;
@@ -193,6 +200,72 @@ export class TasksService {
       metadata: { projectId: task.projectId, dependsOnTaskId },
     });
     return true;
+  }
+
+  /** `undefined` quando a tarefa não existe no tenant. */
+  async listComments(taskId: string, organizationId: string): Promise<TaskCommentItem[] | undefined> {
+    if (!(await this.tasksRepository.findById(taskId, organizationId))) return undefined;
+    return this.tasksRepository.listComments(taskId, organizationId);
+  }
+
+  /** Comentários ficam desligados no projeto de demonstração (contas públicas compartilhadas). */
+  async addComment(
+    taskId: string,
+    organizationId: string,
+    actorUserId: string,
+    body: string,
+  ): Promise<TaskCommentItem[] | undefined> {
+    const task = await this.tasksRepository.findById(taskId, organizationId);
+    if (!task) return undefined;
+
+    const slug = await this.tasksRepository.findProjectSlug(taskId, organizationId);
+    if (slug !== undefined && readProtectedProjectSlugs().has(slug)) {
+      throw new ForbiddenException('Comentários estão desativados nas tarefas do projeto de demonstração.');
+    }
+
+    await this.tasksRepository.addComment({ organizationId, taskId, authorUserId: actorUserId, body });
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId,
+      action: 'task.comment_added',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { projectId: task.projectId },
+    });
+    return this.tasksRepository.listComments(taskId, organizationId);
+  }
+
+  /** Só o autor ou quem tem `project:write` apaga; `false` quando o comentário não existe. */
+  async deleteComment(
+    taskId: string,
+    commentId: string,
+    organizationId: string,
+    actor: { userId: string; role: MemberRole },
+  ): Promise<boolean> {
+    const comment = await this.tasksRepository.findComment(commentId, taskId, organizationId);
+    if (!comment) return false;
+
+    if (comment.authorUserId !== actor.userId && !hasPermission(actor.role, 'project:write')) {
+      throw new ForbiddenException('Só o autor ou um tech lead/admin pode apagar este comentário.');
+    }
+
+    await this.tasksRepository.deleteComment(commentId);
+    await this.auditLogsService.record({
+      organizationId,
+      actorType: 'user',
+      actorUserId: actor.userId,
+      action: 'task.comment_deleted',
+      targetType: 'task',
+      targetId: taskId,
+      metadata: { commentId },
+    });
+    return true;
+  }
+
+  async listActivity(taskId: string, organizationId: string): Promise<TaskActivityItem[] | undefined> {
+    if (!(await this.tasksRepository.findById(taskId, organizationId))) return undefined;
+    return this.tasksRepository.listActivity(taskId, organizationId);
   }
 
   /** `from` alcança `to` seguindo arestas "depende de"? (busca em largura) */

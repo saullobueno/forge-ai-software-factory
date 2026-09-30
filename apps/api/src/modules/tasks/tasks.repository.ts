@@ -11,6 +11,22 @@ export type TaskDependencyWithTarget = typeof schema.taskDependencies.$inferSele
   dependsOnTask: TaskRow;
 };
 
+export interface TaskCommentItem {
+  id: string;
+  body: string;
+  createdAt: Date;
+  authorUserId: string | null;
+  authorName: string | null;
+}
+
+export interface TaskActivityItem {
+  id: string;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  actorName: string | null;
+}
+
 export type TaskListRow = TaskRow & { projectName: string; projectSlug: string };
 
 export type TaskWithDependencies = TaskRow & {
@@ -113,6 +129,68 @@ export class TasksRepository {
       .where(and(eq(schema.taskDependencies.taskId, taskId), eq(schema.taskDependencies.dependsOnTaskId, dependsOnTaskId)))
       .returning();
     return removed.length > 0;
+  }
+
+  async listComments(taskId: string, organizationId: string): Promise<TaskCommentItem[]> {
+    return this.database.db
+      .select({
+        id: schema.taskComments.id,
+        body: schema.taskComments.body,
+        createdAt: schema.taskComments.createdAt,
+        authorUserId: schema.taskComments.authorUserId,
+        authorName: schema.users.name,
+      })
+      .from(schema.taskComments)
+      .leftJoin(schema.users, eq(schema.users.id, schema.taskComments.authorUserId))
+      .where(and(eq(schema.taskComments.taskId, taskId), eq(schema.taskComments.organizationId, organizationId)))
+      .orderBy(asc(schema.taskComments.createdAt), asc(schema.taskComments.id));
+  }
+
+  async addComment(input: { organizationId: string; taskId: string; authorUserId: string; body: string }): Promise<string> {
+    const [row] = await this.database.db.insert(schema.taskComments).values(input).returning();
+    if (!row) throw new Error('Falha ao inserir o comentário.');
+    return row.id;
+  }
+
+  async findComment(commentId: string, taskId: string, organizationId: string) {
+    const [row] = await this.database.db
+      .select()
+      .from(schema.taskComments)
+      .where(
+        and(
+          eq(schema.taskComments.id, commentId),
+          eq(schema.taskComments.taskId, taskId),
+          eq(schema.taskComments.organizationId, organizationId),
+        ),
+      );
+    return row;
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    await this.database.db.delete(schema.taskComments).where(eq(schema.taskComments.id, commentId));
+  }
+
+  /** Eventos de auditoria da própria tarefa, mais recentes primeiro, com o nome de quem agiu. */
+  async listActivity(taskId: string, organizationId: string): Promise<TaskActivityItem[]> {
+    return this.database.db
+      .select({
+        id: schema.auditLogs.id,
+        action: schema.auditLogs.action,
+        metadata: schema.auditLogs.metadata,
+        createdAt: schema.auditLogs.createdAt,
+        actorName: schema.users.name,
+      })
+      .from(schema.auditLogs)
+      .leftJoin(schema.users, eq(schema.users.id, schema.auditLogs.actorUserId))
+      .where(
+        and(
+          eq(schema.auditLogs.organizationId, organizationId),
+          eq(schema.auditLogs.targetType, 'task'),
+          eq(schema.auditLogs.targetId, taskId),
+        ),
+      )
+      .orderBy(desc(schema.auditLogs.createdAt), desc(schema.auditLogs.id))
+      .limit(100);
   }
 
   async setStatus(taskId: string, organizationId: string, status: TaskStatus): Promise<TaskRow | undefined> {

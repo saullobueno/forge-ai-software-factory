@@ -44,3 +44,25 @@ export const taskDependencies = pgTable('task_dependencies', {
   ),
   index('task_dependencies_depends_on_task_id_idx').on(table.dependsOnTaskId),
 ]);
+
+/**
+ * Comentários de uma tarefa. `authorUserId` é nullable/`set null` (mesmo padrão
+ * de `approvals`): excluir um usuário nunca bloqueia nem apaga o histórico.
+ * Somem junto com a tarefa (cascade).
+ */
+export const taskComments = pgTable('task_comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('task_comments_organization_id_idx').on(table.organizationId),
+  index('task_comments_task_id_idx').on(table.taskId),
+]);

@@ -8,6 +8,8 @@ import { Badge } from '@/components/badge';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { ConfirmDeleteButton } from '@/components/confirm-delete-button';
 import { EditTaskForm } from '@/components/edit-task-form';
+import { TaskActivity } from '@/components/task-activity';
+import { TaskComments } from '@/components/task-comments';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { AGENT_RUN_STATUS_LABELS, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/labels';
 import { agentRunStatusTone, taskPriorityTone, taskStatusTone } from '@/lib/status-tone';
@@ -239,6 +241,14 @@ export function TaskDetailView({ projectId, taskId }: { projectId: string; taskI
           </p>
         )}
       </section>
+
+      <TaskComments
+        taskId={taskId}
+        currentUser={currentUserQuery.data}
+        disabled={projectQuery.data?.isProtected !== false}
+      />
+
+      <TaskActivity taskId={taskId} />
 
       {agentRunsQuery.data && agentRunsQuery.data.length > 0 && (
         <section className="rounded-lg border border-border p-4">

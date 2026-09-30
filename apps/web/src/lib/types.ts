@@ -198,6 +198,24 @@ export interface ApiUser {
   avatarUrl: string | null;
 }
 
+/** Comentário de tarefa (`GET /tasks/:id/comments`). */
+export interface ApiTaskComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  authorUserId: string | null;
+  authorName: string | null;
+}
+
+/** Evento de auditoria da tarefa (`GET /tasks/:id/activity`). */
+export interface ApiTaskActivity {
+  id: string;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actorName: string | null;
+}
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;
