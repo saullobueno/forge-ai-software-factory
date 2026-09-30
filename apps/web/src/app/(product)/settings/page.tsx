@@ -465,7 +465,7 @@ function AgentsTab() {
       </h2>
       <p className="text-sm text-muted-foreground">Um agente por papel do pipeline: ajuste nome, instruções, ferramentas permitidas e se participa das execuções.</p>
       {isLoading && <p className="text-sm text-muted-foreground">Carregando agentes…</p>}
-      <div className="grid gap-4 lg:grid-cols-2">{data?.map((agent) => <AgentCard key={`${agent.id}-${agent.name}-${agent.instructions}-${agent.isEnabled}`} agent={agent} />)}</div>
+      <div className="grid gap-4 lg:grid-cols-2">{data?.map((agent) => <AgentCard key={agent.id} agent={agent} />)}</div>
     </section>
   );
 }

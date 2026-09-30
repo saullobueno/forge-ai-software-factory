@@ -56,7 +56,7 @@ test('playground: salva dataset, carrega versão, cria nova versão e avalia por
   await expect(panel.getByRole('status')).toContainText('Nova versão 2 salva.');
 
   // volta para a v1 e verifica que é imutável (título original)
-  await panel.getByLabel('Versão').selectOption('1');
+  await panel.locator('select').nth(1).selectOption('1');
   await panel.getByRole('button', { name: 'Carregar no editor' }).click();
   await expect(panel.getByTestId('loaded-dataset')).toContainText(`${name} v1 — a avaliação usa esta versão salva.`);
   await expect(editor).not.toHaveValue(/Título editado/);

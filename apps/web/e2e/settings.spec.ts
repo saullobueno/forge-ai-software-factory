@@ -94,7 +94,7 @@ test('configurações: matriz de papéis e políticas de ferramentas (só mais r
   await context.close();
 });
 
-test('configurações: papel sem acesso vê aviso e platform_engineer só vê Políticas', async ({ browser }) => {
+test('configurações: papel sem acesso vê aviso e platform_engineer só vê Políticas e Agentes', async ({ browser }) => {
   const devContext = await browser.newContext();
   const dev = await devContext.newPage();
   await login(dev, 'dev@acme-platform.example');
@@ -107,7 +107,8 @@ test('configurações: papel sem acesso vê aviso e platform_engineer só vê Po
   const platform = await platformContext.newPage();
   await login(platform, 'platform@acme-platform.example');
   await platform.goto('/settings');
-  await expect(platform.getByRole('tab')).toHaveCount(1);
+  await expect(platform.getByRole('tab')).toHaveCount(2);
   await expect(platform.getByRole('tab', { name: 'Políticas' })).toBeVisible();
+  await expect(platform.getByRole('tab', { name: 'Agentes' })).toBeVisible();
   await platformContext.close();
 });
