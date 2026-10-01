@@ -15,6 +15,7 @@ const PROTECTED_PREFIXES = [
   '/approvals',
   '/notifications',
   '/settings',
+  '/account',
 ];
 const API_PROXY_PREFIX = '/api/';
 
@@ -89,6 +90,7 @@ export const config = {
     '/approvals',
     '/notifications',
     '/settings',
+    '/account',
     '/login',
   ],
 };

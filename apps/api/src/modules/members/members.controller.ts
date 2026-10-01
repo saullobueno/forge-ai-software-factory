@@ -9,8 +9,11 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { RateLimiterService } from '../../infrastructure/rate-limit/rate-limiter.service.js';
 import { getRolePermissions } from '@forge/domain';
 import {
   acceptInvitationRequestSchema,
@@ -38,7 +41,10 @@ function requireId(id: string, message: string): string {
 /** Configurações → Usuários e Convites (só quem tem `member:manage`). */
 @Controller()
 export class MembersController {
-  constructor(private readonly membersService: MembersService) {}
+  constructor(
+    private readonly membersService: MembersService,
+    private readonly rateLimiter: RateLimiterService,
+  ) {}
 
   @Get('members')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -101,12 +107,14 @@ export class MembersController {
 
   /** Público: a pessoa convidada ainda não tem conta. O token é a credencial. */
   @Get('invitations/lookup/:token')
-  async lookup(@Param('token') token: string) {
+  async lookup(@Param('token') token: string, @Req() request: Request) {
+    this.rateLimiter.consume(`invite:${request.ip ?? 'unknown'}`, 30, 60_000);
     return this.membersService.lookupInvitation(token);
   }
 
   @Post('invitations/accept')
-  async accept(@Body(new ZodValidationPipe(acceptInvitationRequestSchema)) body: AcceptInvitationRequest) {
+  async accept(@Body(new ZodValidationPipe(acceptInvitationRequestSchema)) body: AcceptInvitationRequest, @Req() request: Request) {
+    this.rateLimiter.consume(`invite:${request.ip ?? 'unknown'}`, 30, 60_000);
     return this.membersService.acceptInvitation(body);
   }
 }

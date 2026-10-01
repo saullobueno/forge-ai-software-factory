@@ -23,7 +23,25 @@ export class ApiError extends Error {
  * expirou/foi revogada depois que o `proxy.ts` (checagem só de presença de
  * cookie) já deixou passar a navegação inicial.
  */
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+let refreshInFlight: Promise<boolean> | null = null;
+
+/**
+ * Renova o acesso (JWT curto) com o cookie de refresh. Uma única renovação por vez no navegador:
+ * várias requisições que recebem 401 juntas esperam a mesma, em vez de disputar a rotação do token.
+ */
+function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+    .then((response) => response.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshInFlight = null;
+    });
+  return refreshInFlight;
+}
+
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout', '/auth/2fa/verify'];
+
+export async function apiFetch<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
     credentials: 'include',
@@ -32,6 +50,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ...init?.headers,
     },
   });
+
+  // Acesso vencido (JWT curto): tenta renovar com o refresh token UMA vez e repete a requisição.
+  if (response.status === 401 && !retried && !NO_REFRESH_PATHS.some((prefix) => path.startsWith(prefix))) {
+    if (await refreshSession()) return apiFetch<T>(path, init, true);
+  }
 
   if (response.status === 401) {
     if (typeof window !== 'undefined') {

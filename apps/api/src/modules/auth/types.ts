@@ -10,6 +10,10 @@ export interface JwtPayload {
   sub: string;
   organizationId: string;
   role: MemberRole;
+  /** Id da sessão revogável (`user_sessions`); tokens sem ele não autenticam. */
+  sid?: string;
+  /** Presente só em tokens de desafio 2FA, que NUNCA autenticam requisições. */
+  purpose?: string;
 }
 
 /**
@@ -20,4 +24,5 @@ export interface AuthenticatedUser {
   userId: string;
   organizationId: string;
   role: MemberRole;
+  sessionId: string;
 }

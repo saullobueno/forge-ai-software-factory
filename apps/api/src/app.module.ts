@@ -1,6 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { env } from './infrastructure/config/env.js';
+import { RateLimitModule } from './infrastructure/rate-limit/rate-limit.module.js';
+import { securityHeaders } from './infrastructure/security/security-headers.middleware.js';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
 import { QueueModule } from './infrastructure/queue/queue.module.js';
 import { AIPlaygroundModule } from './modules/ai-playground/ai-playground.module.js';
@@ -25,6 +28,7 @@ import { UsersModule } from './modules/users/users.module.js';
 @Module({
   imports: [
     DatabaseModule,
+    RateLimitModule,
     QueueModule,
     AuthModule,
     ProjectsModule,
@@ -48,4 +52,8 @@ import { UsersModule } from './modules/users/users.module.js';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(securityHeaders(env.NODE_ENV === 'production')).forRoutes('*');
+  }
+}

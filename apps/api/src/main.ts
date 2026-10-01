@@ -13,6 +13,9 @@ async function bootstrap() {
   // Necessário para o fallback de leitura do cookie `forge_session` em
   // JwtAuthGuard — sem isso, `request.cookies` fica undefined.
   app.use(cookieParser());
+  // Atrás do proxy do Next/Render: `request.ip` passa a ser o cliente real (X-Forwarded-For), usado por
+  // limites de taxa e pelo registro de sessões.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
   // `env.API_PORT` (default 3001) é validado por zod em infrastructure/config/env.ts.
   // Antes lia `process.env.PORT` direto (sem validação, default 3000) — mesma
   // porta padrão do `apps/web` (`next dev`), o que colidiria ao rodar os dois

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ThemeMenuItem } from '@/components/theme-toggle';
 import { apiFetch } from '@/lib/api-client';
@@ -108,6 +109,14 @@ export function UserMenu({ user }: { user: ApiCurrentUser | undefined }) {
             </p>
           </div>
           <div role="separator" className="my-1 h-px bg-border" />
+          <Link
+            href="/account"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+          >
+            Minha conta
+          </Link>
           <ThemeMenuItem />
           <button
             type="button"

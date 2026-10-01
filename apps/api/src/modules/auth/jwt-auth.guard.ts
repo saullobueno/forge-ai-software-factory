@@ -2,6 +2,7 @@ import { CanActivate, type ExecutionContext, Injectable, UnauthorizedException }
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { env } from '../../infrastructure/config/env.js';
+import { SessionsService } from './sessions.service.js';
 import type { AuthenticatedUser, JwtPayload } from './types.js';
 
 const SESSION_COOKIE_NAME = 'forge_session';
@@ -17,7 +18,10 @@ const SESSION_COOKIE_NAME = 'forge_session';
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly sessions: SessionsService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context
@@ -31,10 +35,17 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, { secret: env.JWT_SECRET });
+      if (!payload.sid || payload.purpose) throw new UnauthorizedException('Não autenticado.');
+
+      // A sessão precisa estar ativa (não revogada nem vencida) e o papel/organização vêm do banco:
+      // trocar o papel de alguém ou revogar a sessão vale na próxima requisição, não só quando o JWT vence.
+      const active = await this.sessions.findActive(payload.sid);
+      if (!active || active.user.id !== payload.sub) throw new UnauthorizedException('Não autenticado.');
       request.user = {
-        userId: payload.sub,
-        organizationId: payload.organizationId,
-        role: payload.role,
+        userId: active.user.id,
+        organizationId: active.user.organizationId,
+        role: active.user.role,
+        sessionId: active.session.id,
       };
       return true;
     } catch {
