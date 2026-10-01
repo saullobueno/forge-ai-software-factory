@@ -17,6 +17,10 @@ Plataforma onde agentes de IA recebem tarefas de engenharia, propõem mudanças 
 - **Conhecimento (RAG)**: indexação de arquivos reais, detecção de conteúdo desatualizado por hash, reindexação sob demanda e ranking híbrido (lexical + vetorial determinístico), com defesa contra prompt injection no contexto recuperado.
 - **Observabilidade**: traces, métricas e logs OpenTelemetry (inclusive um span por query SQL), correlação de trace entre front-end e API, redação de dados sensíveis.
 - **Qualidade**: CI no GitHub Actions (lint, typecheck, testes, build e *budgets* de bundle por rota), testes e2e reais (PGlite/Postgres e Playwright, sem mocks de banco), auditoria de acessibilidade com axe (claro e escuro) e Lighthouse.
+- **Produtividade**: página global de **Tarefas** (Kanban/lista), responsável e etiquetas, dependências sem ciclo, comentários e atividade, **busca global** (Ctrl+K) e **notificações** (sino).
+- **Administração**: **Configurações** com usuários (papéis, remoção), **convites** de uso único, matriz de papéis, **políticas de ferramentas** por organização (só restringem), **agentes** configuráveis e botão **Resetar demonstração**.
+- **IA por projeto**: provedor escolhido por projeto, **streaming** da saída do modelo ao vivo, **datasets versionados** no Playground.
+- **Segurança**: **sessões revogáveis** (acesso de 15 min + refresh rotativo com detecção de reuso), **2FA TOTP** com códigos de recuperação, limite de tentativas de login, cabeçalhos de segurança/CSP.
 - **Acessível e responsivo**: tema claro/escuro persistente, navegação por teclado, skip link, layout mobile com menu recolhível.
 
 ## Telas
@@ -29,8 +33,14 @@ Plataforma onde agentes de IA recebem tarefas de engenharia, propõem mudanças 
 | ![Playground](docs/screenshots/13-playground-scorecard-dark.png) **Playground**: compara modelos com scorecard | ![Auditoria](docs/screenshots/14-auditoria-dark.png) **Auditoria** de tudo que muda estado |
 | ![Novo projeto](docs/screenshots/15-novo-projeto-dark.png) **Criar projeto** (também editar/excluir, tarefas) | ![Menu do usuário](docs/screenshots/06-menu-usuario-dark.png) **Menu do usuário** com papel e logout |
 | ![Tema claro](docs/screenshots/16-projeto-detalhe-light.png) **Tema claro** | ![Mobile](docs/screenshots/18-mobile-menu-dark.png) **Mobile**, menu recolhível |
+| ![Tarefas](docs/screenshots/19-tarefas-kanban-dark.png) **Tarefas**: Kanban e lista, responsável, etiquetas, dependências | ![Busca global](docs/screenshots/20-busca-global-dark.png) **Busca global** (Ctrl+K) |
+| ![Usuários](docs/screenshots/23-configuracoes-usuarios-dark.png) **Configurações**: usuários e convites | ![Papéis](docs/screenshots/24-configuracoes-papeis-dark.png) **Papéis e permissões** (matriz) |
+| ![Políticas](docs/screenshots/25-configuracoes-politicas-dark.png) **Políticas de ferramentas** (só restringem) | ![Agentes](docs/screenshots/26-configuracoes-agentes-dark.png) **Agentes** configuráveis |
+| ![Datasets](docs/screenshots/21-playground-datasets-dark.png) **Playground**: datasets versionados | ![Conta](docs/screenshots/22-minha-conta-dark.png) **Minha conta**: sessões e 2FA |
 
 Os screenshots são gerados por `pnpm --filter @forge/web screenshots` (ver `apps/web/scripts/capture-screenshots.mjs`).
+
+Documentação extra: [arquitetura C4](docs/architecture/c4.md) · [ADRs](docs/adr/README.md) · [roteiro de demo](docs/demo-script.md) · [dashboard Grafana](docs/observability/README.md) · [rascunho de artigo](docs/blog-post-draft.md) · [threat model](docs/threat-model.md).
 
 ## Roteiro de demonstração (5 minutos)
 

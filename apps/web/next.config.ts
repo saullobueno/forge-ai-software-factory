@@ -27,14 +27,19 @@ const isProduction = process.env.NODE_ENV === 'production';
 // ser embutida (`frame-ancestors`), nem usar `<base>`/`<object>`, e formulários só enviam para si mesma.
 // `'unsafe-inline'` em script/estilo é o custo de não usar nonce por requisição (o Next injeta scripts
 // inline de hidratação e o tema escuro usa um script inline); `'unsafe-eval'` e `ws:` só em desenvolvimento
-// (React Refresh/HMR). Tudo o que sai do navegador passa pelo proxy same-origin `/api`.
+// (React Refresh/HMR). Tudo o que sai do navegador passa pelo proxy same-origin `/api`. Exceção
+// explícita: o editor Monaco (`@monaco-editor/react`) carrega seu código e a fonte de ícones do
+// jsDelivr, e roda os workers via `blob:`.
+const MONACO_CDN = 'https://cdn.jsdelivr.net';
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isProduction ? '' : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline' ${MONACO_CDN}${isProduction ? '' : " 'unsafe-eval'"}`,
+  `style-src 'self' 'unsafe-inline' ${MONACO_CDN}`,
   "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self'${isProduction ? '' : ' ws: wss:'}`,
+  `font-src 'self' data: ${MONACO_CDN}`,
+  `connect-src 'self' ${MONACO_CDN}${isProduction ? '' : ' ws: wss:'}`,
+  "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

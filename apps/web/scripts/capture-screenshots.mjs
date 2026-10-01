@@ -141,6 +141,58 @@ for (const scheme of ['dark', 'light']) {
   await context.close();
 }
 
+// ---- tarefas, notificações, configurações, conta e playground com datasets (opcionais da fase 2)
+{
+  const { context, page } = await newPage('dark');
+  await login(page);
+
+  await page.goto(`${BASE_URL}/tasks`, { waitUntil: 'networkidle' });
+  await settle(page, 800);
+  await shot(page, '19-tarefas-kanban-dark');
+
+  await page.getByTestId('open-search').click();
+  await page.getByTestId('command-palette').getByRole('combobox').fill('Estornos');
+  await settle(page, 800);
+  await shot(page, '20-busca-global-dark');
+  await page.keyboard.press('Escape');
+
+  await page.goto(`${BASE_URL}/ai-playground`, { waitUntil: 'networkidle' });
+  await page.getByTestId('playground-datasets').waitFor();
+  await settle(page, 600);
+  await shot(page, '21-playground-datasets-dark', { fullPage: true });
+
+  await page.goto(`${BASE_URL}/account`, { waitUntil: 'networkidle' });
+  await page.getByTestId('sessions-list').waitFor();
+  await settle(page, 600);
+  await shot(page, '22-minha-conta-dark', { fullPage: true });
+  await context.close();
+}
+
+{
+  const { context, page } = await newPage('dark');
+  await login(page, 'admin@acme-platform.example');
+  await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });
+  await page.getByTestId('members-table').waitFor();
+  await settle(page, 600);
+  await shot(page, '23-configuracoes-usuarios-dark');
+
+  await page.getByRole('tab', { name: 'Papéis' }).click();
+  await page.getByTestId('roles-matrix').waitFor();
+  await settle(page, 400);
+  await shot(page, '24-configuracoes-papeis-dark', { fullPage: true });
+
+  await page.getByRole('tab', { name: 'Políticas' }).click();
+  await page.getByTestId('policies-table').waitFor();
+  await settle(page, 400);
+  await shot(page, '25-configuracoes-politicas-dark', { fullPage: true });
+
+  await page.getByRole('tab', { name: 'Agentes' }).click();
+  await page.getByTestId('agent-card').first().waitFor();
+  await settle(page, 400);
+  await shot(page, '26-configuracoes-agentes-dark', { fullPage: true });
+  await context.close();
+}
+
 // ---- tema claro
 {
   const { context, page } = await newPage('light');

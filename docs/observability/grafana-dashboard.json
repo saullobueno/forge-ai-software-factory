@@ -1,0 +1,58 @@
+{
+  "__inputs": [{ "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus", "pluginName": "Prometheus" }],
+  "title": "Forge — Execuções de IA",
+  "uid": "forge-agent-runs",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["forge", "otel", "agents"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Tool calls (total na janela)", "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(increase(forge_tool_call_count_total[$__range]))", "refId": "A" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Tool calls bloqueadas/negadas (%)", "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.1 }, { "color": "red", "value": 0.3 }] } }, "overrides": [] },
+      "targets": [{ "expr": "sum(increase(forge_tool_call_count_total{forge_status=~\"denied|rejected|failed\"}[$__range])) / clamp_min(sum(increase(forge_tool_call_count_total[$__range])), 1)", "refId": "A" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Steps concluídos", "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(increase(forge_agent_step_duration_ms_count[$__range]))", "refId": "A" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Steps com falha (%)", "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [{ "expr": "sum(increase(forge_agent_step_duration_ms_count{forge_status=\"failed\"}[$__range])) / clamp_min(sum(increase(forge_agent_step_duration_ms_count[$__range])), 1)", "refId": "A" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Tool calls por ferramenta e status (taxa/min)", "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum by (forge_tool_name, forge_status) (rate(forge_tool_call_count_total[5m])) * 60", "legendFormat": "{{forge_tool_name}} · {{forge_status}}", "refId": "A" }]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Duração de steps por papel — p50 / p95 (ms)", "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le, forge_role) (rate(forge_agent_step_duration_ms_bucket[5m])))", "legendFormat": "p50 {{forge_role}}", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by (le, forge_role) (rate(forge_agent_step_duration_ms_bucket[5m])))", "legendFormat": "p95 {{forge_role}}", "refId": "B" }
+      ]
+    },
+    {
+      "id": 7, "type": "barchart", "title": "Steps por papel e status", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum by (forge_role, forge_status) (increase(forge_agent_step_duration_ms_count[$__range]))", "legendFormat": "{{forge_role}} · {{forge_status}}", "refId": "A", "instant": true }]
+    },
+    {
+      "id": 8, "type": "text", "title": "Como ler", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "options": { "mode": "markdown", "content": "**Fonte:** métricas OTel exportadas pela API (`OTEL_EXPORTER_OTLP_ENDPOINT`) → OpenTelemetry Collector → Prometheus.\n\n- `forge_tool_call_count_total` — chamadas de ferramenta por `forge_tool_name` e `forge_status`.\n- `forge_agent_step_duration_ms` — histograma de duração por `forge_role` e `forge_status`.\n\nTraces e logs (com `traceId`/`spanId`) seguem para o mesmo endpoint: use o Tempo/Loki para detalhar uma execução. Veja `docs/observability/README.md`." }
+    }
+  ]
+}

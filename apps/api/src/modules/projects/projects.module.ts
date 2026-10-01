@@ -14,6 +14,6 @@ import { ProjectsService } from './projects.service.js';
   // Exportado para que `CodeModule` (Fase 5) reutilize a mesma checagem de
   // tenant/existência de projeto usada aqui, sem duplicar a camada de
   // acesso a dados — mesmo motivo de `TasksModule` exportar `TasksService`.
-  exports: [ProjectsService],
+  exports: [ProjectsService, ProjectsRepository],
 })
 export class ProjectsModule {}

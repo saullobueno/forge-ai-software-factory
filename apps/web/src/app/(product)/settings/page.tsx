@@ -24,7 +24,7 @@ import type { ApiCurrentUser } from '@/lib/types';
 const INPUT_CLASS = 'rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary';
 const BUTTON_CLASS = 'rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60';
 
-type TabKey = 'members' | 'invitations' | 'roles' | 'policies' | 'agents';
+type TabKey = 'members' | 'invitations' | 'roles' | 'policies' | 'agents' | 'demo';
 
 const errorMessage = (error: unknown): string => (error instanceof ApiError ? error.message : 'Não foi possível concluir a ação.');
 
@@ -470,15 +470,70 @@ function AgentsTab() {
   );
 }
 
+function DemoTab() {
+  const queryClient = useQueryClient();
+  const [summary, setSummary] = useState<Record<string, number | boolean> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = async () => {
+    const result = await apiFetch<Record<string, number | boolean>>('/demo/reset', { method: 'POST' });
+    setError(null);
+    setSummary(result);
+    void queryClient.invalidateQueries();
+  };
+
+  return (
+    <section aria-labelledby="demo-heading" className="flex flex-col gap-3">
+      <h2 id="demo-heading" className="text-lg font-medium">
+        Demonstração
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        Devolve a organização de demonstração ao estado inicial: remove projetos, usuários, convites e datasets criados por visitantes, restaura os agentes e limpa as políticas de ferramentas. O projeto de exemplo e as contas de demonstração são preservados.
+      </p>
+      {error && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+      <div>
+        <ConfirmDeleteButton
+          label="Resetar demonstração"
+          description="Remover tudo o que foi criado por visitantes e restaurar os padrões?"
+          testId="demo-reset"
+          onDelete={async () => {
+            try {
+              await reset();
+            } catch (caught) {
+              setError(errorMessage(caught));
+              throw caught;
+            }
+          }}
+        />
+      </div>
+      {summary && (
+        <p role="status" data-testid="demo-reset-result" className="text-sm">
+          Demonstração restaurada: {String(summary['projectsRemoved'])} projeto(s), {String(summary['membersRemoved'])} usuário(s) e {String(summary['invitationsRemoved'])} convite(s) removidos; {String(summary['agentsRestored'])} agente(s) restaurados.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const { data: user } = useQuery({ queryKey: ['me'], queryFn: () => apiFetch<ApiCurrentUser>('/auth/me') });
   const [chosen, setChosen] = useState<TabKey | null>(null);
+  const demoStatus = useQuery({
+    queryKey: ['demo-status'],
+    queryFn: () => apiFetch<{ resettable: boolean }>('/demo/status'),
+    enabled: user !== undefined && canManageMembers(user.role),
+  });
 
   const tabs: { key: TabKey; label: string }[] = [];
   if (user && canManageMembers(user.role)) {
     tabs.push({ key: 'members', label: 'Usuários' }, { key: 'invitations', label: 'Convites' }, { key: 'roles', label: 'Papéis' });
   }
   if (user && canManagePolicies(user.role)) tabs.push({ key: 'policies', label: 'Políticas' }, { key: 'agents', label: 'Agentes' });
+  if (demoStatus.data?.resettable) tabs.push({ key: 'demo', label: 'Demonstração' });
   const active = tabs.find((tab) => tab.key === chosen)?.key ?? tabs[0]?.key;
 
   return (
@@ -522,6 +577,7 @@ export default function SettingsPage() {
         {active === 'roles' && <RolesTab />}
         {active === 'policies' && <PoliciesTab />}
         {active === 'agents' && <AgentsTab />}
+        {active === 'demo' && <DemoTab />}
       </div>
     </div>
   );

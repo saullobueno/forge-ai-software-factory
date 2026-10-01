@@ -11,7 +11,7 @@ export * from './sql-operation.ts';
  * profundo (`@forge/database/src/seed/run-seed.ts`) que o `exports` map de
  * `package.json` não expõe.
  */
-export { DEMO_PASSWORD, runSeed, type SeedSummary } from './seed/run-seed.ts';
+export { buildAgentRoleCatalog, DEMO_PASSWORD, runSeed, type SeedSummary } from './seed/run-seed.ts';
 
 /**
  * Reexporta os combinadores de query do Drizzle mais usados por

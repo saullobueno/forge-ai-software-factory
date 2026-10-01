@@ -171,7 +171,7 @@ function TwoFactorSection() {
           <code data-testid="totp-secret" className="break-all rounded bg-muted px-2 py-1 text-sm">
             {setup.secret}
           </code>
-          <code className="break-all rounded bg-muted px-2 py-1 text-xs text-muted-foreground">{setup.otpauthUrl}</code>
+          <code className="break-all rounded bg-muted px-2 py-1 text-xs">{setup.otpauthUrl}</code>
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="enable-code" className="text-sm font-medium">

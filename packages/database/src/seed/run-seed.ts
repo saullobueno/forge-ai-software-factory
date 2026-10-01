@@ -102,7 +102,7 @@ function timestampAt(baseMs: number, offsetMs: number): Date {
  * etapa real do pipeline "corrigir o bug de sinal em formatCurrency", não
  * um placeholder.
  */
-function buildAgentRoleCatalog(): Record<
+export function buildAgentRoleCatalog(): Record<
   AgentRole,
   { name: string; description: string; allowedTools: string[] }
 > {

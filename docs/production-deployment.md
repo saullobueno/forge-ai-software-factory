@@ -132,3 +132,17 @@ As contas de demonstração são públicas (o login já vem preenchido), então 
 Ao atingir qualquer teto, `POST /tasks/:id/agent-runs` responde 429 e a tela da tarefa mostra a mensagem. O uso consumido aparece em `/ai-usage` ("Meu uso" e totais). Uma execução com o provider `mock` gasta cerca de 2,1 mil tokens / US$ 0,017 (estimado); com provider real o consumo depende do modelo e do contexto — ajuste os tetos olhando `/ai-usage` depois de alguns dias.
 
 **2. Projeto de demonstração protegido.** Por padrão o projeto do seed (`forge-web-app`) e as tarefas dele não podem ser editados nem excluídos por ninguém (a API responde 403 e a UI esconde os botões); criar tarefas e disparar execuções continua permitido. Projetos criados pelos visitantes são livres. Para mudar a lista: `PROTECTED_PROJECT_SLUGS=forge-web-app,outro-slug`; valor vazio (`PROTECTED_PROJECT_SLUGS=`) desliga a proteção. A proteção existe porque o seed **não** recria projeto nem tarefas apagados quando a organização já existe (ele só garante usuários, ambientes e conhecimento): restaurar a demonstração exigiria recriar o banco (`db:migrate` + `db:seed` num banco novo).
+
+**3. Contas de demonstração e "Resetar demo".** Os e-mails que terminam em `@acme-platform.example` (`PROTECTED_USER_EMAIL_SUFFIXES`, vazio desliga) não podem ser removidos nem ter o papel alterado, não ativam 2FA, não travam por tentativas de login (a senha é pública) e não enxergam/encerram sessões de outros visitantes. Quem entra como `admin@acme-platform.example` tem *Configurações → Demonstração → Resetar demonstração*, que apaga o que visitantes criaram (projetos, usuários, convites, datasets), restaura os agentes, limpa as políticas de ferramentas e revoga as sessões dos outros; o projeto de exemplo e as contas demo ficam. Uma organização real nunca é afetada (só vale para admin de conta demo).
+
+## Segurança: variáveis de sessão e 2FA
+
+| Variável | Padrão | Efeito |
+|---|---|---|
+| `ACCESS_TOKEN_TTL_MINUTES` | `15` | validade do JWT de acesso (renovado sozinho pelo refresh) |
+| `REFRESH_TOKEN_TTL_DAYS` | `7` | validade deslizante do refresh token (rotaciona a cada renovação) |
+| `SESSION_MAX_AGE_DAYS` | `30` | teto absoluto da sessão: depois disso é preciso entrar de novo |
+| `TOTP_ENCRYPTION_KEY` | derivada de `JWT_SECRET` | chave do AES-256-GCM que protege o segredo do 2FA no banco. Defina uma própria: girar o `JWT_SECRET` sem ela invalida os 2FA já configurados |
+| `AI_MOCK_STREAM_DELAY_MS` | `0` | pausa entre pedaços do streaming do provedor mock (ex.: `40` para ver o texto aparecendo na demo) |
+
+A API confia em um proxy (`trust proxy = 1`) para enxergar o IP real (Render/Vercel); os limites de taxa (login por e-mail, convites e refresh por IP) são em memória, por instância. O site responde com CSP restrita, `X-Frame-Options: DENY`, `nosniff` e HSTS (produção).

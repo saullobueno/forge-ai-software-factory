@@ -76,8 +76,10 @@ test('acesso vencido é renovado sozinho pelo refresh, sem pedir login', async (
   await page.goto('/projects');
   await expect(page).toHaveURL('/projects');
   await expect(page.getByRole('heading', { name: 'Projetos', level: 1 })).toBeVisible();
-  const renewed = (await context.cookies()).find((cookie) => cookie.name === 'forge_session');
-  expect(renewed?.value).not.toBe('jwt.vencido.invalido');
+  // o cookie de acesso foi trocado por um novo (o adulterado deixou de ser o único) e a API aceita a sessão
+  const accessCookies = (await context.cookies()).filter((cookie) => cookie.name === 'forge_session');
+  expect(accessCookies.some((cookie) => cookie.value !== 'jwt.vencido.invalido')).toBe(true);
+  expect((await page.request.get('/api/auth/me')).status()).toBe(200);
   await context.close();
 });
 
