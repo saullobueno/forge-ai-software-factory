@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginRequestSchema, type LoginRequest, type LoginResponse } from '@forge/types';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useForm } from 'react-hook-form';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { ApiError } from '@/lib/api-client';
@@ -19,7 +19,12 @@ const DEMO_ACCOUNTS = [
   { email: 'admin@acme-platform.example', password: 'demo1234', role: 'Admin' },
 ] as const;
 
+// `false` no servidor/antes da hidratação, `true` depois: enquanto o React não assumiu a página,
+// um submit nativo mandaria e-mail e senha na URL (GET) — por isso o botão só habilita hidratado.
+const subscribeNever = () => () => undefined;
+
 export default function LoginPage() {
+  const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -114,7 +119,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !hydrated}
               className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {isSubmitting ? 'Entrando…' : 'Entrar'}

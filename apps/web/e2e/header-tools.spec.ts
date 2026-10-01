@@ -52,8 +52,7 @@ test('cabeçalho: sino mostra a notificação nova, abre a tarefa e zera o conta
   await panel.getByRole('button', { name: new RegExp(title) }).click();
   await expect(page).toHaveURL(`/projects/${project.id}/tasks/${task.id}`);
 
-  await page.goto('/notifications');
-  await page.getByRole('button', { name: 'Marcar todas como lidas' }).click();
+  // abrir pelo painel já marcou como lida: o contador some
   await expect(page.getByTestId('notification-badge')).toHaveCount(0);
   await devContext.close();
 });

@@ -14,7 +14,14 @@ test.describe('acessibilidade do layout autenticado', () => {
 
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Ir para conteúdo' })).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: 'Projetos' })).toBeFocused();
+    // O cabeçalho tem controles (logo, busca, notificações, menu do usuário) antes da navegação:
+    // o link "Projetos" da navegação principal precisa ser alcançável por Tab, sem armadilha de foco.
+    const projectsLink = page.getByRole('navigation', { name: 'navegação principal' }).getByRole('link', { name: 'Projetos' });
+    let reached = false;
+    for (let attempt = 0; attempt < 12 && !reached; attempt += 1) {
+      await page.keyboard.press('Tab');
+      reached = await projectsLink.evaluate((element) => element === document.activeElement);
+    }
+    expect(reached).toBe(true);
   });
 });

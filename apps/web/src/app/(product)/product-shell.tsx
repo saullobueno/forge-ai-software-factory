@@ -130,7 +130,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event('forge:open-search'))}
-            aria-label="Buscar (Ctrl+K)"
+            aria-label="Pesquisar em todo o Forge (Ctrl+K)"
             data-testid="open-search"
             className="flex h-9 items-center gap-2 rounded-md border border-border px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
           >
@@ -138,7 +138,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.5-3.5" />
             </svg>
-            <span className="hidden sm:inline">Buscar</span>
+            <span className="hidden sm:inline">Pesquisar</span>
             <kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">Ctrl K</kbd>
           </button>
           <NotificationBell />
