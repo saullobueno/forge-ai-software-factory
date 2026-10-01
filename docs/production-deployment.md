@@ -143,6 +143,7 @@ Ao atingir qualquer teto, `POST /tasks/:id/agent-runs` responde 429 e a tela da 
 | `REFRESH_TOKEN_TTL_DAYS` | `7` | validade deslizante do refresh token (rotaciona a cada renovação) |
 | `SESSION_MAX_AGE_DAYS` | `30` | teto absoluto da sessão: depois disso é preciso entrar de novo |
 | `TOTP_ENCRYPTION_KEY` | derivada de `JWT_SECRET` | chave do AES-256-GCM que protege o segredo do 2FA no banco. Defina uma própria: girar o `JWT_SECRET` sem ela invalida os 2FA já configurados |
+| `TRUST_PROXY_HOPS` | `1` | quantos proxies confiar para descobrir o IP do cliente (usado nos limites de taxa e na lista de sessões). Em Render atrás da Vercel o IP exibido pode ser interno (`10.x`): aumente (2, 3…) até aparecer o IP real |
 | `AI_MOCK_STREAM_DELAY_MS` | `0` | pausa entre pedaços do streaming do provedor mock (ex.: `40` para ver o texto aparecendo na demo) |
 
 A API confia em um proxy (`trust proxy = 1`) para enxergar o IP real (Render/Vercel); os limites de taxa (login por e-mail, convites e refresh por IP) são em memória, por instância. O site responde com CSP restrita, `X-Frame-Options: DENY`, `nosniff` e HSTS (produção).
