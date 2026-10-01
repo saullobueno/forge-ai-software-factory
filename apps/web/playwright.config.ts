@@ -63,7 +63,7 @@ export default defineConfig({
       reuseExistingServer: false,
       // Migração + seed + boot do Nest encadeados podem passar de 60s a
       // frio (primeira compilação TypeScript do `nest start`).
-      timeout: 120_000,
+      timeout: 300_000,
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
@@ -79,7 +79,7 @@ export default defineConfig({
       // possivelmente diferente da deste run.
       reuseExistingServer: false,
       // Rebuild completo (Turbopack) + boot do `next start` encadeados.
-      timeout: 120_000,
+      timeout: 300_000,
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
