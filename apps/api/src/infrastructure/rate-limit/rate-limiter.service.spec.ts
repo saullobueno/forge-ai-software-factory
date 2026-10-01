@@ -22,8 +22,9 @@ describe('RateLimiterService', () => {
     } catch (error) {
       caught = error as HttpException;
     }
-    expect(caught?.getStatus()).toBe(429);
-    expect((caught?.getResponse() as { retryAfterSeconds: number }).retryAfterSeconds).toBeGreaterThan(0);
+    expect(caught).toBeDefined();
+    expect(caught!.getStatus()).toBe(429);
+    expect((caught!.getResponse() as { retryAfterSeconds: number }).retryAfterSeconds).toBeGreaterThan(0);
   });
 
   it('chaves são independentes e reset libera', () => {

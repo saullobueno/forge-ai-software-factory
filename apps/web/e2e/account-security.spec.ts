@@ -76,10 +76,12 @@ test('acesso vencido é renovado sozinho pelo refresh, sem pedir login', async (
   await page.goto('/projects');
   await expect(page).toHaveURL('/projects');
   await expect(page.getByRole('heading', { name: 'Projetos', level: 1 })).toBeVisible();
-  // o cookie de acesso foi trocado por um novo (o adulterado deixou de ser o único) e a API aceita a sessão
-  const accessCookies = (await context.cookies()).filter((cookie) => cookie.name === 'forge_session');
-  expect(accessCookies.some((cookie) => cookie.value !== 'jwt.vencido.invalido')).toBe(true);
+  // a renovação é assíncrona (401 → refresh → repete): espera o cookie de acesso ser trocado por um novo
+  await expect
+    .poll(async () => (await context.cookies()).some((cookie) => cookie.name === 'forge_session' && cookie.value !== 'jwt.vencido.invalido'))
+    .toBe(true);
   expect((await page.request.get('/api/auth/me')).status()).toBe(200);
+  await expect(page).toHaveURL('/projects');
   await context.close();
 });
 
@@ -130,7 +132,7 @@ test('2FA: ativar na conta, entrar em dois passos e desativar', async ({ browser
 
   await loginPage.getByLabel('Código de verificação').fill('000000');
   await loginPage.getByRole('button', { name: 'Verificar' }).click();
-  await expect(loginPage.getByRole('alert')).toContainText('inválido');
+  await expect(loginPage.getByText('Código de verificação inválido.')).toBeVisible();
 
   await loginPage.getByLabel('Código de verificação').fill(totp(secret));
   await loginPage.getByRole('button', { name: 'Verificar' }).click();
